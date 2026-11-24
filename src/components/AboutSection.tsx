@@ -59,7 +59,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onOpenPortal }) => {
                   {COMPANY_CONFIG.name}
                 </h3>
                 <p className="text-sm text-slate-300 mt-2 leading-relaxed">
-                  Delivering resilient enterprise architecture, custom AI agents, verifiable distributed systems, and high-precision digital platforms under strict engineering governance and transparent project workflows.
+                  A Wyoming-registered technology corporation focused on designing, developing and integrating enterprise software, artificial intelligence, blockchain solutions, cloud infrastructure, cybersecurity and digital platforms. Our mission is to help organizations modernize operations through responsible engineering, secure architecture and client-focused delivery.
                 </p>
               </div>
 
@@ -103,6 +103,12 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onOpenPortal }) => {
                 <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
                   <span className="text-slate-400 font-mono">Official Monogram</span>
                   <span className="font-semibold text-[#D4AF37] font-mono">{COMPANY_CONFIG.initials}</span>
+                </div>
+                <div className="space-y-2 border-b border-slate-800/80 pb-2">
+                  <p className="text-slate-400">Corporate structure</p><p className="text-white">Corporation registered in Wyoming, USA</p>
+                  <p className="text-slate-400">Headquarters</p><p className="text-white">{COMPANY_CONFIG.headquartersAddress}</p>
+                  <p className="text-slate-400">Official email</p><a className="text-[#00C2C7]" href={`mailto:${COMPANY_CONFIG.corporateEmail}`}>{COMPANY_CONFIG.corporateEmail}</a>
+                  <p className="text-slate-400">Chief Technology Officer</p><p className="text-white">{COMPANY_CONFIG.chiefTechnologyOfficer}</p>
                 </div>
                 {COMPANY_CONFIG.verification.leadershipName ? (
                   <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
