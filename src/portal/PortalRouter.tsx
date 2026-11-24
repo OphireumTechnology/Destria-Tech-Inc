@@ -9,6 +9,10 @@ interface PortalRouterContextValue {
 
 const PortalRouterContext = createContext<PortalRouterContextValue | null>(null);
 
+function hostingPrefix(): string {
+  return window.location.hostname === 'ophireumtechnology.github.io' && window.location.pathname.startsWith('/Destria-Tech-Inc') ? '/Destria-Tech-Inc' : '';
+}
+
 export function getCurrentPortalLocation(): { pathname: string; search: string } {
   if (typeof window === 'undefined') return { pathname: '/', search: '' };
   // Support hash fallback (#/portal/...) for static GitHub Pages deployments
@@ -18,7 +22,7 @@ export function getCurrentPortalLocation(): { pathname: string; search: string }
     const [p, s = ''] = clean.split('?');
     return { pathname: p, search: s ? `?${s}` : '' };
   }
-  return { pathname: window.location.pathname, search: window.location.search };
+  return { pathname: window.location.pathname.slice(hostingPrefix().length) || '/', search: window.location.search };
 }
 
 export function isPortalRoute(pathname?: string): boolean {
@@ -29,19 +33,10 @@ export function isPortalRoute(pathname?: string): boolean {
 export function navigateToPortalPath(to: string, replace = false) {
   if (typeof window === 'undefined') return;
   const cleanTarget = to.startsWith('/') ? to : `/${to}`;
-  const isStaticPagesHost =
-    window.location.hostname.endsWith('github.io') ||
-    ['destriatech.com', 'www.destriatech.com'].includes(window.location.hostname) ||
-    (window.location.pathname.includes('/OMPNETWORK/') && !cleanTarget.startsWith('/OMPNETWORK'));
-
-  if (isStaticPagesHost && cleanTarget.startsWith('/portal')) {
-    const nextHash = `#${cleanTarget}`;
-    if (replace) window.history.replaceState(null, '', nextHash);
-    else window.history.pushState(null, '', nextHash);
-  } else {
-    if (replace) window.history.replaceState(null, '', cleanTarget);
-    else window.history.pushState(null, '', cleanTarget);
-  }
+  if (!/^\/portal(?:\/|\?|$)/.test(cleanTarget)) return;
+  const destination = hostingPrefix() + cleanTarget;
+  if (replace) window.history.replaceState(null, '', destination);
+  else window.history.pushState(null, '', destination);
   window.dispatchEvent(new Event('opm:routechange'));
 }
 
@@ -67,11 +62,7 @@ export const PortalRouterProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const exitToPublicSite = useCallback(() => {
     if (typeof window === 'undefined') return;
-    if (window.location.hash.startsWith('#/portal')) {
-      window.history.pushState(null, '', window.location.pathname);
-    } else {
-      window.history.pushState(null, '', '/');
-    }
+    window.history.pushState(null, '', hostingPrefix() + '/');
     window.dispatchEvent(new Event('opm:routechange'));
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, []);
