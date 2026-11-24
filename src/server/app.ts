@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import express, { Request, Response, NextFunction, Express } from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
+import { COMPANY_CONFIG } from '../data/companyConfig';
 import {
   CATALOG_CATEGORIES,
   SERVICE_CATALOG,
@@ -936,6 +937,11 @@ export function createApp(deps: AppDependencies = {}): {
   // -----------------------------------------------------------------------
   // 6. HARDENED AI SOLUTIONS CONSULTANT & VOICE ENDPOINTS (BLOCK 8)
   // -----------------------------------------------------------------------
+  const officialPhoneReply = (input: string): string | null => {
+    if (!/\b(?:phone(?: number)?|telephone|call (?:you|destria|the (?:company|office|team))|contact number|number to call)\b/i.test(input)) return null;
+    return `You may contact Destria Tech Inc at our official United States telephone number, ${COMPANY_CONFIG.corporatePhone}.`;
+  };
+
   app.post('/api/consultant/chat', async (req: Request & { correlationId?: string }, res: Response) => {
     const clientIp = getClientIp(req);
     if (!aiLimiter.check(clientIp)) {
@@ -952,6 +958,11 @@ export function createApp(deps: AppDependencies = {}): {
     }
 
     const { userMessage, language, history, stateContext } = sanitized;
+    const contactReply = officialPhoneReply(userMessage);
+    if (contactReply) {
+      res.json({ replyText: contactReply, recommendedServiceIds: [], suggestedAction: 'talk_to_human', quickReplies: ['Direct Solutions Contact', 'Schedule Consultation'], provider: 'Destria Official Corporate Contact', timestamp: new Date().toISOString() });
+      return;
+    }
     const isFilipino = language === 'fil-PH' || /filipino|tagalog/i.test(userMessage);
 
     const systemInstruction = `You are the official DESTRIA TECH INC AI Solutions Consultant for DESTRIA TECH INC (DTI), operating the DESTRIA NETWORK technology ecosystem.
@@ -1144,6 +1155,11 @@ CONSULTATION BEHAVIOR:
     }
 
     const { userMessage, language, history } = sanitized;
+    const contactReply = officialPhoneReply(userMessage);
+    if (contactReply) {
+      res.json({ replyText: contactReply, detectedIntent: { isHumanEscalation: true, isBookingIntent: false, isBriefIntent: false }, language, timestamp: new Date().toISOString() });
+      return;
+    }
     const isFilipino = language === 'fil-PH';
 
     const systemInstruction = `You are the official DESTRIA TECH INC AI Solutions Consultant for DESTRIA TECH INC (DTI) and the DESTRIA NETWORK technology ecosystem.

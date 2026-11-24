@@ -894,3 +894,34 @@ test('Official Destria Tech Inc Rebrand Standardization: centralized assets, fav
   const emailSrc = fs.readFileSync(path.resolve(root, 'src/server/services/emailService.ts'), 'utf8');
   assert.equal(emailSrc.includes('BRAND_ASSETS.hostedPrimaryLogoUrl'), true);
 });
+
+test('Official international corporate telephone is centralized and propagated across public and API surfaces', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const root = process.cwd();
+  const cfg = (await import('../src/data/companyConfig')).COMPANY_CONFIG;
+  assert.equal(cfg.corporatePhone, '+1 (307) 419-4277');
+  assert.equal(cfg.corporatePhoneLink, 'tel:+13074194277');
+  const html = fs.readFileSync(path.resolve(root, 'index.html'), 'utf8');
+  const jsonLd = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(jsonLd, 'Organization JSON-LD must exist');
+  const org = JSON.parse(jsonLd);
+  assert.equal(org.telephone, '+13074194277');
+  assert.equal(org.contactPoint.telephone, '+13074194277');
+  assert.equal(org.contactPoint.contactType, 'customer service');
+  for (const filename of ['src/components/Header.tsx', 'src/components/Footer.tsx', 'src/components/ContactSection.tsx', 'src/components/Hero.tsx', 'src/components/AboutSection.tsx', 'src/components/consultant/AIConsultantWidget.tsx', 'src/portal/components/PortalLayout.tsx', 'src/server/services/emailService.ts']) {
+    assert.match(fs.readFileSync(path.resolve(root,filename),'utf8'), /COMPANY_CONFIG\.corporatePhone/);
+  }
+  const instance = await startPortalTestServer();
+  try {
+    for (const endpoint of ['/api/consultant/chat','/api/voice/process']) {
+      const response = await fetch(instance.baseUrl+endpoint,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ userMessage: 'What is your company phone number?', language:'en-US' })
+      });
+      assert.equal(response.status,200,endpoint);
+      const data=await response.json();
+      assert.equal(data.replyText,'You may contact Destria Tech Inc at our official United States telephone number, +1 (307) 419-4277.');
+    }
+  } finally { await instance.close(); }
+});
