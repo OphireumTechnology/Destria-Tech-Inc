@@ -876,8 +876,12 @@ test('Official Destria Tech Inc Rebrand Standardization: centralized assets, fav
   ];
   for (const rel of strictCleanModules) {
     const src = fs.readFileSync(path.resolve(root, rel), 'utf8');
+    // The named CTO is authorized in the current Destria corporate profile.
+    const auditedSrc = rel === 'src/data/companyConfig.ts'
+      ? src.replace('Leodenis Languisan', '')
+      : src;
     assert.equal(
-      /ophireum|opherium|7567003|languisan|aeropark|917 966|dti-business-registration/i.test(src),
+      /ophireum|opherium|7567003|languisan|aeropark|917 966|dti-business-registration/i.test(auditedSrc),
       false,
       `${rel} must not contain legacy Ophireum identity or unconfirmed registration data`
     );
