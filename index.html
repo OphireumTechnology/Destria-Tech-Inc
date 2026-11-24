@@ -2,6 +2,16 @@
 <html lang="en" class="scroll-smooth dark">
   <head>
     <meta charset="UTF-8" />
+    <base href="/" />
+    <script>
+      (function () {
+        var prefix = location.hostname === 'ophireumtechnology.github.io' && location.pathname.startsWith('/Destria-Tech-Inc') ? '/Destria-Tech-Inc' : '';
+        document.querySelector('base').href = prefix + '/';
+        if (/^#\/portal(?:\/|\?|$)/.test(location.hash)) {
+          history.replaceState(null, '', prefix + location.hash.slice(1));
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DESTRIA TECH INC | Engineering Intelligence. Connecting the Future.</title>
     <meta name="description" content="DESTRIA TECH INC (DTI) & DESTRIA NETWORK: Artificial intelligence, custom AI agents, blockchain & Web3 engineering, enterprise software, cloud cybersecurity, digital modernization, and creative multimedia systems." />
