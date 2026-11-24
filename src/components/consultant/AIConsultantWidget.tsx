@@ -5,6 +5,7 @@ import {
   MapPin, Mic, MicOff, Volume2, VolumeX, PhoneOff, Globe,
   Square, AlertCircle, Sparkles, CheckCircle2
 } from 'lucide-react';
+import { normalizeCorporateMessage } from '../../services/legacyCorporateMessageMigration';
 import { COMPANY_CONFIG } from '../../data/companyConfig';
 import { BrandLogo } from '../BrandLogo';
 import { 
@@ -57,24 +58,6 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       return INITIAL_CONSULTATION_STATE;
     }
   });
-
-  const normalizeCorporateMessage = (message: ChatMessage): ChatMessage => {
-    const replacements = [
-      [/Speak with CEO Dhenze Languisan/gi, `Speak with CEO ${COMPANY_CONFIG.founderAndCeo}`],
-      [/CEO Dhenze Languisan/gi, `CEO ${COMPANY_CONFIG.founderAndCeo}`],
-      [/CEO Leodenis Languisan/gi, `CEO ${COMPANY_CONFIG.founderAndCeo}`],
-    ] as const;
-    const normalize = (value: string) => replacements.reduce((out, [pattern, replacement]) => out.replace(pattern, replacement), value);
-    const migrateLegacy = (value: string) => {
-      const legacy = ['Oph', 'ireum'].join('');
-      const typo = ['Oph', 'erium'].join('');
-      return normalize(value)
-        .replace(new RegExp(legacy + ' Multimedia Production', 'gi'), COMPANY_CONFIG.name)
-        .replace(new RegExp(typo + ' Multimedia Production', 'gi'), COMPANY_CONFIG.name)
-        .replace(new RegExp(legacy + ' Network', 'gi'), COMPANY_CONFIG.platformName);
-    };
-    return { ...message, text: migrateLegacy(message.text), quickReplies: message.quickReplies?.map(migrateLegacy) };
-  };
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
