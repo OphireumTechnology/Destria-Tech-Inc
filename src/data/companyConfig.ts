@@ -20,6 +20,8 @@ export interface CompanyConfig {
   registeredAddress: string | null;
   registeredAddressMapsUrl: string | null;
   verification: CorporateVerificationConfig;
+  chiefTechnologyOfficer: string;
+  headquartersAddress: string;
   logoUrl: string;
   brandBoardUrl: string;
   headline: string;
@@ -65,22 +67,22 @@ export const COMPANY_CONFIG: CompanyConfig = {
   displayName: 'Destria Tech Inc',
   initials: 'DTI',
   platformName: 'DESTRIA NETWORK',
-  corporateEmail: verifiedEmail,
+  corporateEmail: 'info@destriatech.com',
   corporatePhone: verifiedPhone,
   corporatePhoneLink: verifiedPhone ? `tel:${verifiedPhone.replace(/[^+\d]/g, '')}` : null,
   registeredAddress: verifiedAddress,
-  registeredAddressMapsUrl: verifiedAddress
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(verifiedAddress)}`
-    : null,
+  registeredAddressMapsUrl: verifiedAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(verifiedAddress)}` : null,
   verification: {
     isVerified: Boolean(verifiedRegNo),
     statusLabel: verifiedRegNo
       ? `Corporate Registration No. ${verifiedRegNo}`
       : 'Official Corporate Incorporation Records Maintained Upon Confirmation',
     registrationNo: verifiedRegNo,
-    jurisdiction: verifiedJurisdiction,
-    leadershipName: verifiedLeadership,
+    jurisdiction: 'Wyoming, United States of America',
+    leadershipName: 'Desmond Hines — Founder & CEO',
   },
+  chiefTechnologyOfficer: 'Leodenis Languisan',
+  headquartersAddress: '30 N Gould St #6082, Sheridan, Sheridan County, WY 82801 USA',
   logoUrl: LOGO_URL,
   brandBoardUrl: BRAND_BOARD_URL,
   headline: 'DESTRIA TECH INC',
