@@ -44,6 +44,16 @@ const PUBLIC_PORTAL_ROUTES = new Set([
   '/portal/verify-email',
 ]);
 
+function decodeRouteId(value: string): string | null {
+  try { const decoded = decodeURIComponent(value); return decoded && !decoded.includes('/') ? decoded : null; }
+  catch { return null; }
+}
+
+const PortalNotFound: React.FC = () => {
+  const { navigate } = usePortalRouter();
+  return <main className="p-8 text-center"><h1>Portal page not found</h1><button onClick={() => navigate('/portal/dashboard')}>Return to dashboard</button></main>;
+};
+
 const PortalRouteSwitch: React.FC = () => {
   const { loading, user } = usePortalAuth();
   const { path, navigate } = usePortalRouter();
@@ -91,19 +101,22 @@ const PortalRouteSwitch: React.FC = () => {
   if (normalized === '/portal/services') return <PortalMyServicesPage />;
   if (normalized === '/portal/store') return <PortalStorePage />;
   if (normalized.startsWith('/portal/store/')) {
-    const slug = decodeURIComponent(normalized.slice('/portal/store/'.length));
+    const slug = decodeRouteId(normalized.slice('/portal/store/'.length));
+    if (!slug) return <PortalNotFound />;
     return <PortalProductDetailPage slug={slug} />;
   }
   if (normalized === '/portal/cart') return <PortalCartPage />;
   if (normalized === '/portal/checkout') return <PortalCheckoutPage />;
   if (normalized === '/portal/orders') return <PortalOrdersPage />;
   if (normalized.startsWith('/portal/orders/')) {
-    const orderId = decodeURIComponent(normalized.slice('/portal/orders/'.length));
+    const orderId = decodeRouteId(normalized.slice('/portal/orders/'.length));
+    if (!orderId) return <PortalNotFound />;
     return <PortalOrderDetailPage orderId={orderId} />;
   }
   if (normalized === '/portal/projects') return <PortalProjectsPage />;
   if (normalized.startsWith('/portal/projects/')) {
-    const projectId = decodeURIComponent(normalized.slice('/portal/projects/'.length));
+    const projectId = decodeRouteId(normalized.slice('/portal/projects/'.length));
+    if (!projectId) return <PortalNotFound />;
     return <PortalProjectDetailPage projectId={projectId} />;
   }
   if (normalized === '/portal/messages') return <PortalMessagesPage />;
@@ -118,7 +131,7 @@ const PortalRouteSwitch: React.FC = () => {
   if (normalized === '/portal/security') return <PortalSecurityPage />;
   if (normalized === '/portal/settings') return <PortalSettingsPage />;
 
-  return <PortalDashboardPage />;
+  return <PortalNotFound />;
 };
 
 export const ClientPortalApp: React.FC = () => {

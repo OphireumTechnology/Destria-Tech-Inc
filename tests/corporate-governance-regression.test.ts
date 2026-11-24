@@ -318,14 +318,14 @@ test('6. SEO Organization JSON-LD, 10 Legal Governance Drafts, and GitHub Pages 
   assert.equal(jsonLd.alternateName, 'DESTRIA NETWORK');
   assert.equal(jsonLd.url, 'https://destriatech.com/');
   assert.equal(jsonLd.email, 'info@destriatech.com');
-  assert.equal(jsonLd.telephone, '+1-307-419-4277');
+  assert.equal(jsonLd.telephone, '+13074194277');
   assert.equal(jsonLd.address.streetAddress, 'SUITE 6082 - 30 N Gould St #6082');
   assert.equal(jsonLd.address.addressLocality, 'Sheridan');
   assert.equal(jsonLd.address.addressRegion, 'WY');
   assert.equal(jsonLd.address.postalCode, '82801');
   assert.equal(jsonLd.address.addressCountry, 'US');
   assert.ok(Array.isArray(jsonLd.contactPoint));
-  assert.equal(jsonLd.contactPoint[0]?.telephone, '+1-307-419-4277');
+  assert.equal(jsonLd.contactPoint[0]?.telephone, '+13074194277');
 
   // Ensure ZERO Offer / OfferCatalog / price keys exist in JSON-LD
   const rawLd = JSON.stringify(jsonLd);
