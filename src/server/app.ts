@@ -1174,6 +1174,31 @@ CONSULTATION BEHAVIOR:
     });
   });
 
+  // Neural speech is generated server-side; never expose the provider credential.
+  app.post('/api/voice/synthesize', async (req: Request, res: Response) => {
+    if (!aiLimiter.check(getClientIp(req))) {
+      res.status(429).json({ error: 'Voice rate limit exceeded.' }); return;
+    }
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    if (!text || text.length > 2000) {
+      res.status(400).json({ error: 'Speech text must contain 1–2000 characters.' }); return;
+    }
+    if (!ai) { res.status(503).json({ error: 'Neural voice unavailable.' }); return; }
+    try {
+      const result = await ai.models.generateContent({
+        model: process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-lite-tts',
+        contents: [{ role: 'user', parts: [{ text: 'Read the following text verbatim in a warm, natural, professional voice. Do not add words.\\n' + text }] }],
+        config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: process.env.GEMINI_TTS_VOICE || 'Sulafat' } } } },
+      });
+      const audio = result.candidates?.[0]?.content?.parts?.find(p => p.inlineData?.data)?.inlineData;
+      if (!audio?.data || !audio.mimeType?.startsWith('audio/')) throw new Error('No audio');
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ provider: 'gemini-tts', audio: audio.data, mimeType: audio.mimeType });
+    } catch {
+      res.status(502).json({ error: 'Neural voice provider unavailable. Please use text chat.' });
+    }
+  });
+
   app.post('/api/voice/process', async (req: Request & { correlationId?: string }, res: Response) => {
     const clientIp = getClientIp(req);
     if (!aiLimiter.check(clientIp)) {
