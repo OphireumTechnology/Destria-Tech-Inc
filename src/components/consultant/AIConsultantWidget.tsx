@@ -35,6 +35,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
   // Human Escalation Modal
   const [isEscalationModalOpen, setIsEscalationModalOpen] = useState(false);
+  const [executiveRequest, setExecutiveRequest] = useState<'ceo' | 'cto' | null>(null);
 
   // Voice State
   const [voiceStatus, setVoiceStatus] = useState<VoiceState>('disconnected');
@@ -57,10 +58,26 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
     }
   });
 
+  const normalizeCorporateMessage = (message: ChatMessage): ChatMessage => {
+    const replacements = [
+      [/Speak with CEO Dhenze Languisan/gi, `Speak with CEO ${COMPANY_CONFIG.founderAndCeo}`],
+      [/CEO Dhenze Languisan/gi, `CEO ${COMPANY_CONFIG.founderAndCeo}`],
+      [/CEO Leodenis Languisan/gi, `CEO ${COMPANY_CONFIG.founderAndCeo}`],
+      [/Ophireum Multimedia Production/gi, COMPANY_CONFIG.name],
+      [/Opherium Multimedia Production/gi, COMPANY_CONFIG.name],
+      [/Ophireum Network/gi, COMPANY_CONFIG.platformName],
+    ] as const;
+    const normalize = (value: string) => replacements.reduce((out, [pattern, replacement]) => out.replace(pattern, replacement), value);
+    return { ...message, text: normalize(message.text), quickReplies: message.quickReplies?.map(normalize) };
+  };
+
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
       const saved = localStorage.getItem('opm_consultant_messages');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.map(normalizeCorporateMessage);
+      }
     } catch {
       // ignore
     }
@@ -72,6 +89,8 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         stage: 'welcome',
         quickReplies: [
+          `Speak with CEO ${COMPANY_CONFIG.founderAndCeo}`,
+          `Consult with CTO ${COMPANY_CONFIG.chiefTechnologyOfficer}`,
           'Website & Digital Experiences',
           'AI Solutions & AI Agents',
           'Blockchain & Web3 Development',
@@ -255,7 +274,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
     try {
       // Check for human escalation keywords
-      if (/speak to human|talk to human|call executive|solutions architect|phone number|call now|direct contact/i.test(text)) {
+      if (/speak to human|talk to human|call executive|solutions architect|phone number|call now|direct contact|speak with ceo|consult with cto/i.test(text)) {
         setTimeout(() => {
           setIsTyping(false);
           const aiEscalateMsg: ChatMessage = {
@@ -264,7 +283,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
             text: `Our ${COMPANY_CONFIG.name} solutions architecture team is available for structured technical consultations.${COMPANY_CONFIG.corporatePhone ? ` You can also reach us at ${COMPANY_CONFIG.corporatePhone}.` : ''} Would you like to review direct contact options or schedule a consultation meeting?`,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             suggestedAction: 'talk_to_human',
-            quickReplies: ['Direct Solutions Contact', 'Schedule Consultation'],
+            quickReplies: [`Speak with CEO ${COMPANY_CONFIG.founderAndCeo}`, `Consult with CTO ${COMPANY_CONFIG.chiefTechnologyOfficer}`, 'Schedule Consultation'],
           };
           setMessages((prev) => [...prev, aiEscalateMsg]);
           if (isVoiceActive && !isSpeakerMuted) {
@@ -335,6 +354,8 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
   };
 
   const handleQuickReply = (reply: string) => {
+    if (reply === `Speak with CEO ${COMPANY_CONFIG.founderAndCeo}`) { setExecutiveRequest('ceo'); setIsEscalationModalOpen(true); return; }
+    if (reply === `Consult with CTO ${COMPANY_CONFIG.chiefTechnologyOfficer}`) { setExecutiveRequest('cto'); setIsEscalationModalOpen(true); return; }
     if (reply === 'Review Project Brief') {
       if (currentBrief || state.generatedBrief) {
         setIsBriefModalOpen(true);
@@ -352,6 +373,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
     }
 
     if (reply === 'Direct Solutions Contact' || reply === 'Direct Executive Contact') {
+      setExecutiveRequest(null);
       setIsEscalationModalOpen(true);
       return;
     }
@@ -379,6 +401,8 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         stage: 'welcome',
         quickReplies: [
+          `Speak with CEO ${COMPANY_CONFIG.founderAndCeo}`,
+          `Consult with CTO ${COMPANY_CONFIG.chiefTechnologyOfficer}`,
           'Website & Digital Experiences',
           'AI Solutions & AI Agents',
           'Blockchain & Web3 Development',
@@ -387,6 +411,11 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       },
     ]);
   };
+
+  // Refresh old persisted answer labels without deleting legitimate conversation records.
+  useEffect(() => {
+    setMessages(prev => prev.map(normalizeCorporateMessage));
+  }, []);
 
   // Stage progress calculation
   const getStageStep = () => {
@@ -990,7 +1019,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
               <div className="flex items-center gap-3">
                 <BrandLogo variant="emblem" size="md" ring="gold" decorative />
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Direct Solutions Desk</h3>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">{executiveRequest === 'ceo' ? `CEO Consultation — ${COMPANY_CONFIG.founderAndCeo}` : executiveRequest === 'cto' ? `CTO Consultation — ${COMPANY_CONFIG.chiefTechnologyOfficer}` : 'Direct Solutions Desk'}</h3>
                   <p className="text-xs text-slate-400">{COMPANY_CONFIG.name} · {COMPANY_CONFIG.platformName}</p>
                 </div>
               </div>
@@ -1012,7 +1041,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                     </span>
                     <h4 className="text-base font-bold text-white mt-0.5">{COMPANY_CONFIG.name}</h4>
                     <p className="text-xs text-slate-400 mt-1">
-                      Dedicated engineering review for enterprise software, AI automation, digital platforms, and strategic technology deployments.
+                      Request a consultation with the appropriate executive or engineering team. A request does not guarantee availability or a confirmed appointment.
                     </p>
                   </div>
                   <span className="text-[10px] font-mono text-[#00C2C7] bg-[#00C2C7]/10 px-2 py-0.5 rounded border border-[#00C2C7]/30 shrink-0">
@@ -1051,13 +1080,13 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                     </div>
                   )}
 
-                  {COMPANY_CONFIG.registeredAddress && (
+                  {COMPANY_CONFIG.headquartersAddress && (
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-slate-400 flex items-center gap-1.5 shrink-0">
                         <MapPin className="w-3.5 h-3.5 text-[#00C2C7]" />
                         <span>Corporate Office:</span>
                       </span>
-                      <span className="text-slate-300 text-right">{COMPANY_CONFIG.registeredAddress}</span>
+                      <span className="text-slate-300 text-right">{COMPANY_CONFIG.headquartersAddress}</span>
                     </div>
                   )}
 
@@ -1090,7 +1119,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                   className="flex-1 py-2.5 px-4 rounded-xl bg-[#00C2C7] hover:bg-[#00d8de] text-[#0B1220] font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
                   <Calendar className="w-4 h-4" />
-                  <span>Book Formal Consultation</span>
+                  <span>Request Consultation</span>
                 </button>
               </div>
             </div>
