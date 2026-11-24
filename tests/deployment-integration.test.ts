@@ -429,20 +429,21 @@ test('Deployment configuration & frontend secret isolation checks pass', () => {
   }
 });
 
-test('Pages portal recovery preserves nested paths and query strings on both hosting origins', () => {
-  const html = fs.readFileSync('public/404.html', 'utf8');
+test('Pages clean portal entry generation and legacy URL migration', () => {
+  const html = fs.readFileSync('index.html', 'utf8');
   const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(script);
   for (const [hostname, prefix] of [['destriatech.com', ''], ['www.destriatech.com', ''], ['ophireumtechnology.github.io', '/Destria-Tech-Inc']]) {
     let destination = '';
-    const location = { hostname, pathname: prefix + '/portal/login', search: '?next=dashboard', replace: (v: string) => { destination = v; } };
-    new Function('location', script)(location);
-    assert.equal(destination, prefix + '/#/portal/login?next=dashboard');
-    destination = '';
-    location.pathname = prefix + '/missing';
-    new Function('location', script)(location);
-    assert.equal(destination, '');
+    const base = { href: '' };
+    const location = { hostname, pathname: prefix + '/', hash: '#/portal/login?next=dashboard' };
+    new Function('location', 'document', 'history', script)(location, { querySelector: () => base }, { replaceState: (_a: unknown, _b: unknown, v: string) => { destination = v; } });
+    assert.equal(destination, prefix + '/portal/login?next=dashboard');
+    assert.equal(base.href, prefix + '/');
   }
   const router = fs.readFileSync('src/portal/PortalRouter.tsx', 'utf8');
-  assert.ok(router.includes("['destriatech.com', 'www.destriatech.com'].includes(window.location.hostname)"));
+  assert.ok(router.includes('hostingPrefix() + cleanTarget'));
+  const generator = fs.readFileSync('scripts/build-pages-routes.mjs', 'utf8');
+  assert.ok(generator.includes("'forgot-password'"));
+  assert.ok(generator.includes("'dist/404.html'"));
 });
