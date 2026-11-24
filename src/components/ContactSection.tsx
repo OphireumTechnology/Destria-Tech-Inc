@@ -9,24 +9,27 @@ import {
   Paperclip,
   FileText,
   Shield,
-  MapPin,
   Building,
   Phone,
   Mail,
-  ExternalLink,
   User,
 } from 'lucide-react';
-import { COMPANY_CONFIG } from '../data/companyConfig';
+import {
+  corporateIdentity,
+  COMMERCIAL_ENGAGEMENT_STATEMENT,
+} from '../data/companyConfig';
 import { apiUrl, createIdempotencyKey } from '../lib/apiClient';
 
 interface ContactSectionProps {
   selectedServiceId?: string;
   onInquirySubmitted?: (inquiry: any) => void;
+  onOpenLegal?: (sectionId?: string) => void;
 }
 
 export const ContactSection: React.FC<ContactSectionProps> = ({
   selectedServiceId,
   onInquirySubmitted,
+  onOpenLegal,
 }) => {
   const [formData, setFormData] = useState<InquiryFormData>({
     fullName: '',
@@ -35,7 +38,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
     company: '',
     serviceId: selectedServiceId || 'multimedia-production',
     projectDescription: '',
-    estimatedBudget: 'undisclosed',
+    estimatedBudget: 'Subject to Formal Assessment',
     fileName: '',
     privacyConsent: false,
   });
@@ -61,12 +64,11 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
     idempotencyKeyRef.current = createIdempotencyKey();
   }, [formData]);
 
-  const budgetOptions = [
-    { value: 'undisclosed', label: 'To be determined / Flexible' },
-    { value: 'under-50k', label: 'Under ₱50,000 / $1,000' },
-    { value: '50k-150k', label: '₱50,000 - ₱150,000 / $1,000 - $3,000' },
-    { value: '150k-500k', label: '₱150,000 - ₱500,000 / $3,000 - $10,000' },
-    { value: '500k-plus', label: '₱500,000+ / $10,000+ Enterprise Tier' },
+  const engagementScopeOptions = [
+    { value: 'Subject to Formal Assessment', label: 'Subject to Formal Assessment (Default)' },
+    { value: 'Single Solution Technical Assessment', label: 'Single Solution Technical Assessment' },
+    { value: 'Multi-Division Enterprise Architecture', label: 'Multi-Division Enterprise Architecture' },
+    { value: 'Managed Enterprise Stewardship', label: 'Managed Enterprise Stewardship & Support' },
   ];
 
   const validate = (): boolean => {
@@ -77,25 +79,25 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
     }
 
     if (!formData.email.trim()) {
-      errs.email = 'Corporate or personal email address is required.';
+      errs.email = 'Corporate or business email address is required.';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       errs.email = 'Please provide a valid email format.';
     }
 
     if (!formData.contactNumber.trim() || formData.contactNumber.replace(/[^0-9]/g, '').length < 5) {
-      errs.contactNumber = 'Contact phone number is required.';
+      errs.contactNumber = 'Direct telephone number is required.';
     }
 
     if (!formData.company.trim() || formData.company.trim().length < 2) {
-      errs.company = 'Organization or brand name is required.';
+      errs.company = 'Organization or enterprise name is required.';
     }
 
     if (!formData.projectDescription.trim() || formData.projectDescription.trim().length < 20) {
-      errs.projectDescription = 'Please describe your project scope in at least 20 characters.';
+      errs.projectDescription = 'Please describe your project requirements in at least 20 characters.';
     }
 
     if (!formData.privacyConsent) {
-      errs.privacyConsent = 'You must acknowledge the enterprise data privacy terms.';
+      errs.privacyConsent = 'You must acknowledge the corporate governance and privacy terms.';
     }
 
     setErrors(errs);
@@ -147,7 +149,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
           serviceId: formData.serviceId,
           serviceTitle: resolvedTitle,
           selectedServiceIds: matchedCatalog ? [matchedCatalog.id] : [],
-          estimatedBudget: formData.estimatedBudget,
+          estimatedBudget: 'Subject to Formal Assessment',
           projectDescription: formData.projectDescription.trim(),
           fileName: formData.fileName || undefined,
           privacyConsent: formData.privacyConsent,
@@ -190,7 +192,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
       company: '',
       serviceId: 'multimedia-production',
       projectDescription: '',
-      estimatedBudget: 'undisclosed',
+      estimatedBudget: 'Subject to Formal Assessment',
       fileName: '',
       privacyConsent: false,
     });
@@ -206,16 +208,16 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
           {/* Left Column */}
           <div className="lg:col-span-5 flex flex-col justify-between space-y-8">
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-[#00C2C7] uppercase tracking-wider mb-2">
-                <span>Start Your Project</span>
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#00C2C7] uppercase tracking-wider mb-2 font-mono">
+                <span>Request a Consultation</span>
                 <span aria-hidden="true">·</span>
-                <span>Direct Solutions Routing</span>
+                <span>Formal Proposal Intake</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white text-balance">
-                Engage {COMPANY_CONFIG.platformName} for Your Next Assignment
+                Initiate Your Customized Enterprise Engagement
               </h2>
               <p className="mt-4 text-sm sm:text-base text-slate-300 leading-relaxed text-balance">
-                Submissions are received directly by the solutions architecture and engineering leads of {COMPANY_CONFIG.name}. Every project brief receives an initial technical review within 24 business hours.
+                {COMMERCIAL_ENGAGEMENT_STATEMENT}
               </p>
 
               <div className="mt-8 space-y-4">
@@ -223,66 +225,17 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   <User className="w-5 h-5 text-[#00C2C7] shrink-0 mt-0.5" />
                   <div>
                     <span className="text-xs font-mono text-slate-400 block uppercase">
-                      Solutions Architecture Desk
+                      Direct Corporate Telephone
                     </span>
-                    <span className="text-sm font-semibold text-white">
-                      {COMPANY_CONFIG.verification.leadershipName || `${COMPANY_CONFIG.name} Engineering & Delivery Team`}
-                    </span>
-                    {COMPANY_CONFIG.corporatePhone && COMPANY_CONFIG.corporatePhoneLink ? (
-                      <div className="mt-1">
-                        <a
-                          href={COMPANY_CONFIG.corporatePhoneLink}
-                          className="inline-flex items-center gap-1.5 text-xs font-mono text-[#00C2C7] hover:underline"
-                        >
-                          <Phone className="w-3 h-3" />
-                          <span>{COMPANY_CONFIG.corporatePhone}</span>
-                        </a>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400 mt-1">
-                        Direct consultations scheduled securely via the project brief form or AI Solutions Consultant.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {COMPANY_CONFIG.registeredAddress ? (
-                  <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 flex items-start gap-3.5">
-                    <Building className="w-5 h-5 text-[#00C2C7] shrink-0 mt-0.5" />
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-mono text-slate-400 block uppercase">
-                        Corporate Office Address
-                      </span>
-                      <p className="text-xs text-slate-200">{COMPANY_CONFIG.registeredAddress}</p>
-                      {COMPANY_CONFIG.registeredAddressMapsUrl ? (
-                        <div className="pt-2">
-                          <a
-                            href={COMPANY_CONFIG.registeredAddressMapsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-[#00C2C7] hover:text-white transition-colors"
-                          >
-                            <MapPin className="w-3 h-3" />
-                            <span>View Office on Google Maps</span>
-                            <ExternalLink className="w-3 h-3 ml-0.5" />
-                          </a>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 flex items-start gap-3.5">
-                  <Shield className="w-5 h-5 text-[#D4AF37] shrink-0 mt-0.5" />
-                  <div>
-                    <span className="text-xs font-mono text-slate-400 block uppercase">
-                      Non-Disclosure &amp; Confidentiality
-                    </span>
-                    <span className="text-sm font-semibold text-white">
-                      Strict Enterprise Non-Disclosure Guarantee
-                    </span>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      All shared project briefs and documents are protected under proprietary commercial confidentiality.
+                    <a
+                      href={corporateIdentity.contact.telephone.href}
+                      className="inline-flex items-center gap-1.5 text-sm font-mono font-semibold text-[#00C2C7] hover:underline mt-0.5"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      <span>{corporateIdentity.contact.telephone.display}</span>
+                    </a>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Executive &amp; solutions architecture consultation desk for {corporateIdentity.legalName}.
                     </p>
                   </div>
                 </div>
@@ -291,15 +244,48 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   <Mail className="w-5 h-5 text-[#0EA5E9] shrink-0 mt-0.5" />
                   <div>
                     <span className="text-xs font-mono text-slate-400 block uppercase">
-                      Corporate Dispatch Routing
+                      Official Corporate Email
                     </span>
-                    <span className="text-sm font-semibold text-white font-mono">
-                      {COMPANY_CONFIG.corporateEmail || 'Direct Project Intake & Client Portal'}
+                    <a
+                      href={`mailto:${corporateIdentity.contact.email}`}
+                      className="text-sm font-semibold text-[#00C2C7] hover:underline font-mono block mt-0.5"
+                    >
+                      {corporateIdentity.contact.email}
+                    </a>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Verified corporate dispatch channel for formal proposals, RFPs, and enterprise inquiries.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 flex items-start gap-3.5">
+                  <Building className="w-5 h-5 text-[#00C2C7] shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-mono text-slate-400 block uppercase">
+                      Corporate Headquarters ({corporateIdentity.jurisdiction})
+                    </span>
+                    <p className="text-xs text-slate-200 leading-relaxed">
+                      {corporateIdentity.headquarters.fullAddress}
+                    </p>
+                    <p className="text-[11px] text-slate-400 pt-0.5">
+                      Registered corporate address for official correspondence. Consultations are conducted
+                      remotely or by prior appointment.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 flex items-start gap-3.5">
+                  <Shield className="w-5 h-5 text-[#D4AF37] shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-xs font-mono text-slate-400 block uppercase">
+                      Confidentiality &amp; Governance
+                    </span>
+                    <span className="text-sm font-semibold text-white">
+                      Mutual NDA Available Upon Engagement
                     </span>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {COMPANY_CONFIG.corporateEmail
-                        ? 'Verified corporate dispatch channel monitored by solutions administrators.'
-                        : 'Official corporate email channels are configurable via deployment settings; all web briefs are persisted immediately with a tracking reference.'}
+                      Please avoid submitting sensitive credentials or regulated personal records prior to
+                      executing a formal confidentiality agreement.
                     </p>
                   </div>
                 </div>
@@ -307,7 +293,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
             </div>
 
             <div className="pt-4 border-t border-slate-800/80 text-xs text-slate-400">
-              <span>Direct inquiries are reviewed Monday to Friday during standard enterprise business hours.</span>
+              <span>
+                All submitted inquiries receive a server-recorded tracking reference and are routed for
+                executive and technical review.
+              </span>
             </div>
           </div>
 
@@ -319,19 +308,20 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   <div className="w-14 h-14 rounded-full bg-[#00C2C7]/10 border border-[#00C2C7]/30 flex items-center justify-center text-[#00C2C7] mx-auto">
                     <CheckCircle2 className="w-8 h-8" />
                   </div>
-                  <h3 className="text-xl font-bold text-white">Inquiry Recorded Successfully</h3>
+                  <h3 className="text-xl font-bold text-white">Service Inquiry Logged Successfully</h3>
                   <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
                     Your inquiry has been persisted under reference number{' '}
                     <span className="font-mono text-[#00C2C7] font-bold">
                       {submittedRecord.referenceId}
                     </span>{' '}
                     and assigned for review by the{' '}
-                    <span className="text-white font-semibold">{COMPANY_CONFIG.name}</span> solutions architecture and engineering team.
+                    <span className="text-white font-semibold">{corporateIdentity.legalName}</span>{' '}
+                    solutions architecture team.
                   </p>
                   <p className="text-[11px] text-slate-400 max-w-md mx-auto">
                     {submittedRecord.emailDeliveryStatus === 'sent'
                       ? 'Confirmation email dispatched to your inbox.'
-                      : 'Database persistence verified. Automated email notification awaits transactional email configuration.'}
+                      : 'Server persistence verified. Automated email notification awaits transactional email configuration.'}
                   </p>
                   <div className="pt-4 flex justify-center gap-3">
                     <button
@@ -374,7 +364,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                         type="text"
                         value={formData.fullName}
                         onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                        placeholder="e.g. Maria Santos"
+                        placeholder="e.g. Jordan Mercer"
                         className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00C2C7] focus:ring-1 focus:ring-[#00C2C7]"
                       />
                       {errors.fullName && <p className="text-[11px] text-rose-400 mt-1">{errors.fullName}</p>}
@@ -382,7 +372,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1">
-                        Corporate or Contact Email <span className="text-[#00C2C7]">*</span>
+                        Corporate or Business Email <span className="text-[#00C2C7]">*</span>
                       </label>
                       <input
                         type="email"
@@ -398,13 +388,13 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1">
-                        Contact Phone / Mobile <span className="text-[#00C2C7]">*</span>
+                        Direct Telephone Number <span className="text-[#00C2C7]">*</span>
                       </label>
                       <input
                         type="tel"
                         value={formData.contactNumber}
                         onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
-                        placeholder="+1 / +63 XXX XXX XXXX"
+                        placeholder="+1 (XXX) XXX-XXXX"
                         className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00C2C7] focus:ring-1 focus:ring-[#00C2C7]"
                       />
                       {errors.contactNumber && (
@@ -414,7 +404,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1">
-                        Company or Brand Name <span className="text-[#00C2C7]">*</span>
+                        Organization or Enterprise Name <span className="text-[#00C2C7]">*</span>
                       </label>
                       <input
                         type="text"
@@ -430,14 +420,14 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1">
-                        Service Category Required <span className="text-[#00C2C7]">*</span>
+                        Solution Division / Framework <span className="text-[#00C2C7]">*</span>
                       </label>
                       <select
                         value={formData.serviceId}
                         onChange={(e) => setFormData({ ...formData, serviceId: e.target.value })}
                         className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-[#00C2C7] focus:ring-1 focus:ring-[#00C2C7] cursor-pointer"
                       >
-                        <optgroup label="Core Company Disciplines">
+                        <optgroup label="Core Enterprise Disciplines">
                           {servicesData.map((s) => (
                             <option key={s.id} value={s.id}>
                               {s.number}. {s.title}
@@ -448,8 +438,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                           <optgroup key={cat.id} label={`${cat.number}. ${cat.label}`}>
                             {SERVICE_CATALOG.filter((item) => item.categoryId === cat.id).map((item) => (
                               <option key={item.id} value={item.id}>
-                                {item.title} (Starting at ${item.pricing.startingUsd.toLocaleString('en-US')}
-                                {item.pricing.model === 'subscription_monthly' ? '/mo' : ''})
+                                {item.title}
                               </option>
                             ))}
                           </optgroup>
@@ -459,16 +448,16 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1">
-                        Estimated Budget Range (Optional)
+                        Engagement Scope
                       </label>
                       <select
                         value={formData.estimatedBudget}
                         onChange={(e) => setFormData({ ...formData, estimatedBudget: e.target.value })}
                         className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-[#00C2C7] focus:ring-1 focus:ring-[#00C2C7] cursor-pointer"
                       >
-                        {budgetOptions.map((b) => (
-                          <option key={b.value} value={b.value}>
-                            {b.label}
+                        {engagementScopeOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
                           </option>
                         ))}
                       </select>
@@ -477,13 +466,13 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
                   <div>
                     <label className="block text-xs font-medium text-slate-300 mb-1">
-                      Project Scope & Objectives <span className="text-[#00C2C7]">*</span>
+                      Project Requirements &amp; Technical Objectives <span className="text-[#00C2C7]">*</span>
                     </label>
                     <textarea
                       rows={4}
                       value={formData.projectDescription}
                       onChange={(e) => setFormData({ ...formData, projectDescription: e.target.value })}
-                      placeholder="Outline your target deliverables, timeline expectations, media format requirements, or software specifications..."
+                      placeholder="Outline your operational goals, target architecture, integration needs, security/compliance requirements, and desired consultation schedule..."
                       className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00C2C7] focus:ring-1 focus:ring-[#00C2C7]"
                     />
                     {errors.projectDescription && (
@@ -493,7 +482,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
                   <div>
                     <label className="block text-xs font-medium text-slate-300 mb-1">
-                      Project Brief or Reference File Name (Optional)
+                      RFP or Architecture Reference Filename (Optional)
                     </label>
                     <div className="flex items-center gap-3">
                       <label className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 cursor-pointer transition-colors">
@@ -527,7 +516,23 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                         className="mt-0.5 rounded bg-slate-900 border-slate-700 text-[#00C2C7] focus:ring-[#00C2C7]"
                       />
                       <span>
-                        I acknowledge and authorize {COMPANY_CONFIG.name} to process this project brief under corporate confidentiality and data privacy guidelines.
+                        I authorize {corporateIdentity.legalName} to review this inquiry under the{' '}
+                        <button
+                          type="button"
+                          onClick={() => onOpenLegal?.('privacy-policy')}
+                          className="text-[#00C2C7] hover:underline cursor-pointer"
+                        >
+                          Privacy Policy
+                        </button>{' '}
+                        and{' '}
+                        <button
+                          type="button"
+                          onClick={() => onOpenLegal?.('commercial-engagement-policy')}
+                          className="text-[#00C2C7] hover:underline cursor-pointer"
+                        >
+                          Commercial Engagement Policy
+                        </button>
+                        .
                       </span>
                     </label>
                     {errors.privacyConsent && (
@@ -542,10 +547,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                       className="w-full py-3 px-6 text-sm font-semibold text-[#0B1220] bg-[#00C2C7] hover:bg-[#00d6dc] disabled:opacity-50 rounded-lg shadow-lg shadow-[#00C2C7]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       {isSubmitting ? (
-                        <span>Validating and Saving Request...</span>
+                        <span>Logging Enterprise Inquiry...</span>
                       ) : (
                         <>
-                          <span>Submit Project Brief</span>
+                          <span>Initiate Service Inquiry</span>
                           <Send className="w-4 h-4" />
                         </>
                       )}

@@ -1,6 +1,8 @@
 export const PRODUCTION_RAILWAY_API_URL = 'https://api.ophireummultimedia.com';
 
 const GITHUB_PAGES_HOSTNAMES = new Set([
+  'destriatech.com',
+  'www.destriatech.com',
   'ophireummultimedia.com',
   'www.ophireummultimedia.com',
   'ophireumtechnology.github.io',

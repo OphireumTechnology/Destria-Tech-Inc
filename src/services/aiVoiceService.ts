@@ -43,6 +43,7 @@ class AIVoiceService {
   private recognitionRestartTimeout: any = null;
 
   private currentUtterance: SpeechSynthesisUtterance | null = null;
+  private currentAudio: HTMLAudioElement | null = null;
   private isSpeakerMuted = false;
   private isMicMuted = false;
 
@@ -50,7 +51,7 @@ class AIVoiceService {
   private conversationHistory: Array<{ sender: 'user' | 'ai'; text: string }> = [];
 
   constructor() {
-    this.sessionId = `opm-session-${Date.now()}`;
+    this.sessionId = `dti-session-${Date.now()}`;
   }
 
   public setCallbacks(callbacks: VoiceEventCallbacks) {
@@ -86,8 +87,8 @@ class AIVoiceService {
 
   public setSpeakerMuted(muted: boolean) {
     this.isSpeakerMuted = muted;
-    if (muted && typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+    if (muted) {
+      this.cancelSpeech();
       if (this.status === 'speaking') {
         this.setStatus('idle');
       }
@@ -156,10 +157,10 @@ class AIVoiceService {
       this.setStatus('idle');
 
       const greeting = this.language.startsWith('fil')
-        ? 'Magandang araw po. Ako ang inyong DESTRIA TECH INC AI Solutions Consultant. Paano ko po matutulungan ang inyong technology, AI, o enterprise software project ngayon?'
-        : 'Welcome to DESTRIA TECH INC and the DESTRIA NETWORK. I am your AI Solutions Consultant. How can I assist with your AI, digital media, or enterprise software project today?';
+        ? 'Magandang araw po. Ako ang inyong DESTRIA TECH INC AI Corporate Solutions Consultant. Paano ko po matutulungan ang inyong customized enterprise technology project ngayon?'
+        : 'Welcome to DESTRIA TECH INC and the DESTRIA NETWORK. I am your AI Corporate Solutions Consultant. How may I assist with your customized enterprise technology initiative today?';
 
-      this.speakText(greeting, false);
+      void this.speakText(greeting, false);
       return true;
     } catch (err: any) {
       this.setStatus('error');
@@ -256,14 +257,15 @@ class AIVoiceService {
         const data = await response.json();
         const replyText =
           data.replyText ||
-          "I've analyzed your project parameters. How else can we tailor our services for you?";
+          'Thank you for sharing your requirements. Would you like to arrange an initial consultation with DESTRIA TECH INC?';
+        const spokenText = typeof data.spokenText === 'string' && data.spokenText ? data.spokenText : replyText;
 
         this.conversationHistory = [
           ...this.conversationHistory.slice(-7),
           { sender: 'ai', text: replyText },
         ];
         this.callbacks.onAiResponse?.(replyText, data.detectedIntent);
-        this.speakText(replyText);
+        void this.speakText(spokenText);
         return;
       }
     } catch {
@@ -276,11 +278,26 @@ class AIVoiceService {
       { sender: 'ai', text: localReply },
     ];
     this.callbacks.onAiResponse?.(localReply);
-    this.speakText(localReply);
+    void this.speakText(localReply);
   }
 
-  public speakText(text: string, restartRecognitionAfter = true) {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+  private formatSpokenCadence(text: string): string {
+    return text
+      .replace(/[*#_`~>]/g, '')
+      .replace(/\+?1[\s.-]*\(?307\)?[\s.-]*419[\s.-]*4277/g, 'Plus one, three zero seven, four one nine, four two seven seven')
+      .replace(
+        /SUITE\s*6082\s*-\s*30\s*N\s*Gould\s*St\s*#6082,\s*Sheridan,\s*Sheridan\s*County,\s*WY\s*82801\s*USA/gi,
+        'Suite 6082, 30 North Gould Street, number 6082, Sheridan, Sheridan County, Wyoming, 82801, United States of America'
+      )
+      .replace(/\bWY\b/g, 'Wyoming')
+      .replace(/https?:\/\/destriatech\.com\/?/gi, 'destriatech dot com')
+      .replace(/info@destriatech\.com/gi, 'info at destriatech dot com')
+      .replace(/(?:DTI|OPM)-[A-Z]+-\d+-[A-Z0-9]+/g, (match) => match.split('-').join(' '))
+      .trim();
+  }
+
+  public async speakText(text: string, restartRecognitionAfter = true) {
+    if (typeof window === 'undefined') {
       this.setStatus('idle');
       return;
     }
@@ -300,12 +317,57 @@ class AIVoiceService {
       this.isRecognitionRunning = false;
     }
 
-    const cleanText = text
-      .replace(/[*#_`~>]/g, '')
-      .replace(/https?:\/\/\S+/g, '')
-      .replace(/OPM-[A-Z]+-\d+-[A-Z0-9]+/g, (match) => match.split('-').join(' '));
+    const spokenText = this.formatSpokenCadence(text);
+    const finishSpeaking = () => {
+      this.currentAudio = null;
+      this.currentUtterance = null;
+      this.setStatus('idle');
+      if (
+        restartRecognitionAfter &&
+        this.recognition &&
+        !this.isMicMuted &&
+        this.status !== 'disconnected'
+      ) {
+        this.startRecognitionSafe();
+      }
+    };
+
+    // 1. Attempt server-side natural female Gemini TTS (Kore voice)
+    try {
+      const ttsRes = await fetch(apiUrl('/api/voice/speak'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: spokenText }),
+      });
+      if (ttsRes.ok) {
+        const ttsData = await ttsRes.json();
+        if (ttsData.success && ttsData.audioBase64 && !this.isSpeakerMuted) {
+          const audio = new Audio(`data:${ttsData.mimeType || 'audio/wav'};base64,${ttsData.audioBase64}`);
+          this.currentAudio = audio;
+          audio.onended = finishSpeaking;
+          audio.onerror = () => {
+            this.speakWithBrowserFemaleVoice(ttsData.spokenText || spokenText, finishSpeaking);
+          };
+          await audio.play();
+          return;
+        }
+      }
+    } catch {
+      // Fall back gracefully to natural female browser SpeechSynthesis
+    }
+
+    this.speakWithBrowserFemaleVoice(spokenText, finishSpeaking);
+  }
+
+  private speakWithBrowserFemaleVoice(cleanText: string, onComplete: () => void) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window) || this.isSpeakerMuted) {
+      onComplete();
+      return;
+    }
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 0.98;
+    utterance.pitch = 1.02;
     this.currentUtterance = utterance;
 
     const voices = window.speechSynthesis.getVoices();
@@ -315,44 +377,45 @@ class AIVoiceService {
       );
       if (filVoice) utterance.voice = filVoice;
     } else {
-      const enVoice = voices.find(
-        (v) =>
-          (v.lang.includes('en-US') || v.lang.includes('en-GB') || v.lang.includes('en')) &&
-          (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha'))
-      );
+      const preferredFemaleNames = [
+        'Aria',
+        'Jenny',
+        'Samantha',
+        'Ava',
+        'Allison',
+        'Victoria',
+        'Zira',
+        'Google US English',
+        'Natural',
+      ];
+      const enVoice =
+        preferredFemaleNames
+          .map((name) =>
+            voices.find(
+              (v) =>
+                (v.lang.includes('en-US') || v.lang.includes('en-GB') || v.lang.includes('en')) &&
+                v.name.includes(name)
+            )
+          )
+          .find(Boolean) ||
+        voices.find((v) => v.lang.includes('en-US') || v.lang.includes('en'));
       if (enVoice) utterance.voice = enVoice;
     }
 
-    utterance.onend = () => {
-      this.currentUtterance = null;
-      this.setStatus('idle');
-      if (
-        restartRecognitionAfter &&
-        this.recognition &&
-        !this.isMicMuted &&
-        this.status !== 'disconnected'
-      ) {
-        this.startRecognitionSafe();
-      }
-    };
-
-    utterance.onerror = () => {
-      this.currentUtterance = null;
-      this.setStatus('idle');
-      if (
-        restartRecognitionAfter &&
-        this.recognition &&
-        !this.isMicMuted &&
-        this.status !== 'disconnected'
-      ) {
-        this.startRecognitionSafe();
-      }
-    };
+    utterance.onend = onComplete;
+    utterance.onerror = onComplete;
 
     window.speechSynthesis.speak(utterance);
   }
 
   public cancelSpeech() {
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.pause();
+        this.currentAudio.currentTime = 0;
+      } catch {}
+      this.currentAudio = null;
+    }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       this.currentUtterance = null;
@@ -474,15 +537,15 @@ class AIVoiceService {
     const isFilipino = this.language.startsWith('fil');
     const lower = input.toLowerCase();
 
-    if (lower.includes('price') || lower.includes('cost') || lower.includes('budget')) {
+    if (/(price|pricing|cost|budget|rate|discount|promo|cheapest|quote|estimate)/i.test(lower)) {
       return isFilipino
-        ? 'Ang budget ay nakadepende sa saklaw ng architecture at integrations. Maaari tayong magbukas ng scheduling request upang makapag-usap kasama ang aming team.'
-        : 'All advertised figures represent starting investments only. I recommend submitting a Project Brief or scheduling a formal consultation for an itemized proposal.';
+        ? 'Ang DESTRIA TECH INC ay nagbibigay ng customized enterprise technology solutions at hindi naglalathala ng standardized pricing. Maaari po tayong mag-schedule ng initial consultation, mag-email sa info@destriatech.com, o tumawag sa +1 (307) 419-4277.'
+        : "DESTRIA TECH INC delivers customized enterprise technology solutions tailored to each client's operational, technical, security, and integration requirements. Because every project is individually architected, we do not publish standardized pricing or provide automated cost estimates. You may schedule a consultation through our website, email info@destriatech.com, or call +1 (307) 419-4277.";
     }
 
     return isFilipino
       ? 'Naintindihan ko po ang inyong pangangailangan. Nais po ba ninyong gumawa tayo ng preliminary Project Brief o magbukas ng consultation schedule form?'
-      : 'I understand your project requirements. Would you like to inspect a preliminary Project Brief or open the verified consultation scheduling form?';
+      : 'Thank you for sharing your requirements. Would you like to prepare a Project Requirements Brief or open the consultation scheduling form?';
   }
 }
 

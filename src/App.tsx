@@ -7,6 +7,7 @@ import { PortfolioSection } from './components/PortfolioSection';
 import { EnterpriseSuiteSection } from './components/EnterpriseSuiteSection';
 import { ContactSection } from './components/ContactSection';
 import { EnterpriseModal } from './components/EnterpriseModal';
+import { LegalGovernanceModal } from './components/LegalGovernanceModal';
 import { AIConsultantWidget } from './components/consultant/AIConsultantWidget';
 import { Footer } from './components/Footer';
 import { BrandLogo } from './components/BrandLogo';
@@ -19,6 +20,9 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('hero');
   const [isEnterpriseModalOpen, setIsEnterpriseModalOpen] = useState(false);
   const [enterpriseModalTab, setEnterpriseModalTab] = useState<'portal' | 'studio' | 'agents' | 'admin'>('portal');
+  const [legalModalState, setLegalModalState] = useState<{ isOpen: boolean; sectionId?: string }>({
+    isOpen: false,
+  });
   const [selectedServiceIdForInquiry, setSelectedServiceIdForInquiry] = useState<string>('multimedia-production');
   const [consultantOpenRequest, setConsultantOpenRequest] = useState<{
     nonce: number;
@@ -54,6 +58,11 @@ export default function App() {
   const handleOpenEnterpriseModal = (tab: 'portal' | 'studio' | 'agents' | 'admin' = 'portal') => {
     setEnterpriseModalTab(tab);
     setIsEnterpriseModalOpen(true);
+  };
+
+  // Open legal & corporate governance modal to a specific section
+  const handleOpenLegalModal = (sectionId?: string) => {
+    setLegalModalState({ isOpen: true, sectionId });
   };
 
   // When a user selects a service to inquire about
@@ -133,7 +142,7 @@ export default function App() {
           onOpenPortal={() => handleOpenEnterpriseModal('portal')}
         />
 
-        {/* Unified Premium Services Marketplace & Advanced Technology Solutions */}
+        {/* Customized Enterprise Technology Solutions Directory */}
         <ServicesSection
           onSelectServiceForInquiry={handleSelectServiceForInquiry}
           onOpenAIConsultant={handleOpenAIConsultant}
@@ -147,9 +156,10 @@ export default function App() {
           onOpenPortalTab={handleOpenEnterpriseModal}
         />
 
-        {/* Working Inquiry Brief Routing Form */}
+        {/* Enterprise Consultation & Service Inquiry Form */}
         <ContactSection
           selectedServiceId={selectedServiceIdForInquiry}
+          onOpenLegal={handleOpenLegalModal}
         />
       </main>
 
@@ -160,13 +170,21 @@ export default function App() {
         defaultTab={enterpriseModalTab}
       />
 
+      {/* Legal & Corporate Governance Modal */}
+      <LegalGovernanceModal
+        isOpen={legalModalState.isOpen}
+        initialSectionId={legalModalState.sectionId}
+        onClose={() => setLegalModalState((prev) => ({ ...prev, isOpen: false }))}
+      />
+
       {/* Corporate Footer */}
       <Footer
         onNavigate={handleNavigate}
         onOpenPortal={() => handleOpenEnterpriseModal('portal')}
+        onOpenLegal={handleOpenLegalModal}
       />
 
-      {/* AI Solutions Consultant Floating Assistant & Booking System */}
+      {/* AI Corporate Solutions Consultant Floating Assistant & Booking System */}
       <AIConsultantWidget externalOpenRequest={consultantOpenRequest} />
     </div>
   );

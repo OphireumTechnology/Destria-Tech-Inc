@@ -1,13 +1,11 @@
 import React from 'react';
 import { CatalogService } from '../../types';
-import { formatCatalogPrice, CATALOG_CATEGORIES } from '../../data/serviceCatalog';
+import { formatCatalogEngagement, CATALOG_CATEGORIES } from '../../data/serviceCatalog';
 import { ServiceTechIcon } from '../animations/ServiceTechIcon';
 import { Check, ChevronRight, Plus, ArrowUpRight } from 'lucide-react';
 
 interface ServiceCardProps {
   service: CatalogService;
-  currency: 'USD' | 'PHP';
-  phpRate: number;
   isSelected: boolean;
   onToggleSelect: (service: CatalogService) => void;
   onExplore: (service: CatalogService) => void;
@@ -17,8 +15,6 @@ interface ServiceCardProps {
 
 export const ServiceCard: React.FC<ServiceCardProps> = ({
   service,
-  currency,
-  phpRate,
   isSelected,
   onToggleSelect,
   onExplore,
@@ -27,8 +23,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
 }) => {
   const isSignature = service.featuredTier === 'signature';
   const isFlagship = service.featuredTier === 'flagship';
-  const isStandardized = service.engagementMode === 'standardized';
-  const priceInfo = formatCatalogPrice(service, currency, phpRate);
+  const engagementInfo = formatCatalogEngagement(service);
   const categoryMeta = CATALOG_CATEGORIES.find((c) => c.id === service.categoryId);
 
   return (
@@ -42,7 +37,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
       }`}
     >
       <div>
-        {/* Top Row: Animated Tech Icon & Clean Unboxed Metadata */}
+        {/* Top Row: Animated Tech Icon & Clean Metadata */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <ServiceTechIcon
@@ -57,9 +52,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
                   {categoryMeta?.shortLabel || service.categoryId}
                 </span>
                 <span aria-hidden="true">·</span>
-                <span className={isStandardized ? 'text-emerald-400' : 'text-slate-400'}>
-                  {isStandardized ? 'Standardized' : 'Custom-Scoped'}
-                </span>
+                <span className="text-slate-300">Customized Framework</span>
                 {isFlagship && !isSignature && (
                   <>
                     <span aria-hidden="true">·</span>
@@ -77,7 +70,11 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
             type="button"
             onClick={() => onToggleSelect(service)}
             aria-pressed={isSelected}
-            aria-label={isSelected ? `Remove ${service.title} from solution builder` : `Add ${service.title} to solution builder`}
+            aria-label={
+              isSelected
+                ? `Remove ${service.title} from project requirements`
+                : `Select ${service.title} for project assessment`
+            }
             className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7] ${
               isSelected
                 ? 'bg-[#00C2C7] text-[#0B1220]'
@@ -85,7 +82,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
             }`}
           >
             {isSelected ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-            <span>{isSelected ? 'Selected' : 'Add'}</span>
+            <span>{isSelected ? 'Selected' : 'Select'}</span>
           </button>
         </div>
 
@@ -94,23 +91,16 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
           {service.shortDescription}
         </p>
 
-        {/* Pricing Block */}
+        {/* Engagement Model Block (Zero Public Pricing) */}
         <div className="mt-4 pt-3.5 border-t border-slate-800/80">
-          <div className="text-sm font-bold text-white font-mono tabular-nums">
+          <div className="text-xs sm:text-[13px] font-bold font-mono">
             <span className={isSignature ? 'text-[#D4AF37]' : 'text-[#00C2C7]'}>
-              {priceInfo.primaryLabel}
+              {engagementInfo.primaryLabel}
             </span>
           </div>
-          {priceInfo.secondaryLabel && (
-            <div className="text-xs text-slate-300 font-mono tabular-nums mt-0.5">
-              {priceInfo.secondaryLabel}
-            </div>
-          )}
-          {priceInfo.phpEstimateLabel && (
-            <div className="text-[11px] text-slate-400 font-mono tabular-nums mt-1">
-              {priceInfo.phpEstimateLabel} (estimate)
-            </div>
-          )}
+          <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+            {engagementInfo.secondaryLabel}
+          </div>
         </div>
 
         {/* Key Capabilities */}
@@ -147,19 +137,19 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
               onClick={() => onConsultAI(service)}
               className="px-2.5 py-1.5 text-[11px] font-semibold text-[#00C2C7] hover:text-white bg-slate-900 hover:bg-slate-800 border border-[#00C2C7]/40 rounded-lg transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
             >
-              Live AI Demo
+              Consult AI
             </button>
           )}
           <button
             type="button"
-            onClick={() => (isStandardized ? onExplore(service) : onRequestProposal(service))}
+            onClick={() => onRequestProposal(service)}
             className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7] ${
               isSignature
                 ? 'bg-[#D4AF37] hover:bg-[#e3be48] text-[#0B1220]'
                 : 'bg-[#00C2C7] hover:bg-[#00d6dc] text-[#0B1220]'
             }`}
           >
-            <span>{isStandardized ? 'Configure Package' : 'Request Proposal'}</span>
+            <span>Request This Solution</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
           </button>
         </div>

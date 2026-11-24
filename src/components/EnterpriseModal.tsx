@@ -21,7 +21,7 @@ import {
   FileCheck,
 } from 'lucide-react';
 import { AIProcessingVisualizer } from './animations/AIProcessingVisualizer';
-import { COMPANY_CONFIG } from '../data/companyConfig';
+import { COMPANY_CONFIG, corporateIdentity } from '../data/companyConfig';
 import { apiUrl } from '../lib/apiClient';
 import { navigateToPortalPath } from '../portal/PortalRouter';
 
@@ -342,48 +342,26 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
                 <div className="p-5 rounded-xl bg-[#111827] border border-slate-800 space-y-2">
                   <h4 className="text-xs font-mono uppercase text-slate-400">Dedicated Solutions Desk</h4>
                   <div className="text-sm font-bold text-white">
-                    {COMPANY_CONFIG.verification.leadershipName || `${COMPANY_CONFIG.name} Architecture Team`}
+                    {corporateIdentity.leadership.ceo.name} — {corporateIdentity.leadership.ceo.title}
                   </div>
-                  {COMPANY_CONFIG.corporatePhone && COMPANY_CONFIG.corporatePhoneLink ? (
-                    <a
-                      href={COMPANY_CONFIG.corporatePhoneLink}
-                      className="text-xs font-mono text-[#00C2C7] hover:underline flex items-center gap-1.5"
-                    >
-                      <Phone className="w-3.5 h-3.5" />
-                      <span>{COMPANY_CONFIG.corporatePhone}</span>
-                    </a>
-                  ) : (
-                    <div className="text-xs text-slate-400">
-                      Direct coordination via Client Portal workspace and project discussions
-                    </div>
-                  )}
+                  <a
+                    href={corporateIdentity.contact.telephone.href}
+                    className="text-xs font-mono text-[#00C2C7] hover:underline flex items-center gap-1.5"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    <span>{corporateIdentity.contact.telephone.display}</span>
+                  </a>
+                  <div className="text-xs font-mono text-slate-400">{corporateIdentity.contact.email}</div>
                 </div>
 
                 <div className="p-5 rounded-xl bg-[#111827] border border-slate-800 space-y-2">
-                  <h4 className="text-xs font-mono uppercase text-slate-400">Operations &amp; Delivery Model</h4>
-                  {COMPANY_CONFIG.registeredAddress ? (
-                    <>
-                      <div className="text-sm font-bold text-white">{COMPANY_CONFIG.registeredAddress}</div>
-                      {COMPANY_CONFIG.registeredAddressMapsUrl ? (
-                        <a
-                          href={COMPANY_CONFIG.registeredAddressMapsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-[#00C2C7] hover:underline flex items-center gap-1 pt-1"
-                        >
-                          <MapPin className="w-3.5 h-3.5" />
-                          <span>Open Maps Navigation</span>
-                        </a>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-sm font-bold text-white">Global Cloud &amp; Distributed Delivery</div>
-                      <div className="text-xs text-slate-300">
-                        Multi-region enterprise infrastructure under {COMPANY_CONFIG.platformName} governance
-                      </div>
-                    </>
-                  )}
+                  <h4 className="text-xs font-mono uppercase text-slate-400">Corporate Headquarters</h4>
+                  <div className="text-xs font-semibold text-white leading-relaxed">
+                    {corporateIdentity.headquarters.fullAddress}
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    {corporateIdentity.jurisdiction} · Executive briefings by prior appointment.
+                  </div>
                 </div>
               </div>
             </div>
@@ -642,8 +620,8 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
                             <tr className="border-b border-slate-800 text-slate-400 font-mono text-[11px]">
                               <th className="pb-2">REFERENCE</th>
                               <th className="pb-2">CLIENT &amp; ORG</th>
-                              <th className="pb-2">SERVICES</th>
-                              <th className="pb-2">ESTIMATE</th>
+                              <th className="pb-2">SOLUTIONS</th>
+                              <th className="pb-2">ASSESSMENT STATUS</th>
                               <th className="pb-2">EMAIL STATUS</th>
                             </tr>
                           </thead>
@@ -658,7 +636,9 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
                                   </span>
                                 </td>
                                 <td className="py-2.5 max-w-[200px] truncate">{reqItem.serviceTitle}</td>
-                                <td className="py-2.5 font-mono text-slate-300">{reqItem.estimatedBudget}</td>
+                                <td className="py-2.5 font-mono text-slate-300">
+                                  {reqItem.estimatedBudget || 'Subject to Formal Assessment'}
+                                </td>
                                 <td className="py-2.5 font-mono text-[11px] uppercase">
                                   {reqItem.emailDeliveryStatus}
                                 </td>

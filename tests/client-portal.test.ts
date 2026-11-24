@@ -158,24 +158,60 @@ test('Server-Authoritative Pricing, Disabled Payment Gateways, Verified Webhook 
     });
     const token = reg.data.token;
 
-    // Fetch catalog and pick a credit package (e.g., Creator Plan: $49 / 600 credits)
+    // Fetch catalog and verify zero public pricing is exposed
     const cat = await apiJson(srv.baseUrl, '/api/portal/catalog', { token });
     assert.equal(cat.status, 200);
     assert.equal(cat.data.categories.length, 7);
 
     const creditProduct = cat.data.products.find((p: any) => p.categorySlug === 'subscription-credit-packages');
     assert.ok(creditProduct);
-    const creatorPkg = creditProduct.packages.find((pkg: any) => pkg.creditsIncluded > 0 && !pkg.isCustomQuote);
+    const creatorPkg = creditProduct.packages.find((pkg: any) => pkg.creditsIncluded > 0);
     assert.ok(creatorPkg);
+    assert.equal(creatorPkg.priceUsdMinor, undefined, 'Public portal catalog must not expose USD prices');
+    assert.equal(creatorPkg.pricePhpMinor, undefined, 'Public portal catalog must not expose PHP prices');
+    assert.equal(creatorPkg.proposalRequired, true);
 
-    // Add to cart
+    // Public self-service cart add and unapproved checkout must be blocked (403 APPROVED_PROPOSAL_REQUIRED)
     const addRes = await apiJson(srv.baseUrl, '/api/portal/cart/items', {
       method: 'POST',
       token,
       body: { packageId: creatorPkg.id, quantity: 1 },
     });
-    assert.equal(addRes.status, 200);
-    assert.equal(addRes.data.cart.totalMinor, creatorPkg.priceUsdMinor);
+    assert.equal(addRes.status, 403);
+    assert.equal(addRes.data.code, 'APPROVED_PROPOSAL_REQUIRED');
+
+    const unapprovedCheckout = await apiJson(srv.baseUrl, '/api/portal/checkout', {
+      method: 'POST',
+      token,
+      body: {
+        paymentProvider: 'paymongo',
+        billingDetails: { fullName: 'Marco Reyes', email: 'buyer@client.test' },
+      },
+    });
+    assert.equal(unapprovedCheckout.status, 403);
+    assert.equal(unapprovedCheckout.data.code, 'APPROVED_PROPOSAL_REQUIRED');
+
+    // Issue a server-authorized commercial proposal for this client
+    const proposal = await srv.portalRepo.createApprovedProposal({
+      userId: reg.data.user.id,
+      title: 'Enterprise Credit Allocation Proposal',
+      scopeSummary: 'Authorized credit allocation following consultation and formal assessment',
+      currency: 'USD',
+      items: [
+        {
+          productId: creditProduct.id,
+          packageId: creatorPkg.id,
+          productSlug: creditProduct.slug,
+          productName: creditProduct.name,
+          packageName: creatorPkg.name,
+          billingType: creatorPkg.billingType,
+          quantity: 1,
+          unitPriceMinor: 4900,
+          creditsAllocated: creatorPkg.creditsIncluded,
+          revisionLimit: creatorPkg.revisionLimit,
+        },
+      ],
+    });
 
     // Attempt to tamper with totalMinor, paymentStatus, and credits in checkout body
     const checkout = await apiJson(srv.baseUrl, '/api/portal/checkout', {
@@ -183,6 +219,7 @@ test('Server-Authoritative Pricing, Disabled Payment Gateways, Verified Webhook 
       token,
       headers: { 'Idempotency-Key': 'checkout-idem-001' },
       body: {
+        approvedProposalId: proposal.id,
         paymentProvider: 'paymongo',
         totalMinor: 1, // tampered!
         paymentStatus: 'paid', // tampered!
@@ -191,7 +228,7 @@ test('Server-Authoritative Pricing, Disabled Payment Gateways, Verified Webhook 
       },
     });
     assert.equal(checkout.status, 201);
-    assert.equal(checkout.data.order.totalMinor, creatorPkg.priceUsdMinor);
+    assert.equal(checkout.data.order.totalMinor, proposal.totalMinor);
     assert.equal(checkout.data.order.paymentStatus, 'pending');
     assert.equal(checkout.data.order.fulfillmentStatus, 'pending_payment');
 
@@ -206,6 +243,7 @@ test('Server-Authoritative Pricing, Disabled Payment Gateways, Verified Webhook 
       token,
       headers: { 'Idempotency-Key': 'checkout-idem-001' },
       body: {
+        approvedProposalId: proposal.id,
         paymentProvider: 'paymongo',
         billingDetails: { fullName: 'Marco Reyes', email: 'buyer@client.test' },
       },
@@ -449,13 +487,40 @@ test('Phase 2 Audit: HMAC webhook rejects raw secret string; Xendit accepts stat
     });
     const token = reg.data.token;
     const cat = await apiJson(srv.baseUrl, '/api/portal/catalog', { token });
-    const pkg = cat.data.products.flatMap((p: any) => p.packages).find((p: any) => !p.isCustomQuote && p.billingType === 'one_time');
-    await apiJson(srv.baseUrl, '/api/portal/cart/items', { method: 'POST', token, body: { packageId: pkg.id, quantity: 1 } });
+    const prod = cat.data.products.find((p: any) =>
+      p.packages.some((pkg: any) => pkg.billingType === 'one_time')
+    );
+    const pkg = prod.packages.find((p: any) => p.billingType === 'one_time');
+    const proposal = await srv.portalRepo.createApprovedProposal({
+      userId: reg.data.user.id,
+      title: 'Authorized One-Time Solution Proposal',
+      scopeSummary: 'Formal proposal for HMAC & Xendit webhook verification test',
+      currency: 'USD',
+      items: [
+        {
+          productId: prod.id,
+          packageId: pkg.id,
+          productSlug: prod.slug,
+          productName: prod.name,
+          packageName: pkg.name,
+          billingType: 'one_time',
+          quantity: 1,
+          unitPriceMinor: 12000,
+          creditsAllocated: pkg.creditsIncluded || 0,
+          revisionLimit: pkg.revisionLimit || 2,
+        },
+      ],
+    });
     const checkout = await apiJson(srv.baseUrl, '/api/portal/checkout', {
       method: 'POST',
       token,
-      body: { paymentProvider: 'paymongo', billingDetails: { fullName: 'Hmac Tester', email: 'hmac@client.test' } },
+      body: {
+        approvedProposalId: proposal.id,
+        paymentProvider: 'paymongo',
+        billingDetails: { fullName: 'Hmac Tester', email: 'hmac@client.test' },
+      },
     });
+    assert.equal(checkout.status, 201);
 
     // Attack: send the raw webhook secret directly in paymongo-signature header instead of HMAC-SHA256 digest
     const rawSecretAttack = await fetch(`${srv.baseUrl}/api/portal/webhooks/paymongo`, {
@@ -511,27 +576,81 @@ test('Phase 2 Audit: Subscription isolation, strict order state machine, pending
     });
     const token = reg.data.token;
     const cat = await apiJson(srv.baseUrl, '/api/portal/catalog', { token });
-    const allPkgs = cat.data.products.flatMap((p: any) => p.packages);
-    const subPkgs = allPkgs.filter((p: any) => p.billingType === 'subscription_monthly' && !p.isCustomQuote);
-    assert.ok(subPkgs.length >= 2);
-    const cheapSub = subPkgs[0];
-    const expensiveSub = subPkgs[1];
+    const subEntries = cat.data.products.flatMap((prod: any) =>
+      prod.packages
+        .filter((pkg: any) => pkg.billingType === 'subscription_monthly')
+        .map((pkg: any) => ({ prod, pkg }))
+    );
+    assert.ok(subEntries.length >= 2);
+    const cheapEntry = subEntries[0];
+    const expensiveEntry = subEntries[1];
+    const cheapSub = cheapEntry.pkg;
+    const expensiveSub = expensiveEntry.pkg;
+
+    const propA = await srv.portalRepo.createApprovedProposal({
+      userId: reg.data.user.id,
+      title: 'Authorized Subscription A',
+      scopeSummary: 'Authorized recurring engagement A',
+      currency: 'USD',
+      items: [
+        {
+          productId: cheapEntry.prod.id,
+          packageId: cheapSub.id,
+          productSlug: cheapEntry.prod.slug,
+          productName: cheapEntry.prod.name,
+          packageName: cheapSub.name,
+          billingType: 'subscription_monthly',
+          quantity: 1,
+          unitPriceMinor: 4900,
+          creditsAllocated: cheapSub.creditsIncluded,
+          revisionLimit: cheapSub.revisionLimit,
+        },
+      ],
+    });
+    const propB = await srv.portalRepo.createApprovedProposal({
+      userId: reg.data.user.id,
+      title: 'Authorized Subscription B',
+      scopeSummary: 'Authorized recurring engagement B',
+      currency: 'USD',
+      items: [
+        {
+          productId: expensiveEntry.prod.id,
+          packageId: expensiveSub.id,
+          productSlug: expensiveEntry.prod.slug,
+          productName: expensiveEntry.prod.name,
+          packageName: expensiveSub.name,
+          billingType: 'subscription_monthly',
+          quantity: 1,
+          unitPriceMinor: 14900,
+          creditsAllocated: expensiveSub.creditsIncluded,
+          revisionLimit: expensiveSub.revisionLimit,
+        },
+      ],
+    });
 
     // Order A: cheap subscription
-    await apiJson(srv.baseUrl, '/api/portal/cart/items', { method: 'POST', token, body: { packageId: cheapSub.id, quantity: 1 } });
     const orderA = await apiJson(srv.baseUrl, '/api/portal/checkout', {
       method: 'POST',
       token,
-      body: { paymentProvider: 'paymongo', billingDetails: { fullName: 'State Tester', email: 'state@client.test' } },
+      body: {
+        approvedProposalId: propA.id,
+        paymentProvider: 'paymongo',
+        billingDetails: { fullName: 'State Tester', email: 'state@client.test' },
+      },
     });
+    assert.equal(orderA.status, 201);
 
     // Order B: expensive subscription (left UNPAID!)
-    await apiJson(srv.baseUrl, '/api/portal/cart/items', { method: 'POST', token, body: { packageId: expensiveSub.id, quantity: 1 } });
     const orderB = await apiJson(srv.baseUrl, '/api/portal/checkout', {
       method: 'POST',
       token,
-      body: { paymentProvider: 'paymongo', billingDetails: { fullName: 'State Tester', email: 'state@client.test' } },
+      body: {
+        approvedProposalId: propB.id,
+        paymentProvider: 'paymongo',
+        billingDetails: { fullName: 'State Tester', email: 'state@client.test' },
+      },
     });
+    assert.equal(orderB.status, 201);
 
     // Pay Order A -> ONLY Order A's subscription may activate; Order B's must stay pending!
     const payA = signBody({
@@ -594,12 +713,36 @@ test('Phase 2 Audit: Subscription isolation, strict order state machine, pending
     assert.equal(creditsAfterFail.data.wallet.pendingCredits, 0);
 
     // Order C: cancelled order must NEVER transition to paid via late webhook (422)
-    await apiJson(srv.baseUrl, '/api/portal/cart/items', { method: 'POST', token, body: { packageId: cheapSub.id, quantity: 1 } });
+    const propC = await srv.portalRepo.createApprovedProposal({
+      userId: reg.data.user.id,
+      title: 'Authorized Subscription C',
+      scopeSummary: 'Authorized recurring engagement C',
+      currency: 'USD',
+      items: [
+        {
+          productId: cheapEntry.prod.id,
+          packageId: cheapSub.id,
+          productSlug: cheapEntry.prod.slug,
+          productName: cheapEntry.prod.name,
+          packageName: cheapSub.name,
+          billingType: 'subscription_monthly',
+          quantity: 1,
+          unitPriceMinor: 4900,
+          creditsAllocated: cheapSub.creditsIncluded,
+          revisionLimit: cheapSub.revisionLimit,
+        },
+      ],
+    });
     const orderC = await apiJson(srv.baseUrl, '/api/portal/checkout', {
       method: 'POST',
       token,
-      body: { paymentProvider: 'paymongo', billingDetails: { fullName: 'State Tester', email: 'state@client.test' } },
+      body: {
+        approvedProposalId: propC.id,
+        paymentProvider: 'paymongo',
+        billingDetails: { fullName: 'State Tester', email: 'state@client.test' },
+      },
     });
+    assert.equal(orderC.status, 201);
     const cancelC = await apiJson(srv.baseUrl, `/api/portal/orders/${orderC.data.order.id}/cancel`, {
       method: 'POST',
       token,

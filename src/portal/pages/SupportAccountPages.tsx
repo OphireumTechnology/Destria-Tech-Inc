@@ -13,8 +13,12 @@ import {
   Send,
   Sparkles,
   X,
+  Phone,
+  Mail,
+  MapPin,
 } from 'lucide-react';
 import { PortalLayout } from '../components/PortalLayout';
+import { corporateIdentity } from '../../data/companyConfig';
 import { portalRequest } from '../portalApi';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
@@ -113,7 +117,27 @@ export const PortalSupportPage: React.FC = () => {
         <div className="mb-4 p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-sm text-rose-800">{error}</div>
       )}
 
-      <div className="mb-5 flex justify-end">
+      <div className="mb-5 p-4 rounded-xl bg-white border border-[#E6E2D8] flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[#334155]">
+          <a
+            href={corporateIdentity.contact.telephone.href}
+            className="inline-flex items-center gap-1.5 font-semibold text-[#0F4C3A] hover:underline"
+          >
+            <Phone className="w-3.5 h-3.5" />
+            <span>{corporateIdentity.contact.telephone.display}</span>
+          </a>
+          <a
+            href={`mailto:${corporateIdentity.contact.email}`}
+            className="inline-flex items-center gap-1.5 font-medium text-[#0F1D36] hover:underline"
+          >
+            <Mail className="w-3.5 h-3.5" />
+            <span>{corporateIdentity.contact.email}</span>
+          </a>
+          <span className="inline-flex items-center gap-1.5 text-[#64748B]">
+            <MapPin className="w-3.5 h-3.5 shrink-0" />
+            <span>{corporateIdentity.headquarters.fullAddress}</span>
+          </span>
+        </div>
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
@@ -936,7 +960,6 @@ export const PortalSettingsPage: React.FC = () => {
   const { profile, refreshSession } = usePortalAuth();
   const { navigate } = usePortalRouter();
 
-  const [currency, setCurrency] = useState<'USD' | 'PHP'>(profile?.preferredCurrency || 'USD');
   const [prefs, setPrefs] = useState(
     profile?.notificationPreferences || {
       emailOrders: true,
@@ -965,7 +988,7 @@ export const PortalSettingsPage: React.FC = () => {
     try {
       await portalRequest('/profile', {
         method: 'PATCH',
-        body: { preferredCurrency: currency, notificationPreferences: prefs },
+        body: { notificationPreferences: prefs },
       });
       await refreshSession();
       setNotice('Preferences updated.');
@@ -993,7 +1016,7 @@ export const PortalSettingsPage: React.FC = () => {
   return (
     <PortalLayout
       title="Preferences"
-      subtitle="Configure display currency, notification preferences, and read-only portal guidance."
+      subtitle="Configure notification preferences and access read-only portal account guidance."
     >
       {notice && (
         <div className="mb-4 p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-900">
@@ -1005,29 +1028,11 @@ export const PortalSettingsPage: React.FC = () => {
         <form onSubmit={handleSave} className="bg-white border border-[#E6E2D8] rounded-xl p-6 space-y-5">
           <div className="flex items-center gap-2">
             <Settings className="w-4 h-4 text-[#0F4C3A]" />
-            <h2 className="text-base font-semibold text-[#0F1D36]">Display &amp; Notification Settings</h2>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-[#334155] mb-1.5">Default Display Currency</label>
-            <div className="inline-flex rounded-lg border border-[#E6E2D8] p-0.5 bg-[#FAF8F4]">
-              {(['USD', 'PHP'] as const).map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setCurrency(c)}
-                  className={`px-4 py-1.5 rounded-md text-xs font-semibold cursor-pointer ${
-                    currency === c ? 'bg-[#0F1D36] text-white' : 'text-[#475569]'
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
+            <h2 className="text-base font-semibold text-[#0F1D36]">Notification Preferences</h2>
           </div>
 
           <div className="space-y-2.5 pt-2 border-t border-[#E6E2D8]">
-            <p className="text-xs font-semibold text-[#0F1D36]">Notifications</p>
+            <p className="text-xs font-semibold text-[#0F1D36]">Account &amp; Delivery Alerts</p>
             {(
               [
                 ['emailOrders', 'Order & payment status emails'],

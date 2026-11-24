@@ -3,13 +3,13 @@ import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   CATALOG_CATEGORIES,
   SERVICE_CATALOG,
-  DEFAULT_USD_TO_PHP_RATE,
-  COMMERCIAL_PRICING_NOTICE,
+  COMMERCIAL_ENGAGEMENT_NOTICE,
+  COMMERCIAL_SERVICE_NOTICE,
   EXTERNAL_CHARGES_DISCLOSURE,
   BLOCKCHAIN_COMPLIANCE_NOTICE,
   EMERGING_TECH_FEASIBILITY_NOTICE,
-  computeConfiguredServiceTotal,
 } from '../data/serviceCatalog';
+import { corporateIdentity } from '../data/companyConfig';
 import { CatalogCategoryId, CatalogService } from '../types';
 import { ServiceTechIcon } from './animations/ServiceTechIcon';
 import { BlockchainNetworkCanvas } from './animations/BlockchainNetworkCanvas';
@@ -25,13 +25,15 @@ import {
   Shield,
   Check,
   Sparkles,
-  SlidersHorizontal,
+  Phone,
 } from 'lucide-react';
 
 interface ServicesSectionProps {
   onSelectServiceForInquiry: (serviceId: string) => void;
   onOpenAIConsultant: (initialPrompt?: string) => void;
 }
+
+const SELECTION_STORAGE_KEY = 'dti_solution_selection_v2';
 
 export const ServicesSection: React.FC<ServicesSectionProps> = ({
   onSelectServiceForInquiry,
@@ -42,13 +44,11 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
 
   const [activeCategory, setActiveCategory] = useState<CatalogCategoryId>('website-digital');
   const [searchQuery, setSearchQuery] = useState('');
-  const [currency, setCurrency] = useState<'USD' | 'PHP'>('USD');
-  const [phpRate, setPhpRate] = useState<number>(DEFAULT_USD_TO_PHP_RATE);
-  const [showRateEditor, setShowRateEditor] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('opm_pending_selection_v1');
+      localStorage.removeItem('opm_pending_selection_v1');
+      const saved = localStorage.getItem(SELECTION_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed?.selectedIds)) return parsed.selectedIds;
@@ -60,7 +60,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
   });
   const [selectedOptionsMap, setSelectedOptionsMap] = useState<Record<string, string[]>>(() => {
     try {
-      const saved = localStorage.getItem('opm_pending_selection_v1');
+      const saved = localStorage.getItem(SELECTION_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.selectedOptionsMap && typeof parsed.selectedOptionsMap === 'object') {
@@ -78,7 +78,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
   React.useEffect(() => {
     try {
       localStorage.setItem(
-        'opm_pending_selection_v1',
+        SELECTION_STORAGE_KEY,
         JSON.stringify({ selectedIds, selectedOptionsMap })
       );
     } catch {
@@ -94,7 +94,11 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
   const filteredServices = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return SERVICE_CATALOG.filter((svc) => {
-      const matchesCategory = q ? (activeCategory === 'all' ? true : svc.categoryId === activeCategory) : activeCategory === 'all' || svc.categoryId === activeCategory;
+      const matchesCategory = q
+        ? activeCategory === 'all'
+          ? true
+          : svc.categoryId === activeCategory
+        : activeCategory === 'all' || svc.categoryId === activeCategory;
       if (!matchesCategory) return false;
       if (!q) return true;
       return (
@@ -137,14 +141,14 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
 
   const handleConsultAIForService = (service: CatalogService) => {
     onOpenAIConsultant(
-      `I would like to explore "${service.title}" (starting at $${service.pricing.startingUsd.toLocaleString('en-US')}) and understand how it fits our business requirements.`
+      `I would like to explore "${service.title}" as a customized enterprise solution and understand how it aligns with our operational and technical requirements.`
     );
   };
 
   const handleConsultAIWithSelection = (services: CatalogService[]) => {
     const names = services.map((s) => s.title).join(', ');
     onOpenAIConsultant(
-      `I selected the following solutions in Build Your Solution: ${names}. Can you help me scope the right architecture and next steps?`
+      `I selected the following customized solution frameworks for assessment: ${names}. Can you help me outline the technical discovery scope and next steps for a consultation?`
     );
   };
 
@@ -161,16 +165,6 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
   );
   const otherServices = filteredServices.filter((s) => s.categoryId !== 'modernization-care');
 
-  const selectedOneTimeTotal = selectedServices.reduce(
-    (sum, s) => sum + computeConfiguredServiceTotal(s, selectedOptionsMap[s.id] || []).oneTimeUsd,
-    0
-  );
-
-  const selectedMonthlyTotal = selectedServices.reduce(
-    (sum, s) => sum + computeConfiguredServiceTotal(s, selectedOptionsMap[s.id] || []).monthlyUsd,
-    0
-  );
-
   return (
     <section
       id="services"
@@ -178,27 +172,27 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
       className="py-20 lg:py-28 bg-[#0B1220] border-t border-slate-800/80 relative"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* =================================================================
-            BLOCK 1: UNIFIED SERVICES HEADER & PRIMARY ACTIONS
-            ================================================================= */}
+        {/* BLOCK 1: UNIFIED SOLUTIONS HEADER & PRIMARY ACTIONS */}
         <div className="max-w-4xl">
           <div className="text-xs font-mono font-semibold text-[#00C2C7] uppercase tracking-wider mb-3">
-            OUR SERVICES &amp; ADVANCED TECHNOLOGY SOLUTIONS
+            CUSTOMIZED ENTERPRISE SOLUTION FRAMEWORKS
           </div>
 
           <h2
             id="services-marketplace-heading"
             className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-[1.12] text-balance"
           >
-            Engineering the Future of Digital Innovation.
+            Engineering Intelligent Solutions Across Every Enterprise Division.
           </h2>
 
           <p className="mt-4 text-base sm:text-lg text-slate-200 leading-relaxed text-balance">
-            From intelligent AI ecosystems and blockchain infrastructure to enterprise software, premium digital experiences, and next-generation automation, DESTRIA TECH INC delivers sophisticated technology solutions engineered to accelerate business transformation.
+            {COMMERCIAL_SERVICE_NOTICE}
           </p>
 
           <p className="mt-3 text-sm text-slate-400 leading-relaxed max-w-3xl">
-            We combine creative excellence, intelligent engineering, and strategic innovation to help ambitious businesses build, automate, secure, and scale their digital operations.
+            Explore our customized solution frameworks across Artificial Intelligence, Blockchain
+            Infrastructure, Enterprise Software, Cloud &amp; Cybersecurity, Workflow Automation, and
+            Digital Transformation.
           </p>
 
           {/* Primary Actions */}
@@ -208,7 +202,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
               onClick={() => scrollToCatalog('all')}
               className="inline-flex items-center gap-2 px-5 py-3 text-xs sm:text-sm font-semibold text-[#0B1220] bg-[#00C2C7] hover:bg-[#00d6dc] rounded-lg transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
             >
-              <span>Explore Our Solutions</span>
+              <span>Explore Our Technology Solutions</span>
               <ArrowUpRight className="w-4 h-4" />
             </button>
 
@@ -218,7 +212,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
               className="inline-flex items-center gap-2 px-5 py-3 text-xs sm:text-sm font-semibold text-white bg-[#111827] hover:bg-slate-800 border border-slate-700 hover:border-[#D4AF37]/60 rounded-lg transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
             >
               <Layers className="w-4 h-4 text-[#D4AF37]" />
-              <span>Request a Personalized Proposal</span>
+              <span>Request a Formal Proposal</span>
             </button>
 
             <button
@@ -227,20 +221,18 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
               className="inline-flex items-center gap-2 px-5 py-3 text-xs sm:text-sm font-semibold text-[#00C2C7] hover:text-white bg-transparent hover:bg-[#00C2C7]/10 border border-[#00C2C7]/45 rounded-lg transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
             >
               <Bot className="w-4 h-4" />
-              <span>Speak With Our AI Solutions Consultant</span>
+              <span>Consult AI Corporate Solutions Advisor</span>
             </button>
           </div>
         </div>
 
-        {/* =================================================================
-            INTERACTIVE DISCOVERY BAR: SEARCH, CURRENCY & 10 CATEGORIES
-            ================================================================= */}
+        {/* INTERACTIVE DISCOVERY BAR: SEARCH & SOLUTION ENGAGEMENT BUILDER */}
         <div ref={catalogRef} className="mt-14 space-y-5 scroll-mt-28">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-2xl bg-[#111827] border border-slate-800">
             {/* Search Input */}
             <div className="relative flex-1 max-w-xl">
               <label htmlFor="service-catalog-search" className="sr-only">
-                Search Destria Tech Inc services and capabilities
+                Search Destria Tech Inc technology solutions and capabilities
               </label>
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
@@ -254,7 +246,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                     setActiveCategory('all');
                   }
                 }}
-                placeholder="Search solutions, AI agents, blockchain, industries, or prices..."
+                placeholder="Search enterprise solutions, AI agents, blockchain, cloud security, or capabilities..."
                 className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-[#0B1220] border border-slate-700 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00C2C7]"
               />
               {searchQuery && (
@@ -269,71 +261,13 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
               )}
             </div>
 
-            {/* Currency Switcher & Build Your Solution Trigger */}
+            {/* Engagement Model Indicator & Solution Scope Builder Trigger */}
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1 p-1 rounded-xl bg-[#0B1220] border border-slate-800 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setCurrency('USD')}
-                  aria-pressed={currency === 'USD'}
-                  className={`px-3 py-1.5 rounded-lg font-mono font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                    currency === 'USD'
-                      ? 'bg-[#00C2C7] text-[#0B1220]'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  USD
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrency('PHP')}
-                  aria-pressed={currency === 'PHP'}
-                  className={`px-3 py-1.5 rounded-lg font-mono font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                    currency === 'PHP'
-                      ? 'bg-[#00C2C7] text-[#0B1220]'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  USD + PHP Est.
-                </button>
+              <div className="px-3.5 py-2 rounded-xl bg-[#0B1220] border border-slate-800 text-[11px] font-mono text-slate-300">
+                <span className="text-[#00C2C7] font-semibold">Customized Enterprise Solutions</span>
+                <span className="mx-1.5 text-slate-600">·</span>
+                <span>Subject to Formal Assessment</span>
               </div>
-
-              {currency === 'PHP' && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowRateEditor((v) => !v)}
-                    className="px-2.5 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-[11px] font-mono text-slate-300 hover:text-white flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                    title="Configure estimated USD to PHP exchange rate"
-                  >
-                    <SlidersHorizontal className="w-3 h-3 text-[#00C2C7]" />
-                    <span>1 USD ≈ ₱{phpRate}</span>
-                  </button>
-                  {showRateEditor && (
-                    <div className="absolute right-0 mt-2 p-3 rounded-xl bg-[#111827] border border-slate-700 shadow-xl z-20 w-56 space-y-2">
-                      <label htmlFor="php-rate-input" className="block text-[11px] font-mono text-slate-300">
-                        Configurable PHP Estimate Rate
-                      </label>
-                      <input
-                        id="php-rate-input"
-                        type="number"
-                        min={40}
-                        max={80}
-                        step={0.5}
-                        value={phpRate}
-                        onChange={(e) => {
-                          const num = parseFloat(e.target.value);
-                          if (!Number.isNaN(num) && num > 0) setPhpRate(num);
-                        }}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#0B1220] border border-slate-700 text-xs font-mono text-white"
-                      />
-                      <p className="text-[10px] text-slate-400">
-                        PHP figures are displayed strictly as estimates alongside USD pricing.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
 
               <button
                 type="button"
@@ -341,14 +275,14 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                 className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-[#D4AF37]/45 text-xs font-semibold text-white flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
               >
                 <Layers className="w-3.5 h-3.5 text-[#D4AF37]" />
-                <span>Build Your Solution ({selectedIds.length})</span>
+                <span>Submit Project Requirements ({selectedIds.length})</span>
               </button>
             </div>
           </div>
 
           {/* 10-Category Navigation Bar + All Solutions */}
           <nav
-            aria-label="Service categories"
+            aria-label="Solution divisions"
             className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2"
           >
             {CATALOG_CATEGORIES.map((cat) => {
@@ -373,7 +307,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                   />
                   <div className="min-w-0">
                     <div className="text-[10px] font-mono text-slate-400">
-                      {cat.id === 'all' ? 'CATALOG' : cat.number}
+                      {cat.id === 'all' ? 'DIRECTORY' : cat.number}
                     </div>
                     <div className="text-xs font-semibold truncate">{cat.shortLabel}</div>
                   </div>
@@ -383,9 +317,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
           </nav>
         </div>
 
-        {/* =================================================================
-            ACTIVE CATEGORY SHOWCASE BANNER & DIVISION SPECIALS
-            ================================================================= */}
+        {/* ACTIVE CATEGORY SHOWCASE BANNER & DIVISION SPECIALS */}
         <AnimatePresence mode="wait">
           <motion.div
             key={activeCategory}
@@ -424,29 +356,28 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                   </div>
                 </div>
 
-                {/* Contextual Division Action */}
                 {activeCategory === 'ai-agents' && (
                   <div className="shrink-0 flex flex-col items-start lg:items-end gap-2">
                     <button
                       type="button"
                       onClick={() =>
                         onOpenAIConsultant(
-                          'Can you walk me through DESTRIA TECH INC AI agents and help recommend the right setup for our organization?'
+                          'Can you walk me through DESTRIA TECH INC AI agents and help recommend the right architecture for our organization?'
                         )
                       }
                       className="px-4 py-2.5 rounded-lg bg-[#00C2C7] hover:bg-[#00d6dc] text-[#111827] text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
                     >
                       <Bot className="w-4 h-4" />
-                      <span>Launch Live AI Solutions Demo</span>
+                      <span>Start AI Consultation</span>
                     </button>
                     <span className="text-[11px] font-mono text-slate-400">
-                      Connected to live DESTRIA TECH INC AI Solutions Consultant
+                      DESTRIA TECH INC AI Corporate Solutions Consultant
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* BLOCK 5: Blockchain & Web3 Featured Network Visual, Capabilities & Compliance */}
+              {/* Blockchain & Web3 Featured Network Visual, Capabilities & Compliance */}
               {activeCategory === 'blockchain-web3' && (
                 <div className="mt-6 pt-6 border-t border-slate-800 space-y-5">
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
@@ -494,7 +425,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                 </div>
               )}
 
-              {/* BLOCK 6: Emerging Technology Feasibility Disclosure */}
+              {/* Emerging Technology Feasibility Disclosure */}
               {(activeCategory === 'enterprise-mobile' || activeCategory === 'automation-systems') && (
                 <div className="mt-5 pt-4 border-t border-slate-800 text-xs text-slate-400 flex items-start gap-2.5">
                   <Sparkles className="w-4 h-4 text-[#00C2C7] shrink-0 mt-0.5" />
@@ -503,16 +434,15 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
               )}
             </div>
 
-            {/* ===============================================================
-                SERVICE CARDS GRID (OR SEPARATED MODERNIZATION + CARE GRIDS)
-                =============================================================== */}
+            {/* SERVICE CARDS GRID */}
             {filteredServices.length === 0 ? (
               <div className="p-12 rounded-2xl bg-[#111827] border border-slate-800 text-center space-y-3">
                 <p className="text-sm font-semibold text-white">
                   No solutions matched "{searchQuery}".
                 </p>
                 <p className="text-xs text-slate-400">
-                  Try clearing your search or ask our AI Solutions Consultant for a custom-scoped architecture recommendation.
+                  Try clearing your search or consult our AI Corporate Solutions Advisor for a
+                  custom-scoped architecture recommendation.
                 </p>
                 <div className="pt-2 flex justify-center gap-3">
                   <button
@@ -527,7 +457,9 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onOpenAIConsultant(`I am looking for a solution related to: ${searchQuery}`)}
+                    onClick={() =>
+                      onOpenAIConsultant(`I am looking for a customized solution related to: ${searchQuery}`)
+                    }
                     className="px-4 py-2 rounded-lg bg-[#00C2C7] hover:bg-[#00d6dc] text-xs font-semibold text-[#0B1220] cursor-pointer"
                   >
                     Ask AI Consultant
@@ -536,7 +468,6 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
               </div>
             ) : (
               <div className="space-y-12">
-                {/* Non-Modernization Services Grid */}
                 {otherServices.length > 0 && (
                   <div
                     className={`grid gap-6 ${
@@ -549,8 +480,6 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                       <ServiceCard
                         key={service.id}
                         service={service}
-                        currency={currency}
-                        phpRate={phpRate}
                         isSelected={selectedIds.includes(service.id)}
                         onToggleSelect={toggleSelectService}
                         onExplore={setDetailService}
@@ -561,20 +490,19 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                   </div>
                 )}
 
-                {/* BLOCK 7: Separate One-Time Modernization Services vs Digital Care Memberships */}
                 {oneTimeModernization.length > 0 && (
                   <div className="space-y-5">
                     <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pb-3 border-b border-slate-800">
                       <div>
                         <div className="text-xs font-mono text-[#00C2C7] uppercase">
-                          One-Time Modernization &amp; Repair Services
+                          Targeted Modernization &amp; Remediation Frameworks
                         </div>
                         <h4 className="text-lg font-bold text-white mt-0.5">
-                          Targeted Upgrades, Restorations &amp; Security Remediation ({oneTimeModernization.length})
+                          Upgrades, Restorations &amp; Security Remediation ({oneTimeModernization.length})
                         </h4>
                       </div>
                       <span className="text-xs text-slate-400 font-mono">
-                        Scoped per assignment
+                        Subject to Formal Assessment
                       </span>
                     </div>
 
@@ -583,8 +511,6 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                         <ServiceCard
                           key={service.id}
                           service={service}
-                          currency={currency}
-                          phpRate={phpRate}
                           isSelected={selectedIds.includes(service.id)}
                           onToggleSelect={toggleSelectService}
                           onExplore={setDetailService}
@@ -600,14 +526,14 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                     <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pb-3 border-b border-slate-800">
                       <div>
                         <div className="text-xs font-mono text-[#D4AF37] uppercase">
-                          Digital Care Memberships
+                          Managed Enterprise Stewardship Frameworks
                         </div>
                         <h4 className="text-lg font-bold text-white mt-0.5">
-                          Ongoing Monthly Maintenance, Monitoring &amp; Technical Stewardship
+                          Ongoing Maintenance, Monitoring &amp; Technical Stewardship
                         </h4>
                       </div>
                       <span className="text-xs text-slate-400 font-mono">
-                        Recurring monthly plans
+                        Structured via Formal Proposal
                       </span>
                     </div>
 
@@ -616,8 +542,6 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                         <ServiceCard
                           key={service.id}
                           service={service}
-                          currency={currency}
-                          phpRate={phpRate}
                           isSelected={selectedIds.includes(service.id)}
                           onToggleSelect={toggleSelectService}
                           onExplore={setDetailService}
@@ -632,43 +556,40 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
           </motion.div>
         </AnimatePresence>
 
-        {/* =================================================================
-            BLOCK 13: PRICING & COMMERCIAL POLICY DISCLOSURE
-            ================================================================= */}
+        {/* COMMERCIAL ENGAGEMENT POLICY DISCLOSURE */}
         <div className="mt-14 p-6 rounded-2xl bg-[#111827] border border-slate-800 space-y-2.5 text-xs text-slate-300 leading-relaxed">
           <div className="text-[11px] font-mono uppercase tracking-wider text-[#00C2C7] font-semibold">
-            Commercial Pricing &amp; Engagement Notice
+            Commercial Engagement Policy &amp; Assessment Notice
           </div>
-          <p>{COMMERCIAL_PRICING_NOTICE}</p>
+          <p>{COMMERCIAL_ENGAGEMENT_NOTICE}</p>
           <p className="text-slate-400">{EXTERNAL_CHARGES_DISCLOSURE}</p>
         </div>
 
-        {/* =================================================================
-            FINAL DESIGN DIRECTION: CLOSING CALL TO ACTION
-            ================================================================= */}
+        {/* CLOSING ENTERPRISE CALL TO ACTION */}
         <div className="mt-12 rounded-2xl bg-gradient-to-br from-[#151e30] via-[#111827] to-[#0B1220] border border-slate-700/80 p-8 sm:p-10 text-center space-y-5">
           <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight text-balance">
-            Your Vision Deserves Extraordinary Technology.
+            Architect Your Customized Enterprise Solution.
           </h3>
           <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed">
-            Discover a smarter approach to digital transformation through solutions thoughtfully engineered for your business.
+            Initiate a technical consultation with {corporateIdentity.legalName} to evaluate your
+            operational requirements, integration landscape, and formal proposal roadmap.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
             <button
               type="button"
-              onClick={() => scrollToCatalog('signature-packages')}
+              onClick={() => setIsBuilderOpen(true)}
               className="px-5 py-2.5 rounded-lg bg-[#00C2C7] hover:bg-[#00d6dc] text-[#0B1220] text-xs sm:text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap"
             >
-              Explore Our Solutions
+              Request a Formal Proposal
             </button>
-            <button
-              type="button"
-              onClick={() => setIsBuilderOpen(true)}
-              className="px-5 py-2.5 rounded-lg bg-[#D4AF37] hover:bg-[#e3be48] text-[#0B1220] text-xs sm:text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap"
+            <a
+              href={corporateIdentity.contact.telephone.href}
+              className="px-5 py-2.5 rounded-lg bg-[#D4AF37] hover:bg-[#e3be48] text-[#0B1220] text-xs sm:text-sm font-semibold transition-colors inline-flex items-center gap-2 whitespace-nowrap font-mono"
             >
-              Request a Personalized Proposal
-            </button>
+              <Phone className="w-4 h-4" />
+              <span>{corporateIdentity.contact.telephone.display}</span>
+            </a>
             <button
               type="button"
               onClick={() => onOpenAIConsultant()}
@@ -679,28 +600,24 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
           </div>
 
           <div className="pt-4 border-t border-slate-800/80 text-xs text-slate-400">
-            <span className="font-bold text-white tracking-wide">DESTRIA TECH INC</span>
+            <span className="font-bold text-white tracking-wide">{corporateIdentity.legalName}</span>
             <span className="mx-2 text-slate-600" aria-hidden="true">·</span>
-            <em className="text-[#D4AF37] not-italic">Engineering Intelligence. Connecting the Future.</em>
+            <span className="text-[#D4AF37]">
+              Engineering Intelligent Solutions. Empowering Enterprise Transformation.
+            </span>
           </div>
         </div>
       </div>
 
-      {/* =================================================================
-          STICKY MULTI-SERVICE SOLUTION BUILDER BAR (Avoids AI launcher overlap on mobile)
-          ================================================================= */}
+      {/* STICKY MULTI-SERVICE SOLUTION BUILDER BAR */}
       {selectedServices.length > 0 && (
         <div className="fixed bottom-4 left-3 right-20 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto sm:w-full sm:max-w-xl z-30 bg-[#111827]/95 backdrop-blur-md border border-[#00C2C7]/60 rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 shadow-2xl flex items-center justify-between gap-2.5 sm:gap-3">
           <div className="min-w-0">
             <div className="text-xs font-bold text-white truncate">
-              {selectedServices.length} {selectedServices.length === 1 ? 'Solution' : 'Solutions'} Selected
+              {selectedServices.length} {selectedServices.length === 1 ? 'Solution' : 'Solutions'} Selected for Assessment
             </div>
-            <div className="text-[11px] font-mono text-[#00C2C7] tabular-nums truncate">
-              {selectedOneTimeTotal > 0 ? `Est. $${selectedOneTimeTotal.toLocaleString('en-US')}` : 'Est. Custom'}
-              {selectedMonthlyTotal > 0 ? ` + $${selectedMonthlyTotal.toLocaleString('en-US')}/mo` : ''}
-              {currency === 'PHP' && selectedOneTimeTotal > 0
-                ? ` (≈ ₱${Math.round(selectedOneTimeTotal * phpRate).toLocaleString('en-US')})`
-                : ''}
+            <div className="text-[11px] font-mono text-[#00C2C7] truncate">
+              Customized Enterprise Solution · Subject to Formal Assessment
             </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -716,7 +633,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
               onClick={() => setIsBuilderOpen(true)}
               className="px-3 sm:px-4 py-2 rounded-lg bg-[#00C2C7] hover:bg-[#00d6dc] text-[#0B1220] text-xs font-semibold cursor-pointer whitespace-nowrap"
             >
-              Review
+              Submit Requirements
             </button>
           </div>
         </div>
@@ -725,8 +642,6 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
       {/* Modals */}
       <ServiceDetailModal
         service={detailService}
-        currency={currency}
-        phpRate={phpRate}
         isSelected={detailService ? selectedIds.includes(detailService.id) : false}
         selectedOptionIds={detailService ? selectedOptionsMap[detailService.id] || [] : []}
         onClose={() => setDetailService(null)}
@@ -740,8 +655,6 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
         isOpen={isBuilderOpen}
         selectedServices={selectedServices}
         selectedOptionsMap={selectedOptionsMap}
-        currency={currency}
-        phpRate={phpRate}
         onClose={() => setIsBuilderOpen(false)}
         onRemoveService={(id) => {
           setSelectedIds((prev) => prev.filter((item) => item !== id));

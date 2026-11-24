@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   LayoutDashboard,
   Briefcase,
-  Store,
+  Layers,
   ShoppingBag,
   FolderKanban,
   MessageSquare,
@@ -18,13 +18,16 @@ import {
   Settings,
   LogOut,
   Search,
-  ShoppingCart,
+  ClipboardCheck,
   Menu,
   X,
   ArrowLeft,
   ChevronDown,
+  Phone,
+  Mail,
 } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
+import { corporateIdentity } from '../../data/companyConfig';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
 
@@ -45,7 +48,7 @@ export const PortalLayout: React.FC<{
   subtitle?: string;
   children: React.ReactNode;
 }> = ({ title, subtitle, children }) => {
-  const { user, profile, wallet, unreadNotifications, cartItemCount, logout } = usePortalAuth();
+  const { user, profile, wallet, unreadNotifications, logout } = usePortalAuth();
   const { path, navigate, exitToPublicSite } = usePortalRouter();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -55,29 +58,30 @@ export const PortalLayout: React.FC<{
 
   const navGroups: Array<{ heading: string; items: SidebarItem[] }> = [
     {
-      heading: 'Workspace',
+      heading: 'Enterprise Workspace',
       items: [
-        { label: 'Dashboard', path: '/portal/dashboard', icon: LayoutDashboard },
-        { label: 'My Services', path: '/portal/services', icon: Briefcase },
-        { label: 'Service Store', path: '/portal/store', icon: Store, matchPrefixes: ['/portal/store'] },
-        { label: 'My Orders', path: '/portal/orders', icon: ShoppingBag, matchPrefixes: ['/portal/orders'] },
+        { label: 'Overview', path: '/portal/dashboard', icon: LayoutDashboard },
+        { label: 'Solutions Directory', path: '/portal/store', icon: Layers, matchPrefixes: ['/portal/store'] },
+        { label: 'Inquiries & Proposals', path: '/portal/cart', icon: ClipboardCheck, matchPrefixes: ['/portal/checkout'] },
+        { label: 'My Engagements', path: '/portal/services', icon: Briefcase },
       ],
     },
     {
-      heading: 'Production',
+      heading: 'Delivery & Collaboration',
       items: [
-        { label: 'My Projects', path: '/portal/projects', icon: FolderKanban, matchPrefixes: ['/portal/projects'] },
-        { label: 'Project Discussions', path: '/portal/messages', icon: MessageSquare },
-        { label: 'My Files & Deliverables', path: '/portal/files', icon: FolderOpen },
+        { label: 'Project Workspaces', path: '/portal/projects', icon: FolderKanban, matchPrefixes: ['/portal/projects'] },
+        { label: 'Corporate Communications', path: '/portal/messages', icon: MessageSquare },
+        { label: 'Deliverables & Files', path: '/portal/files', icon: FolderOpen },
       ],
     },
     {
-      heading: 'Billing & Credits',
+      heading: 'Authorized Financials',
       items: [
-        { label: 'Credits & Usage', path: '/portal/credits', icon: Coins },
-        { label: 'Subscriptions', path: '/portal/subscriptions', icon: RefreshCw },
-        { label: 'Invoices & Receipts', path: '/portal/invoices', icon: FileText },
+        { label: 'Authorized Orders', path: '/portal/orders', icon: ShoppingBag, matchPrefixes: ['/portal/orders'] },
+        { label: 'Authorized Invoices', path: '/portal/invoices', icon: FileText },
         { label: 'Payment History', path: '/portal/payments', icon: CreditCard },
+        { label: 'Authorized Credits', path: '/portal/credits', icon: Coins },
+        { label: 'Authorized Subscriptions', path: '/portal/subscriptions', icon: RefreshCw },
       ],
     },
     {
@@ -100,7 +104,7 @@ export const PortalLayout: React.FC<{
   const isActivePath = (item: SidebarItem) => {
     if (path === item.path) return true;
     if (item.matchPrefixes) {
-      return item.matchPrefixes.some((prefix) => path.startsWith(`${prefix}/`));
+      return item.matchPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
     }
     return false;
   };
@@ -136,8 +140,8 @@ export const PortalLayout: React.FC<{
             theme="portal-dark"
             size="md"
             ring="gold"
-            title="DESTRIA TECH INC"
-            subtitle="DESTRIA NETWORK · Portal"
+            title={corporateIdentity.legalName}
+            subtitle={`${corporateIdentity.networkName} · Portal`}
             eager
           />
         </button>
@@ -195,22 +199,41 @@ export const PortalLayout: React.FC<{
         ))}
       </nav>
 
-      {/* Bottom Actions */}
-      <div className="p-3 border-t border-white/10 space-y-1">
-        <button
-          onClick={exitToPublicSite}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-slate-300 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4 text-slate-400 shrink-0" />
-          <span>Back to Public Website</span>
-        </button>
-        <button
-          onClick={handleSignOut}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-rose-200 hover:text-white hover:bg-rose-500/20 transition-colors cursor-pointer"
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          <span>Logout</span>
-        </button>
+      {/* Corporate Contact & Bottom Actions */}
+      <div className="p-3 border-t border-white/10 space-y-2">
+        <div className="px-3 py-2 rounded-lg bg-white/5 text-[11px] text-slate-300 space-y-1">
+          <div className="font-semibold text-white">Corporate Inquiry Desk</div>
+          <a
+            href={corporateIdentity.contact.telephone.href}
+            className="flex items-center gap-1.5 text-[#00C2C7] hover:underline"
+          >
+            <Phone className="w-3 h-3 shrink-0" />
+            <span>{corporateIdentity.contact.telephone.display}</span>
+          </a>
+          <a
+            href={`mailto:${corporateIdentity.contact.email}`}
+            className="flex items-center gap-1.5 text-slate-300 hover:text-white truncate"
+          >
+            <Mail className="w-3 h-3 shrink-0" />
+            <span className="truncate">{corporateIdentity.contact.email}</span>
+          </a>
+        </div>
+        <div className="space-y-1">
+          <button
+            onClick={exitToPublicSite}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-slate-300 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4 text-slate-400 shrink-0" />
+            <span>Back to Public Website</span>
+          </button>
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-rose-200 hover:text-white hover:bg-rose-500/20 transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -289,18 +312,18 @@ export const PortalLayout: React.FC<{
                   type="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search services, packages, or categories..."
+                  placeholder="Search technology solutions or frameworks..."
                   className="w-full pl-9 pr-3 py-2 text-sm bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg text-[#0F1D36] placeholder:text-[#64748B] focus:outline-none focus:border-[#0F4C3A] focus:bg-white transition-colors"
                 />
               </div>
             </form>
 
-            {/* Right: Credits, Store CTA, Cart, Notifications, Profile */}
+            {/* Right: Authorized Credits, Solutions CTA, Proposals, Notifications, Profile */}
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               <button
                 onClick={() => navigate('/portal/credits')}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E6E2D8] bg-[#FAF8F4] hover:border-[#B8923A] transition-colors cursor-pointer whitespace-nowrap"
-                title="Available service credits"
+                title="Authorized service credits"
               >
                 <Coins className="w-3.5 h-3.5 text-[#B8923A]" />
                 <span className="font-mono text-xs font-semibold tabular-nums text-[#0F1D36]">
@@ -313,21 +336,17 @@ export const PortalLayout: React.FC<{
                 onClick={() => navigate('/portal/store')}
                 className="hidden xl:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
               >
-                <Store className="w-3.5 h-3.5" />
-                <span>Service Store</span>
+                <Layers className="w-3.5 h-3.5" />
+                <span>Solutions Directory</span>
               </button>
 
               <button
                 onClick={() => navigate('/portal/cart')}
                 className="relative p-2 rounded-lg border border-[#E6E2D8] text-[#0F1D36] hover:bg-[#FAF8F4] transition-colors cursor-pointer"
-                aria-label="Shopping cart"
+                aria-label="Inquiries and formal proposals"
+                title="Inquiries & Formal Proposals"
               >
-                <ShoppingCart className="w-4 h-4" />
-                {cartItemCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#0F4C3A] text-white font-mono text-[10px] font-bold flex items-center justify-center tabular-nums">
-                    {cartItemCount}
-                  </span>
-                )}
+                <ClipboardCheck className="w-4 h-4" />
               </button>
 
               <button

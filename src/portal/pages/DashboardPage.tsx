@@ -1,17 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
-  Coins,
+  ClipboardCheck,
   FilePlus2,
   FolderKanban,
+  Layers,
   LifeBuoy,
   ShoppingBag,
-  Store,
 } from 'lucide-react';
 import { PortalLayout } from '../components/PortalLayout';
 import { portalRequest } from '../portalApi';
 import { usePortalRouter } from '../PortalRouter';
-import { usePortalAuth } from '../PortalAuthContext';
 import {
   formatMoney,
   formatPortalDate,
@@ -30,6 +29,8 @@ interface DashboardData {
     completedProjects: number;
     pendingPayments: number;
     openSupportRequests: number;
+    serviceInquiriesCount?: number;
+    approvedProposalsCount?: number;
   };
   recentOrders: any[];
   activeProjectsList: any[];
@@ -39,12 +40,9 @@ interface DashboardData {
 
 export const PortalDashboardPage: React.FC = () => {
   const { navigate } = usePortalRouter();
-  const { profile } = usePortalAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  const currency = profile?.preferredCurrency || 'USD';
 
   useEffect(() => {
     let active = true;
@@ -65,8 +63,8 @@ export const PortalDashboardPage: React.FC = () => {
 
   return (
     <PortalLayout
-      title="Client Dashboard"
-      subtitle="Overview of your active orders, creative production workspaces, credits, and recent updates."
+      title="Enterprise Client Overview"
+      subtitle="Overview of your formal proposals, active engineering workspaces, authorized financial records, and recent updates."
     >
       {error && (
         <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-sm text-[#B91C1C]">
@@ -77,11 +75,11 @@ export const PortalDashboardPage: React.FC = () => {
       {/* 6 Overview Metric Cards */}
       <section aria-label="Account summary metrics" className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
         {[
-          { label: 'Active Orders', value: data?.metrics.activeOrders ?? 0, to: '/portal/orders' },
+          { label: 'Active Engagements', value: data?.metrics.activeOrders ?? 0, to: '/portal/orders' },
           { label: 'Active Projects', value: data?.metrics.activeProjects ?? 0, to: '/portal/projects' },
-          { label: 'Available Credits', value: data?.metrics.availableCredits ?? 0, to: '/portal/credits' },
-          { label: 'Completed Projects', value: data?.metrics.completedProjects ?? 0, to: '/portal/projects' },
-          { label: 'Pending Payments', value: data?.metrics.pendingPayments ?? 0, to: '/portal/payments' },
+          { label: 'Approved Proposals', value: data?.metrics.approvedProposalsCount ?? 0, to: '/portal/cart' },
+          { label: 'Service Inquiries', value: data?.metrics.serviceInquiriesCount ?? 0, to: '/portal/cart' },
+          { label: 'Authorized Credits', value: data?.metrics.availableCredits ?? 0, to: '/portal/credits' },
           { label: 'Open Support', value: data?.metrics.openSupportRequests ?? 0, to: '/portal/support' },
         ].map((card) => (
           <button
@@ -101,16 +99,16 @@ export const PortalDashboardPage: React.FC = () => {
       <section className="mb-8 bg-white border border-[#E6E2D8] rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-[#0F1D36]">Quick Actions</h2>
-          <span className="text-xs text-[#64748B]">Start a workflow in one click</span>
+          <span className="text-xs text-[#64748B]">Enterprise workflows and project governance</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
-            { label: 'Purchase a Service', icon: Store, to: '/portal/store', primary: true },
-            { label: 'Create a Project', icon: FolderKanban, to: '/portal/projects?new=1' },
+            { label: 'Solutions Directory', icon: Layers, to: '/portal/store', primary: true },
+            { label: 'Inquiries & Proposals', icon: ClipboardCheck, to: '/portal/cart' },
+            { label: 'Project Workspaces', icon: FolderKanban, to: '/portal/projects' },
             { label: 'Submit Project Brief', icon: FilePlus2, to: '/portal/projects?new=1' },
-            { label: 'Purchase Credits', icon: Coins, to: '/portal/store?category=subscription-credit-packages' },
-            { label: 'View My Orders', icon: ShoppingBag, to: '/portal/orders' },
-            { label: 'Contact Support', icon: LifeBuoy, to: '/portal/support?new=1' },
+            { label: 'Authorized Orders', icon: ShoppingBag, to: '/portal/orders' },
+            { label: 'Support Center', icon: LifeBuoy, to: '/portal/support?new=1' },
           ].map((action) => {
             const Icon = action.icon;
             return (
@@ -131,12 +129,12 @@ export const PortalDashboardPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Two-Column Core Sections: Recent Orders & Active Projects */}
+      {/* Two-Column Core Sections: Recent Authorized Orders & Active Projects */}
       <div className="grid lg:grid-cols-2 gap-6 mb-8">
-        {/* A. Recent Orders */}
+        {/* A. Recent Authorized Orders */}
         <section className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden flex flex-col">
           <div className="px-5 py-4 border-b border-[#E6E2D8] flex items-center justify-between">
-            <h2 className="text-base font-semibold text-[#0F1D36]">Recent Orders</h2>
+            <h2 className="text-base font-semibold text-[#0F1D36]">Recent Authorized Orders</h2>
             <button
               onClick={() => navigate('/portal/orders')}
               className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer inline-flex items-center gap-1"
@@ -146,18 +144,18 @@ export const PortalDashboardPage: React.FC = () => {
             </button>
           </div>
           {loading ? (
-            <div className="p-6 text-sm text-[#64748B]">Loading recent orders...</div>
+            <div className="p-6 text-sm text-[#64748B]">Loading authorized orders...</div>
           ) : !data?.recentOrders.length ? (
             <div className="p-8 text-center">
-              <p className="text-sm font-medium text-[#0F1D36]">No orders placed yet</p>
+              <p className="text-sm font-medium text-[#0F1D36]">No authorized orders recorded yet</p>
               <p className="mt-1 text-xs text-[#64748B]">
-                Browse the Service Store to select a multimedia package or credit bundle.
+                Explore the Technology Solutions Directory to initiate a consultation and receive a formal proposal.
               </p>
               <button
                 onClick={() => navigate('/portal/store')}
                 className="mt-4 px-4 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
               >
-                Explore Service Store
+                Explore Solutions Directory
               </button>
             </div>
           ) : (
@@ -166,8 +164,8 @@ export const PortalDashboardPage: React.FC = () => {
                 <thead className="bg-[#FAF8F4] text-xs text-[#64748B] border-b border-[#E6E2D8]">
                   <tr>
                     <th className="px-4 py-2.5 font-medium">Order</th>
-                    <th className="px-4 py-2.5 font-medium">Service</th>
-                    <th className="px-4 py-2.5 font-medium text-right">Amount</th>
+                    <th className="px-4 py-2.5 font-medium">Engagement</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Authorized Total</th>
                     <th className="px-4 py-2.5 font-medium">Status</th>
                     <th className="px-4 py-2.5 font-medium text-right">Action</th>
                   </tr>
@@ -182,7 +180,7 @@ export const PortalDashboardPage: React.FC = () => {
                         <div className="text-[11px] text-[#64748B]">{formatPortalDate(order.createdAt)}</div>
                       </td>
                       <td className="px-4 py-3 text-xs text-[#334155]">
-                        {order.items?.[0]?.productName || 'Service Package'}
+                        {order.items?.[0]?.productName || 'Enterprise Solution'}
                         {order.items?.length > 1 ? ` +${order.items.length - 1}` : ''}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-xs font-semibold tabular-nums text-[#0F1D36]">
@@ -215,7 +213,7 @@ export const PortalDashboardPage: React.FC = () => {
         {/* B. Active Projects */}
         <section className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden flex flex-col">
           <div className="px-5 py-4 border-b border-[#E6E2D8] flex items-center justify-between">
-            <h2 className="text-base font-semibold text-[#0F1D36]">Active Projects</h2>
+            <h2 className="text-base font-semibold text-[#0F1D36]">Active Project Workspaces</h2>
             <button
               onClick={() => navigate('/portal/projects')}
               className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer inline-flex items-center gap-1"
@@ -230,7 +228,7 @@ export const PortalDashboardPage: React.FC = () => {
             <div className="p-8 text-center">
               <p className="text-sm font-medium text-[#0F1D36]">No active projects yet</p>
               <p className="mt-1 text-xs text-[#64748B]">
-                Submit a project brief or confirm a service order to open a collaborative workspace.
+                Submit a project brief or execute an approved formal proposal to open a collaborative workspace.
               </p>
               <button
                 onClick={() => navigate('/portal/projects?new=1')}
@@ -274,7 +272,7 @@ export const PortalDashboardPage: React.FC = () => {
         </section>
       </div>
 
-      {/* Bottom Two Columns: Recent Activities + Recommended Services */}
+      {/* Bottom Two Columns: Recent Activities + Customized Solution Frameworks */}
       <div className="grid lg:grid-cols-[1fr_1.4fr] gap-6">
         {/* C. Recent Activities */}
         <section className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
@@ -283,7 +281,7 @@ export const PortalDashboardPage: React.FC = () => {
           </div>
           {!data?.recentActivities.length ? (
             <div className="p-6 text-xs text-[#64748B]">
-              Order confirmations, messages, file uploads, and deliverable updates will appear here.
+              Proposal issuances, authorized orders, messages, file uploads, and deliverable updates will appear here.
             </div>
           ) : (
             <div className="divide-y divide-[#EFECE4]">
@@ -302,39 +300,38 @@ export const PortalDashboardPage: React.FC = () => {
           )}
         </section>
 
-        {/* D. Recommended Services */}
+        {/* D. Featured Customized Solution Frameworks (Zero Public Pricing) */}
         <section className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-[#E6E2D8] flex items-center justify-between">
-            <h2 className="text-base font-semibold text-[#0F1D36]">Recommended Services & Packages</h2>
+            <h2 className="text-base font-semibold text-[#0F1D36]">Customized Solution Frameworks</h2>
             <button
               onClick={() => navigate('/portal/store')}
               className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
             >
-              Browse full catalog
+              Explore Solutions Directory
             </button>
           </div>
           <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:gap-px bg-[#EFECE4]">
             {(data?.recommendedServices || []).map((product) => {
               const pkg = product.packages[0];
-              const priceMinor = currency === 'PHP' ? pkg.pricePhpMinor : pkg.priceUsdMinor;
               return (
                 <div key={product.id} className="bg-white p-5 flex flex-col justify-between">
                   <div>
                     <div className="text-xs text-[#64748B]">
-                      {pkg.creditsIncluded > 0 ? `${pkg.creditsIncluded.toLocaleString()} credits` : pkg.turnaroundLabel}
+                      {pkg?.turnaroundLabel || 'Customized Enterprise Engagement'}
                     </div>
                     <h3 className="mt-1 text-sm font-semibold text-[#0F1D36]">{product.name}</h3>
                     <p className="mt-1 text-xs text-[#475569] line-clamp-2">{product.shortDescription}</p>
                   </div>
-                  <div className="mt-4 pt-3 border-t border-[#F2EFE8] flex items-center justify-between">
-                    <span className="font-mono text-sm font-bold tabular-nums text-[#0F1D36]">
-                      {pkg.isCustomQuote ? 'Custom Quote' : formatMoney(priceMinor, currency)}
+                  <div className="mt-4 pt-3 border-t border-[#F2EFE8] flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#0F4C3A]">
+                      {pkg?.engagementLabel || 'Customized Enterprise Solution'}
                     </span>
                     <button
                       onClick={() => navigate(`/portal/store/${product.slug}`)}
-                      className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
+                      className="text-xs font-semibold text-[#0F1D36] hover:text-[#0F4C3A] hover:underline cursor-pointer whitespace-nowrap"
                     >
-                      Details →
+                      Explore Solution →
                     </button>
                   </div>
                 </div>

@@ -28,9 +28,12 @@ export class NotFoundError extends Error {
 export interface SelectedServiceSnapshot {
   id: string;
   title: string;
-  startingUsd: number;
+  engagementLabel?: string;
+  assessmentBasis?: string;
+  deliveryType?: string;
+  startingUsd?: number;
   monthlyUsd?: number;
-  model: string;
+  model?: string;
   selectedOptionIds: string[];
 }
 
@@ -38,7 +41,7 @@ export interface SolutionRequestRecord {
   id: string;
   referenceCode: string;
   idempotencyKey?: string;
-  type: 'contact_form' | 'solution_builder';
+  type: 'contact_form' | 'contact_inquiry' | 'solution_builder';
   fullName: string;
   email: string;
   contactNumber: string;
@@ -140,7 +143,7 @@ export interface AdminUserRecord {
 export interface CreateSolutionRequestInput {
   referenceCode: string;
   idempotencyKey?: string;
-  type: 'contact_form' | 'solution_builder';
+  type: 'contact_form' | 'contact_inquiry' | 'solution_builder';
   fullName: string;
   email: string;
   contactNumber: string;

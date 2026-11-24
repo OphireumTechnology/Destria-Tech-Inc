@@ -6,6 +6,7 @@ import {
   PortalCurrency,
   PortalRepository,
   PortalUserRecord,
+  ProductRecord,
   SupportTicketCategory,
   USD_TO_PHP_REFERENCE_RATE,
   formatMinorMoney,
@@ -13,6 +14,44 @@ import {
 } from './types';
 import { PaymentGatewayRegistry } from './payments/paymentAdapters';
 import { logStructured } from '../logger';
+import {
+  corporateIdentity,
+  COMMERCIAL_ENGAGEMENT_STATEMENT,
+  CORPORATE_SERVICE_STATEMENT,
+} from '../../data/companyConfig';
+import {
+  classifyCommercialPolicyIntent,
+  enforceCommercialPolicyOnOutput,
+} from '../aiCommercialPolicy';
+
+function sanitizeProductForPublicCatalog(product: ProductRecord) {
+  return {
+    ...product,
+    engagementLabel: 'Customized Enterprise Solution',
+    assessmentBasis: 'Subject to Formal Assessment',
+    proposalRequired: true,
+    packages: product.packages.map((pkg) => ({
+      id: pkg.id,
+      productId: pkg.productId,
+      name: pkg.name,
+      tierCode: pkg.tierCode,
+      isCustomQuote: true,
+      engagementLabel: 'Customized Enterprise Solution',
+      assessmentBasis: 'Subject to Formal Assessment',
+      proposalRequired: true,
+      billingType: pkg.billingType,
+      creditsIncluded: pkg.creditsIncluded,
+      turnaroundLabel: pkg.turnaroundLabel,
+      validityDays: pkg.validityDays,
+      revisionLimit: pkg.revisionLimit,
+      usageLimits: pkg.usageLimits,
+      deliveryConditions: pkg.deliveryConditions,
+      supportLevel: pkg.supportLevel,
+      features: pkg.features,
+      isPopular: pkg.isPopular,
+    })),
+  };
+}
 
 export interface PortalAuthenticatedRequest extends Request {
   portalUser?: PortalUserRecord;
@@ -713,18 +752,31 @@ export function createPortalRouter(options: {
   // Dashboard Overview
   router.get('/dashboard', async (req: PortalAuthenticatedRequest, res: Response) => {
     const userId = req.portalUser!.id;
-    const [profile, orders, projects, wallet, tickets, activities, products, notifications, subscriptions] =
-      await Promise.all([
-        repo.getProfile(userId),
-        repo.listOrders(userId),
-        repo.listProjects(userId),
-        repo.getWallet(userId),
-        repo.listSupportTickets(userId),
-        repo.listActivities(userId, 12),
-        repo.listProducts(),
-        repo.listNotifications(userId),
-        repo.listSubscriptions(userId),
-      ]);
+    const [
+      profile,
+      orders,
+      projects,
+      wallet,
+      tickets,
+      activities,
+      products,
+      notifications,
+      subscriptions,
+      customInquiries,
+      approvedProposals,
+    ] = await Promise.all([
+      repo.getProfile(userId),
+      repo.listOrders(userId),
+      repo.listProjects(userId),
+      repo.getWallet(userId),
+      repo.listSupportTickets(userId),
+      repo.listActivities(userId, 12),
+      repo.listProducts(),
+      repo.listNotifications(userId),
+      repo.listSubscriptions(userId),
+      repo.listCustomInquiries(userId),
+      repo.listApprovedProposals(userId),
+    ]);
 
     const activeOrders = orders.filter((o) => !['completed', 'cancelled'].includes(o.fulfillmentStatus)).length;
     const pendingPayments = orders.filter((o) => ['unpaid', 'pending', 'processing'].includes(o.paymentStatus)).length;
@@ -743,17 +795,23 @@ export function createPortalRouter(options: {
         completedProjects,
         pendingPayments,
         openSupportRequests,
+        serviceInquiriesCount: customInquiries.length,
+        approvedProposalsCount: approvedProposals.filter((p) => p.status === 'approved').length,
       },
       recentOrders: orders.slice(0, 5),
       activeProjectsList: projects.filter((p) => p.currentStage !== 'project_completed').slice(0, 5),
       recentActivities: activities,
-      recommendedServices: products.filter((p) => p.isFeatured).slice(0, 6),
+      recommendedServices: products
+        .filter((p) => p.isFeatured)
+        .slice(0, 6)
+        .map(sanitizeProductForPublicCatalog),
       unreadNotifications: notifications.filter((n) => !n.isRead).length,
       activeSubscriptionsCount: subscriptions.filter((s) => s.status === 'active').length,
+      commercialEngagementStatement: COMMERCIAL_ENGAGEMENT_STATEMENT,
     });
   });
 
-  // Catalog & Service Store
+  // Technology Solutions Directory (Zero Advertised Public Pricing)
   router.get('/catalog', async (req: PortalAuthenticatedRequest, res: Response) => {
     const categorySlug = sanitizeText(req.query.category, 80) || undefined;
     const search = sanitizeText(req.query.q, 120) || undefined;
@@ -764,8 +822,10 @@ export function createPortalRouter(options: {
     res.status(200).json({
       success: true,
       categories,
-      products,
-      fxRateReference: USD_TO_PHP_REFERENCE_RATE,
+      products: products.map(sanitizeProductForPublicCatalog),
+      commercialPolicy: corporateIdentity.commercialPolicy,
+      corporateServiceStatement: CORPORATE_SERVICE_STATEMENT,
+      commercialEngagementStatement: COMMERCIAL_ENGAGEMENT_STATEMENT,
     });
   });
 
@@ -773,13 +833,14 @@ export function createPortalRouter(options: {
     const slug = sanitizeText(req.params.slug, 120);
     const product = await repo.getProductBySlug(slug);
     if (!product) {
-      res.status(404).json({ success: false, error: 'Service product not found.' });
+      res.status(404).json({ success: false, error: 'Technology solution not found.' });
       return;
     }
     res.status(200).json({
       success: true,
-      product,
-      fxRateReference: USD_TO_PHP_REFERENCE_RATE,
+      product: sanitizeProductForPublicCatalog(product),
+      commercialPolicy: corporateIdentity.commercialPolicy,
+      commercialEngagementStatement: COMMERCIAL_ENGAGEMENT_STATEMENT,
     });
   });
 
@@ -793,7 +854,7 @@ export function createPortalRouter(options: {
       : [];
     const estimatedMonthlyVolume = sanitizeText(req.body?.estimatedMonthlyVolume, 120);
     const projectDescription = sanitizeText(req.body?.projectDescription, 2000);
-    const budgetRange = sanitizeText(req.body?.budgetRange, 100);
+    const budgetRange = 'Subject to Formal Assessment';
     const expectedSchedule = sanitizeText(req.body?.expectedSchedule, 120);
     const supportingFileIds = Array.isArray(req.body?.supportingFileIds)
       ? req.body.supportingFileIds.map((s: unknown) => sanitizeText(s, 80)).filter(Boolean)
@@ -820,7 +881,7 @@ export function createPortalRouter(options: {
       companyName,
       contactPerson,
       email,
-      requiredServices: requiredServices.length > 0 ? requiredServices : ['Custom Enterprise Multimedia'],
+      requiredServices: requiredServices.length > 0 ? requiredServices : ['Customized Enterprise Solution'],
       estimatedMonthlyVolume,
       projectDescription,
       budgetRange,
@@ -836,51 +897,29 @@ export function createPortalRouter(options: {
     res.status(200).json({ success: true, inquiries });
   });
 
+  // Server-Authorized Formal Proposals (Scoped strictly to authenticated client)
+  router.get('/proposals', async (req: PortalAuthenticatedRequest, res: Response) => {
+    const proposals = await repo.listApprovedProposals(req.portalUser!.id);
+    res.status(200).json({
+      success: true,
+      proposals,
+      commercialEngagementStatement: COMMERCIAL_ENGAGEMENT_STATEMENT,
+    });
+  });
+
   // Shopping Cart (Server-Authoritative Totals)
   router.get('/cart', async (req: PortalAuthenticatedRequest, res: Response) => {
     const summary = await computeCartSummary(req.portalUser!.id);
     res.status(200).json({ success: true, cart: summary });
   });
 
-  router.post('/cart/items', async (req: PortalAuthenticatedRequest, res: Response) => {
-    const userId = req.portalUser!.id;
-    const packageId = sanitizeText(req.body?.packageId, 120);
-    const quantity = Math.max(1, Math.min(25, Number.parseInt(String(req.body?.quantity || 1), 10) || 1));
-
-    const found = await repo.getPackageById(packageId);
-    if (!found) {
-      res.status(404).json({ success: false, error: 'Selected service package was not found in the catalog.' });
-      return;
-    }
-    if (found.pkg.isCustomQuote) {
-      res.status(400).json({
-        success: false,
-        error: 'Custom quotation packages must be submitted via Request a Custom Package.',
-      });
-      return;
-    }
-
-    const cart = await repo.getCart(userId);
-    const existing = cart.items.find((i) => i.packageId === packageId && !i.savedForLater);
-    const ts = new Date().toISOString();
-    if (existing) {
-      existing.quantity = Math.min(25, existing.quantity + quantity);
-      existing.updatedAt = ts;
-    } else {
-      cart.items.push({
-        id: crypto.randomUUID(),
-        cartId: cart.id,
-        productId: found.product.id,
-        packageId: found.pkg.id,
-        quantity,
-        savedForLater: false,
-        createdAt: ts,
-        updatedAt: ts,
-      });
-    }
-    await repo.saveCart(cart);
-    const summary = await computeCartSummary(userId);
-    res.status(200).json({ success: true, cart: summary });
+  router.post('/cart/items', async (_req: PortalAuthenticatedRequest, res: Response) => {
+    res.status(403).json({
+      success: false,
+      code: 'APPROVED_PROPOSAL_REQUIRED',
+      error:
+        'DESTRIA TECH INC delivers customized enterprise solutions exclusively. Public self-service checkout is disabled; please submit a service inquiry or consultation request to receive a formal approved proposal.',
+    });
   });
 
   router.patch('/cart/items/:itemId', async (req: PortalAuthenticatedRequest, res: Response) => {
@@ -922,28 +961,25 @@ export function createPortalRouter(options: {
   router.patch('/cart/preferences', async (req: PortalAuthenticatedRequest, res: Response) => {
     const userId = req.portalUser!.id;
     const cart = await repo.getCart(userId);
-    if (req.body?.currency === 'PHP' || req.body?.currency === 'USD') {
-      cart.currency = req.body.currency;
-    }
     if (req.body?.discountCode !== undefined) {
       const code = sanitizeText(req.body.discountCode, 40).toUpperCase();
-      if (!code) {
-        cart.discountCode = undefined;
-      } else {
-        const valid = await repo.getDiscountCode(code);
-        if (!valid) {
-          res.status(400).json({ success: false, error: 'Discount code is invalid or expired.' });
-          return;
-        }
-        cart.discountCode = valid.code;
+      if (code) {
+        res.status(400).json({
+          success: false,
+          code: 'PUBLIC_DISCOUNTS_DISABLED',
+          error:
+            'DESTRIA TECH INC does not advertise public discounts or promotional pricing. Commercial terms are determined exclusively within formal approved proposals.',
+        });
+        return;
       }
+      cart.discountCode = undefined;
     }
     await repo.saveCart(cart);
     const summary = await computeCartSummary(userId);
     res.status(200).json({ success: true, cart: summary });
   });
 
-  // Payment Providers Registry
+  // Payment Providers Registry (Used strictly for authorized approved proposals)
   router.get('/payment-providers', (_req: PortalAuthenticatedRequest, res: Response) => {
     res.status(200).json({
       success: true,
@@ -951,11 +987,12 @@ export function createPortalRouter(options: {
     });
   });
 
-  // Guided Checkout -> Server-Authoritative Order & Invoice Creation
+  // Authorized Commercial Proposal Settlement -> Server-Authoritative Order & Invoice Creation
+  // Public unapproved catalog checkout is strictly disabled (requires server-verified ApprovedProposal).
   router.post('/checkout', async (req: PortalAuthenticatedRequest, res: Response) => {
     const userId = req.portalUser!.id;
     if (!writeLimiter.allow(`checkout:${userId}`)) {
-      res.status(429).json({ success: false, error: 'Too many checkout requests. Please wait briefly.' });
+      res.status(429).json({ success: false, error: 'Too many settlement requests. Please wait briefly.' });
       return;
     }
 
@@ -979,6 +1016,37 @@ export function createPortalRouter(options: {
       }
     }
 
+    const approvedProposalId = sanitizeText(req.body?.approvedProposalId, 120);
+    if (!approvedProposalId) {
+      res.status(403).json({
+        success: false,
+        code: 'APPROVED_PROPOSAL_REQUIRED',
+        error:
+          'Public self-checkout is disabled. An authorized DESTRIA TECH INC formal commercial proposal is required following consultation and technical assessment.',
+      });
+      return;
+    }
+
+    const proposal = await repo.getApprovedProposalById(userId, approvedProposalId);
+    if (!proposal || proposal.status !== 'approved' || proposal.items.length === 0) {
+      res.status(403).json({
+        success: false,
+        code: 'APPROVED_PROPOSAL_REQUIRED',
+        error:
+          'Approved commercial proposal not found, already settled, or not authorized for your account.',
+      });
+      return;
+    }
+
+    if (proposal.expiresAt && Date.parse(proposal.expiresAt) < Date.now()) {
+      res.status(403).json({
+        success: false,
+        code: 'PROPOSAL_EXPIRED',
+        error: 'This formal commercial proposal has expired. Please contact DESTRIA TECH INC for renewal.',
+      });
+      return;
+    }
+
     const paymentProvider = sanitizeText(req.body?.paymentProvider, 40) as PaymentProviderId;
     if (!PAYMENT_PROVIDERS.includes(paymentProvider)) {
       res.status(400).json({ success: false, error: 'Please select a valid payment method.' });
@@ -998,13 +1066,6 @@ export function createPortalRouter(options: {
       return;
     }
 
-    // ALWAYS compute pricing strictly from server-side cart/catalog — NEVER trust browser amounts!
-    const cartSummary = await computeCartSummary(userId);
-    if (cartSummary.items.length === 0) {
-      res.status(400).json({ success: false, error: 'Your shopping cart is empty.' });
-      return;
-    }
-
     const reqInfo = req.body?.projectRequirements || {};
     const referenceFileIds = Array.isArray(reqInfo.referenceFileIds)
       ? reqInfo.referenceFileIds.map((id: unknown) => sanitizeText(id, 80)).filter(Boolean)
@@ -1017,31 +1078,31 @@ export function createPortalRouter(options: {
       return;
     }
     const projectRequirements = {
-      title: sanitizeText(reqInfo.title, 160),
-      instructions: sanitizeText(reqInfo.instructions, 3000),
+      title: sanitizeText(reqInfo.title, 160) || proposal.title,
+      instructions: sanitizeText(reqInfo.instructions, 3000) || proposal.scopeSummary,
       deliveryExpectation: sanitizeText(reqInfo.deliveryExpectation, 160),
       creativeBrief: sanitizeText(reqInfo.creativeBrief, 3000),
       specialInstructions: sanitizeText(reqInfo.specialInstructions, 1500),
       referenceFileIds,
     };
 
+    // ALWAYS compute settlement totals strictly from the server-stored Approved Proposal — NEVER trust browser amounts!
     const ts = new Date().toISOString();
     const { order, invoice, payment } = await repo.createOrder({
       userId,
-      currency: cartSummary.currency,
-      fxRateSnapshot: cartSummary.fxRateReference,
-      subtotalMinor: cartSummary.subtotalMinor,
-      discountCode: cartSummary.discountCode,
-      discountMinor: cartSummary.discountMinor,
-      taxMinor: cartSummary.taxMinor,
-      totalMinor: cartSummary.totalMinor,
+      currency: proposal.currency,
+      fxRateSnapshot: proposal.fxRateSnapshot,
+      subtotalMinor: proposal.subtotalMinor,
+      discountMinor: 0,
+      taxMinor: proposal.taxMinor,
+      totalMinor: proposal.totalMinor,
       paymentProvider,
       paymentStatus: 'pending',
       fulfillmentStatus: 'pending_payment',
       billingDetails: { fullName, email, phone, companyName, taxId, address },
       projectRequirements,
       idempotencyKey,
-      items: cartSummary.items.map((item) => ({
+      items: proposal.items.map((item) => ({
         id: crypto.randomUUID(),
         orderId: '',
         productId: item.productId,
@@ -1053,24 +1114,20 @@ export function createPortalRouter(options: {
         quantity: item.quantity,
         unitPriceMinor: item.unitPriceMinor,
         lineTotalMinor: item.lineTotalMinor,
-        creditsAllocated: item.creditsIncluded,
+        creditsAllocated: item.creditsAllocated,
         revisionLimit: item.revisionLimit,
       })),
       timeline: [
         {
           status: 'pending_payment' as OrderStatus,
-          label: 'Order Created — Pending Payment Verification',
-          note: `Server-calculated total ${formatMinorMoney(cartSummary.totalMinor, cartSummary.currency)}. No live charge collected while payment gateway is in readiness mode.`,
+          label: `Authorized Engagement Created (${proposal.proposalNumber}) — Pending Payment Verification`,
+          note: `Server-verified approved proposal total ${formatMinorMoney(proposal.totalMinor, proposal.currency)}.`,
           timestamp: ts,
         },
       ],
     });
 
-    // Clear active items from cart (preserve savedForLater items)
-    const cart = await repo.getCart(userId);
-    cart.items = cart.items.filter((i) => i.savedForLater);
-    cart.discountCode = undefined;
-    await repo.saveCart(cart);
+    await repo.markProposalAccepted(userId, proposal.id, order.id);
 
     const adapter = paymentRegistry.getAdapter(paymentProvider)!;
     const paymentInitiation = await adapter.initiatePayment({
@@ -1085,6 +1142,7 @@ export function createPortalRouter(options: {
 
     res.status(201).json({
       success: true,
+      proposalNumber: proposal.proposalNumber,
       order,
       invoice,
       payment,
@@ -1752,53 +1810,79 @@ export function createPortalRouter(options: {
     });
   });
 
-  // Future-Ready Permission-Scoped Client Portal Assistant (Strictly Read-Only Guidance)
+  // Permission-Scoped Client Portal Assistant (Read-Only Guidance + Commercial Policy Enforced)
   router.post('/assistant/ask', async (req: PortalAuthenticatedRequest, res: Response) => {
     const userId = req.portalUser!.id;
-    const question = sanitizeText(req.body?.question, 800).toLowerCase();
+    const rawQuestion = sanitizeText(req.body?.question, 800);
+    const question = rawQuestion.toLowerCase();
     if (!question) {
       res.status(400).json({ success: false, error: 'Please enter a question.' });
       return;
     }
 
-    const [orders, projects, wallet, files] = await Promise.all([
+    // 1. Authoritative Commercial Policy & Corporate Identity Guardrail Check
+    const policy = classifyCommercialPolicyIntent(rawQuestion);
+    if (policy.approvedResponse) {
+      res.status(200).json({
+        success: true,
+        answer: policy.approvedResponse,
+        suggestedRoute: policy.isPricingRestricted ? '/portal/store' : '/portal/support',
+        policyEnforced: policy.isPricingRestricted,
+        scopeNotice:
+          'Read-only corporate guidance governed by DESTRIA TECH INC commercial policy. Informational only.',
+      });
+      return;
+    }
+
+    const [orders, projects, wallet, files, proposals] = await Promise.all([
       repo.listOrders(userId),
       repo.listProjects(userId),
       repo.getWallet(userId),
       repo.listAttachments(userId),
+      repo.listApprovedProposals(userId),
     ]);
 
     let answer =
-      'I can help you choose services, understand package inclusions, prepare project briefs, check your order or project status, locate files, or route support questions. I cannot change prices, confirm payments, adjust credits, or issue refunds.';
+      'I can help you explore customized technology solution frameworks, submit service inquiries, check your approved proposals, track active project workspaces, locate private files, or contact Support Center. For official commercial inquiries, email info@destriatech.com or call +1 (307) 419-4277.';
     let suggestedRoute = '/portal/store';
 
-    if (question.includes('order') || question.includes('payment') || question.includes('invoice')) {
+    if (question.includes('proposal') || question.includes('inquiry')) {
+      answer =
+        proposals.length > 0
+          ? `You have ${proposals.length} authorized commercial proposal(s) on file. Review them in the Service Inquiries & Proposals workspace.`
+          : 'You can initiate a customized enterprise Service Inquiry directly from the Technology Solutions Directory to request a consultation and formal proposal.';
+      suggestedRoute = '/portal/cart';
+    } else if (question.includes('order') || question.includes('payment') || question.includes('invoice')) {
       answer =
         orders.length > 0
-          ? `You currently have ${orders.length} order(s). Your latest order is ${orders[0].orderNumber} (${orders[0].fulfillmentStatus.replace(/_/g, ' ')}, payment: ${orders[0].paymentStatus.replace(/_/g, ' ')}). Payments are confirmed exclusively via verified server webhooks.`
-          : 'You have not placed an order yet. Browse the Service Store to add a package to your cart and review itemized pricing at checkout.';
+          ? `You currently have ${orders.length} authorized engagement order(s). Your latest record is ${orders[0].orderNumber} (${orders[0].fulfillmentStatus.replace(/_/g, ' ')}, payment: ${orders[0].paymentStatus.replace(/_/g, ' ')}). Payments are confirmed exclusively via verified server webhooks.`
+          : 'You do not have an authorized engagement order yet. Explore our Technology Solutions Directory and submit a Service Inquiry to coordinate a consultation and formal proposal.';
       suggestedRoute = '/portal/orders';
     } else if (question.includes('credit') || question.includes('balance')) {
-      answer = `Your wallet currently shows ${wallet.availableCredits.toLocaleString()} available credits, ${wallet.pendingCredits.toLocaleString()} pending credits (awaiting verified payment), and ${wallet.usedCredits.toLocaleString()} used credits.`;
+      answer = `Your authorized account ledger currently shows ${wallet.availableCredits.toLocaleString()} available credits, ${wallet.pendingCredits.toLocaleString()} pending credits, and ${wallet.usedCredits.toLocaleString()} used credits.`;
       suggestedRoute = '/portal/credits';
     } else if (question.includes('project') || question.includes('brief') || question.includes('revision')) {
       answer =
         projects.length > 0
           ? `You have ${projects.length} project workspace(s). Latest: ${projects[0].referenceNumber} — "${projects[0].title}" (${projects[0].progressPercent}% progress, ${projects[0].revisionsUsed}/${projects[0].revisionLimit} revisions used).`
-          : 'You can create a project brief from My Projects or include project instructions directly during Step 3 of checkout.';
+          : 'You can create or review project requirements inside Project Workspaces once an engagement is initiated.';
       suggestedRoute = '/portal/projects';
     } else if (question.includes('file') || question.includes('deliverable') || question.includes('download')) {
-      answer = `You have ${files.length} private file(s) stored in your File Center. All downloads use time-limited signed URLs restricted strictly to your account.`;
+      answer = `You have ${files.length} private file(s) stored in your Deliverables & File Vault. All downloads use time-limited signed URLs restricted strictly to your account.`;
       suggestedRoute = '/portal/files';
     } else if (question.includes('support') || question.includes('refund') || question.includes('help')) {
-      answer = 'For billing, refund reviews, or technical assistance, open a ticket in Support Center so our authorized team can assist you.';
+      answer =
+        'For engagement support, authorized billing questions, or technical assistance, open a ticket in Support Center, email info@destriatech.com, or call +1 (307) 419-4277.';
       suggestedRoute = '/portal/support';
     }
 
+    const enforced = enforceCommercialPolicyOnOutput(answer, rawQuestion);
+
     res.status(200).json({
       success: true,
-      answer,
+      answer: enforced.replyText,
       suggestedRoute,
+      policyEnforced: enforced.enforced,
       scopeNotice: 'Read-only client guidance scoped strictly to your authenticated account.',
     });
   });

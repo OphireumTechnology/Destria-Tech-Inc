@@ -1,8 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ShoppingCart,
-  Trash2,
-  Bookmark,
   ArrowRight,
   ArrowLeft,
   CheckCircle2,
@@ -12,16 +9,23 @@ import {
   FileText,
   CreditCard,
   Lock,
-  Sparkles,
+  ClipboardCheck,
+  Phone,
+  Mail,
+  Layers,
 } from 'lucide-react';
 import { PortalLayout } from '../components/PortalLayout';
 import { portalRequest, uploadPortalFile } from '../portalApi';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
 import {
-  CartSummary,
+  COMMERCIAL_ENGAGEMENT_STATEMENT,
+  CORPORATE_SERVICE_STATEMENT,
+  corporateIdentity,
+} from '../../data/companyConfig';
+import {
   PaymentProviderConfig,
-  PortalCurrency,
+  PortalApprovedProposal,
   formatMoney,
   formatPortalDate,
   formatStatusLabel,
@@ -29,120 +33,39 @@ import {
 } from '../portalTypes';
 
 export const PortalCartPage: React.FC = () => {
-  const { refreshSession } = usePortalAuth();
   const { navigate } = usePortalRouter();
-  const [cart, setCart] = useState<CartSummary | null>(null);
+  const [proposals, setProposals] = useState<PortalApprovedProposal[]>([]);
+  const [inquiries, setInquiries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [discountInput, setDiscountInput] = useState('');
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
 
-  const loadCart = useCallback(async () => {
+  const loadWorkspace = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await portalRequest<{ cart: CartSummary }>('/cart');
-      setCart(res.cart);
-      setDiscountInput(res.cart.discountCode || '');
+      const [propRes, inqRes] = await Promise.all([
+        portalRequest<{ proposals: PortalApprovedProposal[] }>('/proposals'),
+        portalRequest<{ inquiries: any[] }>('/custom-inquiries'),
+      ]);
+      setProposals(propRes.proposals || []);
+      setInquiries(inqRes.inquiries || []);
     } catch (err: any) {
-      setError(err?.message || 'Unable to load shopping cart.');
+      setError(err?.message || 'Unable to load inquiries and formal proposals.');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadCart();
-  }, [loadCart]);
+    void loadWorkspace();
+  }, [loadWorkspace]);
 
-  const updateQuantity = async (itemId: string, quantity: number) => {
-    setBusyId(itemId);
-    setError('');
-    try {
-      const res = await portalRequest<{ cart: CartSummary }>(`/cart/items/${encodeURIComponent(itemId)}`, {
-        method: 'PATCH',
-        body: { quantity },
-      });
-      setCart(res.cart);
-      await refreshSession();
-    } catch (err: any) {
-      setError(err?.message || 'Unable to update quantity.');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const toggleSaveForLater = async (itemId: string, savedForLater: boolean) => {
-    setBusyId(itemId);
-    setError('');
-    try {
-      const res = await portalRequest<{ cart: CartSummary }>(`/cart/items/${encodeURIComponent(itemId)}`, {
-        method: 'PATCH',
-        body: { savedForLater },
-      });
-      setCart(res.cart);
-      await refreshSession();
-    } catch (err: any) {
-      setError(err?.message || 'Unable to update item.');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const removeItem = async (itemId: string) => {
-    setBusyId(itemId);
-    setError('');
-    try {
-      const res = await portalRequest<{ cart: CartSummary }>(`/cart/items/${encodeURIComponent(itemId)}`, {
-        method: 'DELETE',
-      });
-      setCart(res.cart);
-      await refreshSession();
-    } catch (err: any) {
-      setError(err?.message || 'Unable to remove item.');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const switchCurrency = async (currency: PortalCurrency) => {
-    setError('');
-    try {
-      const res = await portalRequest<{ cart: CartSummary }>('/cart/preferences', {
-        method: 'PATCH',
-        body: { currency },
-      });
-      setCart(res.cart);
-    } catch (err: any) {
-      setError(err?.message || 'Unable to switch currency.');
-    }
-  };
-
-  const applyDiscount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setNotice('');
-    try {
-      const res = await portalRequest<{ cart: CartSummary }>('/cart/preferences', {
-        method: 'PATCH',
-        body: { discountCode: discountInput.trim() },
-      });
-      setCart(res.cart);
-      setNotice(
-        res.cart.discountCode
-          ? `Discount code ${res.cart.discountCode} applied (${res.cart.discountDescription || 'verified'}).`
-          : 'Discount code cleared.'
-      );
-    } catch (err: any) {
-      setError(err?.message || 'Discount code could not be applied.');
-    }
-  };
+  const activeApprovedProposals = proposals.filter((p) => p.status === 'approved');
 
   return (
     <PortalLayout
-      title="Shopping Cart"
-      subtitle="Review selected services and packages. All pricing, discounts, and totals are calculated strictly on the server."
+      title="Service Inquiries & Formal Proposals"
+      subtitle="Track consultation inquiries, technical assessments, and server-authorized commercial proposals issued by DESTRIA TECH INC."
     >
       {error && (
         <div className="mb-5 p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-sm text-rose-800 flex items-start gap-2.5">
@@ -150,269 +73,241 @@ export const PortalCartPage: React.FC = () => {
           <span>{error}</span>
         </div>
       )}
-      {notice && (
-        <div className="mb-5 p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-900 flex items-start gap-2.5">
-          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{notice}</span>
-        </div>
-      )}
 
-      {loading || !cart ? (
+      {/* Commercial Policy Governance Notice */}
+      <div className="mb-6 p-5 rounded-xl bg-white border border-[#E6E2D8] flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="w-5 h-5 text-[#0F4C3A] shrink-0 mt-0.5" />
+          <div className="space-y-1 text-xs text-[#334155]">
+            <p className="text-sm font-semibold text-[#0F1D36]">
+              Consultation-First Enterprise Engagement Governance
+            </p>
+            <p className="leading-relaxed">{CORPORATE_SERVICE_STATEMENT}</p>
+            <p className="text-[#475569] leading-relaxed">{COMMERCIAL_ENGAGEMENT_STATEMENT}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => navigate('/portal/store')}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Initiate Service Inquiry</span>
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
         <div className="bg-white border border-[#E6E2D8] rounded-xl p-10 text-center text-sm text-[#64748B]">
-          Loading cart items...
+          Loading formal proposals and service inquiries...
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* Left: Cart Items & Saved For Later */}
+          {/* Left: Authorized Proposals + Service Inquiries */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-[#E6E2D8] flex flex-wrap items-center justify-between gap-3">
+            {/* Approved Commercial Proposals */}
+            <section className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-[#E6E2D8] flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-semibold text-[#0F1D36]">
-                    Active Cart Items ({cart.items.length})
+                    Server-Authorized Formal Proposals ({proposals.length})
                   </h2>
                   <p className="text-xs text-[#64748B]">
-                    Reference FX rate: 1 USD = ₱{cart.fxRateReference.toFixed(2)} PHP
+                    Commercial settlement is enabled strictly for authorized proposals issued to your client account.
                   </p>
-                </div>
-                <div className="inline-flex rounded-lg border border-[#E6E2D8] p-0.5 bg-[#FAF8F4]">
-                  {(['USD', 'PHP'] as PortalCurrency[]).map((cur) => (
-                    <button
-                      key={cur}
-                      type="button"
-                      onClick={() => switchCurrency(cur)}
-                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                        cart.currency === cur
-                          ? 'bg-[#0F1D36] text-white'
-                          : 'text-[#475569] hover:text-[#0F1D36]'
-                      }`}
-                    >
-                      {cur}
-                    </button>
-                  ))}
                 </div>
               </div>
 
-              {cart.items.length === 0 ? (
-                <div className="p-10 text-center space-y-4">
-                  <ShoppingCart className="w-9 h-9 text-[#94A3B8] mx-auto" />
+              {proposals.length === 0 ? (
+                <div className="p-10 text-center space-y-3">
+                  <ClipboardCheck className="w-9 h-9 text-[#94A3B8] mx-auto" />
                   <div>
-                    <p className="text-sm font-semibold text-[#0F1D36]">Your shopping cart is empty</p>
-                    <p className="text-xs text-[#64748B] mt-1">
-                      Browse the Service Store to choose multimedia production, AI creative services, or credit packages.
+                    <p className="text-sm font-semibold text-[#0F1D36]">No formal proposals issued yet</p>
+                    <p className="text-xs text-[#64748B] mt-1 max-w-md mx-auto">
+                      Public self-service checkout is disabled. Submit a service inquiry or schedule a consultation so our engineering team can prepare a tailored proposal.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => navigate('/portal/store')}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-sm font-semibold cursor-pointer"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
                   >
-                    <span>Browse Service Store</span>
+                    <span>Explore Solutions Directory</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               ) : (
                 <div className="divide-y divide-[#E6E2D8]">
-                  {cart.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                    >
-                      <div className="min-w-0 space-y-1">
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/portal/store/${item.productSlug}`)}
-                          className="text-sm font-semibold text-[#0F1D36] hover:text-[#0F4C3A] text-left cursor-pointer"
-                        >
-                          {item.productName}
-                        </button>
-                        <p className="text-xs text-[#475569]">
-                          Package: <span className="font-medium text-[#0F1D36]">{item.packageName}</span> ·{' '}
-                          {formatStatusLabel(item.billingType)}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#64748B]">
-                          <span>Unit: {formatMoney(item.unitPriceMinor, cart.currency)}</span>
-                          {item.creditsIncluded > 0 && (
-                            <span className="font-mono text-[#0F4C3A]">
-                              +{(item.creditsIncluded * item.quantity).toLocaleString()} credits upon verified payment
+                  {proposals.map((prop) => {
+                    const isExpired = prop.expiresAt && Date.parse(prop.expiresAt) < Date.now();
+                    const canSettle = prop.status === 'approved' && !isExpired;
+                    return (
+                      <div key={prop.id} className="p-5 space-y-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2 text-xs text-[#64748B]">
+                              <span className="font-mono font-semibold text-[#0F1D36]">{prop.proposalNumber}</span>
+                              <span>·</span>
+                              <span>Issued {formatPortalDate(prop.issuedAt)}</span>
+                              <span>·</span>
+                              <span>Valid until {formatPortalDate(prop.expiresAt)}</span>
+                            </div>
+                            <h3 className="text-sm font-bold text-[#0F1D36] mt-1">{prop.title}</h3>
+                            <p className="text-xs text-[#475569] mt-0.5">{prop.scopeSummary}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-mono text-base font-bold tabular-nums text-[#0F1D36]">
+                              {formatMoney(prop.totalMinor, prop.currency)}
+                            </p>
+                            <span className={`text-xs ${statusToneClass(isExpired ? 'expired' : prop.status)}`}>
+                              {isExpired ? 'Expired' : formatStatusLabel(prop.status)}
                             </span>
-                          )}
-                          {item.revisionLimit > 0 && <span>{item.revisionLimit} revision rounds</span>}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0">
-                        <div className="inline-flex items-center border border-[#E6E2D8] rounded-lg">
-                          <button
-                            type="button"
-                            disabled={busyId === item.id}
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                            className="px-2.5 py-1 text-sm text-[#0F1D36] hover:bg-[#FAF8F4] cursor-pointer disabled:opacity-40"
-                            aria-label="Decrease quantity"
-                          >
-                            −
-                          </button>
-                          <span className="px-3 py-1 text-xs font-mono font-semibold tabular-nums text-[#0F1D36]">
-                            {item.quantity}
-                          </span>
-                          <button
-                            type="button"
-                            disabled={busyId === item.id || item.quantity >= 25}
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                            className="px-2.5 py-1 text-sm text-[#0F1D36] hover:bg-[#FAF8F4] cursor-pointer disabled:opacity-40"
-                            aria-label="Increase quantity"
-                          >
-                            +
-                          </button>
-                        </div>
-
-                        <div className="text-right min-w-[96px]">
-                          <p className="font-mono text-sm font-semibold tabular-nums text-[#0F1D36]">
-                            {formatMoney(item.lineTotalMinor, cart.currency)}
-                          </p>
-                          <div className="flex items-center justify-end gap-2 mt-1">
-                            <button
-                              type="button"
-                              disabled={busyId === item.id}
-                              onClick={() => toggleSaveForLater(item.id, true)}
-                              className="text-[11px] text-[#475569] hover:text-[#0F1D36] inline-flex items-center gap-1 cursor-pointer"
-                            >
-                              <Bookmark className="w-3 h-3" />
-                              <span>Save</span>
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busyId === item.id}
-                              onClick={() => removeItem(item.id)}
-                              className="text-[11px] text-[#B91C1C] hover:underline inline-flex items-center gap-1 cursor-pointer"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                              <span>Remove</span>
-                            </button>
                           </div>
                         </div>
+
+                        <div className="bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg divide-y divide-[#E6E2D8] text-xs">
+                          {prop.items.map((item) => (
+                            <div key={item.id} className="px-3.5 py-2 flex items-center justify-between gap-3">
+                              <span className="text-[#334155]">
+                                {item.productName} ({item.packageName}) × {item.quantity}
+                              </span>
+                              <span className="font-mono font-semibold text-[#0F1D36] tabular-nums">
+                                {formatMoney(item.lineTotalMinor, prop.currency)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                          <span className="text-[11px] text-[#64748B]">Issued by {prop.issuedBy}</span>
+                          {canSettle ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/portal/checkout?proposalId=${encodeURIComponent(prop.id)}`)}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
+                            >
+                              <span>Proceed to Authorized Settlement</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          ) : prop.acceptedOrderId ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/portal/orders/${prop.acceptedOrderId}`)}
+                              className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
+                            >
+                              View Authorized Order →
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
-            </div>
+            </section>
 
-            {cart.savedItems.length > 0 && (
-              <div className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
-                <div className="px-5 py-3.5 border-b border-[#E6E2D8]">
-                  <h3 className="text-sm font-semibold text-[#0F1D36]">
-                    Saved For Later ({cart.savedItems.length})
-                  </h3>
+            {/* Submitted Service Inquiries */}
+            <section className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-[#E6E2D8]">
+                <h2 className="text-base font-semibold text-[#0F1D36]">
+                  Service Inquiries &amp; Technical Assessments ({inquiries.length})
+                </h2>
+              </div>
+              {inquiries.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#64748B]">
+                  No service inquiries submitted from your portal account yet.
                 </div>
+              ) : (
                 <div className="divide-y divide-[#E6E2D8]">
-                  {cart.savedItems.map((item) => (
-                    <div key={item.id} className="p-4 flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-medium text-[#0F1D36]">{item.productName}</p>
-                        <p className="text-xs text-[#64748B]">
-                          {item.packageName} · {formatMoney(item.unitPriceMinor, cart.currency)}
-                        </p>
+                  {inquiries.map((inq) => (
+                    <div key={inq.id} className="p-4 flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="text-xs text-[#64748B]">
+                          <span className="font-mono font-semibold text-[#0F1D36]">{inq.referenceNumber}</span> ·{' '}
+                          {formatPortalDate(inq.createdAt)}
+                        </div>
+                        <p className="text-sm font-semibold text-[#0F1D36]">{inq.companyName}</p>
+                        <p className="text-xs text-[#475569]">{inq.projectDescription}</p>
+                        {Array.isArray(inq.requiredServices) && inq.requiredServices.length > 0 && (
+                          <p className="text-[11px] text-[#64748B]">
+                            Solutions: {inq.requiredServices.join(', ')}
+                          </p>
+                        )}
                       </div>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          disabled={busyId === item.id}
-                          onClick={() => toggleSaveForLater(item.id, false)}
-                          className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
-                        >
-                          Move to Cart
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busyId === item.id}
-                          onClick={() => removeItem(item.id)}
-                          className="text-xs text-[#B91C1C] hover:underline cursor-pointer"
-                        >
-                          Remove
-                        </button>
-                      </div>
+                      <span className="text-xs font-semibold text-[#B45309]">{formatStatusLabel(inq.status)}</span>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right: Order Summary & Promo */}
-          <div className="bg-white border border-[#E6E2D8] rounded-xl p-5 space-y-5 sticky top-24">
-            <h2 className="text-base font-semibold text-[#0F1D36]">Order Summary</h2>
-
-            <form onSubmit={applyDiscount} className="space-y-2">
-              <label className="block text-xs font-medium text-[#475569]">
-                Promo / Discount Code
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={discountInput}
-                  onChange={(e) => setDiscountInput(e.target.value.toUpperCase())}
-                  placeholder="e.g. WELCOME10"
-                  className="flex-1 px-3 py-2 text-sm bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg text-[#0F1D36] focus:outline-none focus:border-[#0F4C3A]"
-                />
-                <button
-                  type="submit"
-                  className="px-3.5 py-2 rounded-lg border border-[#0F1D36] text-xs font-semibold text-[#0F1D36] hover:bg-[#0F1D36] hover:text-white transition-colors cursor-pointer"
-                >
-                  Apply
-                </button>
-              </div>
-              <p className="text-[11px] text-[#64748B]">
-                Discounts are validated and computed exclusively on the server.
-              </p>
-            </form>
-
-            <div className="space-y-2.5 pt-3 border-t border-[#E6E2D8] text-sm">
-              <div className="flex justify-between text-[#475569]">
-                <span>Subtotal</span>
-                <span className="font-mono tabular-nums text-[#0F1D36]">
-                  {formatMoney(cart.subtotalMinor, cart.currency)}
-                </span>
-              </div>
-              {cart.discountMinor > 0 && (
-                <div className="flex justify-between text-[#15803D]">
-                  <span>Discount ({cart.discountCode})</span>
-                  <span className="font-mono tabular-nums">
-                    −{formatMoney(cart.discountMinor, cart.currency)}
-                  </span>
-                </div>
               )}
-              <div className="flex justify-between text-[#475569]">
-                <span>Estimated Tax</span>
-                <span className="font-mono tabular-nums text-[#0F1D36]">
-                  {formatMoney(cart.taxMinor, cart.currency)}
-                </span>
-              </div>
-              <div className="pt-3 border-t border-[#E6E2D8] flex justify-between items-baseline">
-                <span className="font-semibold text-[#0F1D36]">Total ({cart.currency})</span>
-                <span className="font-mono text-xl font-bold tabular-nums text-[#0F1D36]">
-                  {formatMoney(cart.totalMinor, cart.currency)}
-                </span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              disabled={cart.items.length === 0}
-              onClick={() => navigate('/portal/checkout')}
-              className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] disabled:opacity-40 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              <span>Proceed to Checkout</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-
-            <div className="p-3 rounded-lg bg-[#FAF8F4] border border-[#E6E2D8] text-xs text-[#475569] flex items-start gap-2">
-              <ShieldCheck className="w-4 h-4 text-[#0F4C3A] shrink-0 mt-0.5" />
-              <span>
-                Credits and project activation occur strictly after verified payment confirmation via server webhook.
-              </span>
-            </div>
+            </section>
           </div>
+
+          {/* Right: Commercial Engagement Desk */}
+          <aside className="bg-white border border-[#E6E2D8] rounded-xl p-5 space-y-5 sticky top-24">
+            <h2 className="text-base font-semibold text-[#0F1D36]">Commercial Engagement Desk</h2>
+            <p className="text-xs text-[#475569] leading-relaxed">
+              Every DESTRIA TECH INC engagement begins with consultation and formal architectural assessment. Public self-checkout and promotional discount codes are not offered.
+            </p>
+
+            <div className="space-y-2.5 pt-3 border-t border-[#E6E2D8] text-xs">
+              <div className="flex justify-between text-[#475569]">
+                <span>Active Approved Proposals</span>
+                <span className="font-mono font-semibold text-[#0F1D36]">{activeApprovedProposals.length}</span>
+              </div>
+              <div className="flex justify-between text-[#475569]">
+                <span>Submitted Inquiries</span>
+                <span className="font-mono font-semibold text-[#0F1D36]">{inquiries.length}</span>
+              </div>
+              <div className="flex justify-between text-[#475569]">
+                <span>Commercial Basis</span>
+                <span className="font-semibold text-[#0F4C3A]">Formal Proposal</span>
+              </div>
+            </div>
+
+            {activeApprovedProposals.length > 0 ? (
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(`/portal/checkout?proposalId=${encodeURIComponent(activeApprovedProposals[0].id)}`)
+                }
+                className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <span>Settle Approved Proposal</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate('/portal/store')}
+                className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <span>Request a Formal Proposal</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+
+            <div className="p-3.5 rounded-lg bg-[#FAF8F4] border border-[#E6E2D8] text-xs text-[#475569] space-y-2">
+              <p className="font-semibold text-[#0F1D36]">Official Corporate Contact</p>
+              <a
+                href={corporateIdentity.contact.telephone.href}
+                className="flex items-center gap-2 text-[#0F4C3A] font-semibold hover:underline"
+              >
+                <Phone className="w-3.5 h-3.5" />
+                <span>{corporateIdentity.contact.telephone.display}</span>
+              </a>
+              <a
+                href={`mailto:${corporateIdentity.contact.email}`}
+                className="flex items-center gap-2 text-[#334155] hover:text-[#0F1D36]"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                <span>{corporateIdentity.contact.email}</span>
+              </a>
+              <p className="text-[11px] text-[#64748B] pt-1 border-t border-[#E6E2D8]">
+                {corporateIdentity.headquarters.fullAddress}
+              </p>
+            </div>
+          </aside>
         </div>
       )}
     </PortalLayout>
@@ -420,11 +315,11 @@ export const PortalCartPage: React.FC = () => {
 };
 
 // =========================================================================
-// GUIDED 5-STEP CHECKOUT
+// AUTHORIZED PROPOSAL SETTLEMENT (5-STEP GUIDED WORKFLOW)
 // =========================================================================
 
 const CHECKOUT_STEPS = [
-  'Review Order',
+  'Review Proposal',
   'Billing Info',
   'Project Requirements',
   'Payment Method',
@@ -433,10 +328,11 @@ const CHECKOUT_STEPS = [
 
 export const PortalCheckoutPage: React.FC = () => {
   const { user, profile, refreshSession } = usePortalAuth();
-  const { navigate } = usePortalRouter();
+  const { navigate, query } = usePortalRouter();
 
   const [step, setStep] = useState(0);
-  const [cart, setCart] = useState<CartSummary | null>(null);
+  const [proposals, setProposals] = useState<PortalApprovedProposal[]>([]);
+  const [selectedProposalId, setSelectedProposalId] = useState(query.get('proposalId') || '');
   const [providers, setProviders] = useState<PaymentProviderConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -475,13 +371,21 @@ export const PortalCheckoutPage: React.FC = () => {
     (async () => {
       setLoading(true);
       try {
-        const [cartRes, provRes, profRes] = await Promise.all([
-          portalRequest<{ cart: CartSummary }>('/cart'),
+        const [propRes, provRes, profRes] = await Promise.all([
+          portalRequest<{ proposals: PortalApprovedProposal[] }>('/proposals'),
           portalRequest<{ providers: PaymentProviderConfig[] }>('/payment-providers'),
           portalRequest<{ profile: any; addresses: any[] }>('/profile'),
         ]);
         if (!active) return;
-        setCart(cartRes.cart);
+        const activeProposals = (propRes.proposals || []).filter(
+          (p) => p.status === 'approved' && (!p.expiresAt || Date.parse(p.expiresAt) >= Date.now())
+        );
+        setProposals(activeProposals);
+        const requestedId = query.get('proposalId');
+        const initial =
+          activeProposals.find((p) => p.id === requestedId)?.id || activeProposals[0]?.id || '';
+        setSelectedProposalId(initial);
+
         setProviders(provRes.providers || []);
         const p = profRes.profile || profile;
         setFullName(p?.fullName || '');
@@ -492,13 +396,20 @@ export const PortalCheckoutPage: React.FC = () => {
         const defaultAddr = (profRes.addresses || []).find((a: any) => a.isDefault) || profRes.addresses?.[0];
         if (defaultAddr) {
           setAddress(
-            [defaultAddr.line1, defaultAddr.line2, defaultAddr.city, defaultAddr.stateProvince, defaultAddr.postalCode, defaultAddr.country]
+            [
+              defaultAddr.line1,
+              defaultAddr.line2,
+              defaultAddr.city,
+              defaultAddr.stateProvince,
+              defaultAddr.postalCode,
+              defaultAddr.country,
+            ]
               .filter(Boolean)
               .join(', ')
           );
         }
       } catch (err: any) {
-        if (active) setError(err?.message || 'Unable to initialize checkout.');
+        if (active) setError(err?.message || 'Unable to initialize authorized settlement workspace.');
       } finally {
         if (active) setLoading(false);
       }
@@ -506,7 +417,9 @@ export const PortalCheckoutPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [profile, user]);
+  }, [profile, user, query]);
+
+  const activeProposal = proposals.find((p) => p.id === selectedProposalId) || null;
 
   const handleUploadReference = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -525,6 +438,10 @@ export const PortalCheckoutPage: React.FC = () => {
   };
 
   const handlePlaceOrder = async () => {
+    if (!activeProposal) {
+      setError('An approved DESTRIA TECH INC commercial proposal is required before settlement.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -537,10 +454,11 @@ export const PortalCheckoutPage: React.FC = () => {
         method: 'POST',
         idempotent: true,
         body: {
+          approvedProposalId: activeProposal.id,
           paymentProvider: selectedProvider,
           billingDetails: { fullName, email, phone, companyName, taxId, address },
           projectRequirements: {
-            title: projectTitle,
+            title: projectTitle || activeProposal.title,
             instructions,
             deliveryExpectation,
             creativeBrief,
@@ -553,7 +471,7 @@ export const PortalCheckoutPage: React.FC = () => {
       setStep(4);
       await refreshSession();
     } catch (err: any) {
-      setError(err?.message || 'Unable to submit order.');
+      setError(err?.message || 'Unable to submit authorized order.');
     } finally {
       setSubmitting(false);
     }
@@ -563,8 +481,8 @@ export const PortalCheckoutPage: React.FC = () => {
 
   return (
     <PortalLayout
-      title="Guided Checkout"
-      subtitle="Complete billing details, optional project brief, and payment method selection."
+      title="Authorized Proposal Settlement"
+      subtitle="Complete billing verification, project onboarding brief, and authorized settlement strictly against an approved DESTRIA TECH INC formal proposal."
     >
       {/* Stepper */}
       <div className="mb-6 bg-white border border-[#E6E2D8] rounded-xl p-4">
@@ -610,33 +528,88 @@ export const PortalCheckoutPage: React.FC = () => {
 
       {loading ? (
         <div className="bg-white border border-[#E6E2D8] rounded-xl p-10 text-center text-sm text-[#64748B]">
-          Preparing checkout workspace...
+          Verifying authorized proposals...
         </div>
-      ) : !confirmation && (!cart || cart.items.length === 0) ? (
-        <div className="bg-white border border-[#E6E2D8] rounded-xl p-10 text-center space-y-4">
-          <p className="text-sm font-semibold text-[#0F1D36]">No items in cart to check out.</p>
-          <button
-            type="button"
-            onClick={() => navigate('/portal/store')}
-            className="px-4 py-2.5 rounded-lg bg-[#0F4C3A] text-white text-sm font-semibold cursor-pointer"
-          >
-            Return to Service Store
-          </button>
+      ) : !confirmation && !activeProposal ? (
+        <div className="bg-white border border-[#E6E2D8] rounded-xl p-10 text-center space-y-4 max-w-2xl mx-auto">
+          <Lock className="w-9 h-9 text-[#0F4C3A] mx-auto" />
+          <div className="space-y-2">
+            <h2 className="text-base font-bold text-[#0F1D36]">Approved Formal Proposal Required</h2>
+            <p className="text-xs text-[#475569] leading-relaxed">
+              Public self-service checkout is disabled. Commercial settlement is available exclusively after consultation, formal technical assessment, and issuance of an authorized DESTRIA TECH INC commercial proposal to your account.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => navigate('/portal/store')}
+              className="px-4 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
+            >
+              Initiate Service Inquiry
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/portal/cart')}
+              className="px-4 py-2.5 rounded-lg border border-[#E6E2D8] text-[#0F1D36] hover:bg-[#FAF8F4] text-xs font-semibold cursor-pointer"
+            >
+              View Inquiries &amp; Proposals
+            </button>
+          </div>
+          <div className="pt-3 border-t border-[#E6E2D8] text-xs text-[#64748B]">
+            Direct Corporate Desk:{' '}
+            <a href={corporateIdentity.contact.telephone.href} className="font-semibold text-[#0F4C3A] hover:underline">
+              {corporateIdentity.contact.telephone.display}
+            </a>{' '}
+            ·{' '}
+            <a href={`mailto:${corporateIdentity.contact.email}`} className="font-semibold text-[#0F1D36] hover:underline">
+              {corporateIdentity.contact.email}
+            </a>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* Main Step Panel */}
           <div className="lg:col-span-2 bg-white border border-[#E6E2D8] rounded-xl p-6">
-            {step === 0 && cart && (
+            {step === 0 && activeProposal && (
               <div className="space-y-5">
                 <div>
-                  <h2 className="text-base font-semibold text-[#0F1D36]">Step 1: Review Order Items</h2>
+                  <h2 className="text-base font-semibold text-[#0F1D36]">
+                    Step 1: Review Authorized Commercial Proposal ({activeProposal.proposalNumber})
+                  </h2>
                   <p className="text-xs text-[#64748B] mt-0.5">
-                    Verify quantities, package inclusions, and server-calculated pricing before continuing.
+                    Verify the server-authorized scope, line items, and commercial terms issued by DESTRIA TECH INC.
                   </p>
                 </div>
+
+                {proposals.length > 1 && (
+                  <div>
+                    <label className="block text-xs font-medium text-[#334155] mb-1">
+                      Select Approved Proposal
+                    </label>
+                    <select
+                      value={selectedProposalId}
+                      onChange={(e) => setSelectedProposalId(e.target.value)}
+                      className="w-full px-3 py-2 text-sm bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg"
+                    >
+                      {proposals.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.proposalNumber} — {p.title} ({formatMoney(p.totalMinor, p.currency)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="p-4 rounded-lg bg-[#FAF8F4] border border-[#E6E2D8] text-xs text-[#334155] space-y-1">
+                  <p className="font-semibold text-[#0F1D36]">{activeProposal.title}</p>
+                  <p>{activeProposal.scopeSummary}</p>
+                  <p className="text-[11px] text-[#64748B]">
+                    Valid until {formatPortalDate(activeProposal.expiresAt)} · Issued by {activeProposal.issuedBy}
+                  </p>
+                </div>
+
                 <div className="divide-y divide-[#E6E2D8] border border-[#E6E2D8] rounded-lg">
-                  {cart.items.map((item) => (
+                  {activeProposal.items.map((item) => (
                     <div key={item.id} className="p-4 flex items-center justify-between gap-4">
                       <div>
                         <p className="text-sm font-semibold text-[#0F1D36]">{item.productName}</p>
@@ -645,11 +618,12 @@ export const PortalCheckoutPage: React.FC = () => {
                         </p>
                       </div>
                       <span className="font-mono text-sm font-semibold tabular-nums text-[#0F1D36]">
-                        {formatMoney(item.lineTotalMinor, cart.currency)}
+                        {formatMoney(item.lineTotalMinor, activeProposal.currency)}
                       </span>
                     </div>
                   ))}
                 </div>
+
                 <div className="flex justify-between pt-2">
                   <button
                     type="button"
@@ -657,7 +631,7 @@ export const PortalCheckoutPage: React.FC = () => {
                     className="inline-flex items-center gap-1.5 text-sm text-[#475569] hover:text-[#0F1D36] cursor-pointer"
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    <span>Edit Cart</span>
+                    <span>Back to Proposals</span>
                   </button>
                   <button
                     type="button"
@@ -676,7 +650,7 @@ export const PortalCheckoutPage: React.FC = () => {
                 <div>
                   <h2 className="text-base font-semibold text-[#0F1D36]">Step 2: Client Billing Information</h2>
                   <p className="text-xs text-[#64748B] mt-0.5">
-                    These details will appear on your sequential Destria Tech Inc invoice and receipt.
+                    These details will appear on your sequential DESTRIA TECH INC invoice and receipt.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -710,7 +684,7 @@ export const PortalCheckoutPage: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-[#334155] mb-1">Company Name</label>
+                    <label className="block text-xs font-medium text-[#334155] mb-1">Organization / Company</label>
                     <input
                       type="text"
                       value={companyName}
@@ -719,7 +693,7 @@ export const PortalCheckoutPage: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-[#334155] mb-1">Tax ID / TIN (Optional)</label>
+                    <label className="block text-xs font-medium text-[#334155] mb-1">Tax ID / EIN (Optional)</label>
                     <input
                       type="text"
                       value={taxId}
@@ -733,7 +707,7 @@ export const PortalCheckoutPage: React.FC = () => {
                       type="text"
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      placeholder="Street, City, Country"
+                      placeholder="Street, City, State/Country"
                       className="w-full px-3 py-2 text-sm bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg focus:outline-none focus:border-[#0F4C3A]"
                     />
                   </div>
@@ -770,20 +744,20 @@ export const PortalCheckoutPage: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <h2 className="text-base font-semibold text-[#0F1D36]">
-                    Step 3: Project Requirements &amp; Creative Brief
+                    Step 3: Project Onboarding &amp; Technical Requirements
                   </h2>
                   <p className="text-xs text-[#64748B] mt-0.5">
-                    Optional for credit packages; recommended for creative and production services.
+                    Provide kickoff instructions and attach private technical specifications or SOW reference documents.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-[#334155] mb-1">Project Title</label>
+                    <label className="block text-xs font-medium text-[#334155] mb-1">Project Workspace Title</label>
                     <input
                       type="text"
                       value={projectTitle}
                       onChange={(e) => setProjectTitle(e.target.value)}
-                      placeholder="e.g. Q3 Brand Launch Video Campaign"
+                      placeholder={activeProposal?.title || 'Enterprise Initiative'}
                       className="w-full px-3 py-2 text-sm bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg focus:outline-none focus:border-[#0F4C3A]"
                     />
                   </div>
@@ -798,12 +772,12 @@ export const PortalCheckoutPage: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#334155] mb-1">Creative Brief &amp; Objectives</label>
+                  <label className="block text-xs font-medium text-[#334155] mb-1">Onboarding Objectives</label>
                   <textarea
                     rows={3}
                     value={creativeBrief}
                     onChange={(e) => setCreativeBrief(e.target.value)}
-                    placeholder="Describe your brand tone, target audience, visual references, and required formats..."
+                    placeholder="Outline stakeholder contacts, target environments, architecture priorities, or compliance constraints..."
                     className="w-full px-3 py-2 text-sm bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg focus:outline-none focus:border-[#0F4C3A]"
                   />
                 </div>
@@ -813,7 +787,7 @@ export const PortalCheckoutPage: React.FC = () => {
                     rows={2}
                     value={specialInstructions}
                     onChange={(e) => setSpecialInstructions(e.target.value)}
-                    placeholder="Any compliance notes, aspect ratios, or voiceover pronunciation details..."
+                    placeholder="Security access notes, NDA reference numbers, or executive kickoff preferences..."
                     className="w-full px-3 py-2 text-sm bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg focus:outline-none focus:border-[#0F4C3A]"
                   />
                 </div>
@@ -868,9 +842,9 @@ export const PortalCheckoutPage: React.FC = () => {
             {step === 3 && (
               <div className="space-y-5">
                 <div>
-                  <h2 className="text-base font-semibold text-[#0F1D36]">Step 4: Payment Method Selection</h2>
+                  <h2 className="text-base font-semibold text-[#0F1D36]">Step 4: Settlement Method Selection</h2>
                   <p className="text-xs text-[#64748B] mt-0.5">
-                    Select your preferred payment rail. Online gateways remain in verified readiness mode until merchant credentials and webhook tests are activated.
+                    Select your authorized payment rail. Online gateways remain in verified readiness mode until merchant credentials and webhook tests are activated.
                   </p>
                 </div>
 
@@ -890,9 +864,7 @@ export const PortalCheckoutPage: React.FC = () => {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-semibold text-[#0F1D36]">{prov.displayName}</span>
-                          <span className="font-mono text-[10px] uppercase text-[#64748B]">
-                            {prov.mode}
-                          </span>
+                          <span className="font-mono text-[10px] uppercase text-[#64748B]">{prov.mode}</span>
                         </div>
                         <p className="text-xs text-[#475569] mt-1">{prov.description}</p>
                         <p className="text-[11px] text-[#64748B] mt-2">
@@ -911,7 +883,7 @@ export const PortalCheckoutPage: React.FC = () => {
                     </p>
                     <p>{activeProviderConfig.unavailableMessage}</p>
                     <p>
-                      Submitting creates a verified pending order and sequential invoice. No card or wallet charge is collected automatically, and credits remain pending until verified webhook confirmation.
+                      Submitting creates a verified pending order and sequential invoice linked to your approved proposal. Credits and project activation occur strictly upon verified settlement confirmation.
                     </p>
                   </div>
                 )}
@@ -932,7 +904,7 @@ export const PortalCheckoutPage: React.FC = () => {
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] disabled:opacity-50 text-white text-sm font-semibold cursor-pointer"
                   >
                     <CreditCard className="w-4 h-4" />
-                    <span>{submitting ? 'Creating Order...' : 'Submit Order & Generate Invoice'}</span>
+                    <span>{submitting ? 'Recording Settlement...' : 'Confirm Authorized Order & Issue Invoice'}</span>
                   </button>
                 </div>
               </div>
@@ -944,7 +916,7 @@ export const PortalCheckoutPage: React.FC = () => {
                   <CheckCircle2 className="w-6 h-6 text-[#0F4C3A] shrink-0 mt-0.5" />
                   <div>
                     <h2 className="text-base font-bold text-[#0F1D36]">
-                      Order {confirmation.order.orderNumber} Recorded
+                      Authorized Order {confirmation.order.orderNumber} Recorded
                     </h2>
                     <p className="text-xs text-[#334155] mt-1">
                       Invoice <span className="font-mono font-semibold">{confirmation.invoice?.invoiceNumber}</span> has been issued. Payment status is{' '}
@@ -976,7 +948,7 @@ export const PortalCheckoutPage: React.FC = () => {
                     </p>
                   </div>
                   <div>
-                    <p className="text-[#64748B]">Server-Calculated Total</p>
+                    <p className="text-[#64748B]">Authorized Proposal Total</p>
                     <p className="font-mono font-semibold text-[#0F1D36] mt-0.5">
                       {formatMoney(confirmation.order.totalMinor, confirmation.order.currency)}
                     </p>
@@ -987,79 +959,58 @@ export const PortalCheckoutPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => navigate(`/portal/orders/${confirmation.order.id}`)}
-                    className="px-4 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-sm font-semibold cursor-pointer"
+                    className="px-4 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
                   >
-                    Track Order Details
+                    Open Authorized Order
                   </button>
                   <button
                     type="button"
                     onClick={() => navigate('/portal/invoices')}
-                    className="px-4 py-2.5 rounded-lg border border-[#E6E2D8] text-sm font-semibold text-[#0F1D36] hover:bg-[#FAF8F4] cursor-pointer"
+                    className="px-4 py-2.5 rounded-lg border border-[#E6E2D8] text-[#0F1D36] hover:bg-[#FAF8F4] text-xs font-semibold cursor-pointer"
                   >
-                    View Invoice
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/portal/dashboard')}
-                    className="px-4 py-2.5 rounded-lg border border-[#E6E2D8] text-sm text-[#475569] hover:text-[#0F1D36] cursor-pointer"
-                  >
-                    Back to Dashboard
+                    View Authorized Invoices
                   </button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Right Summary Card */}
-          {cart && step < 4 && (
-            <div className="bg-white border border-[#E6E2D8] rounded-xl p-5 space-y-4 sticky top-24">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-[#0F1D36]">Checkout Summary</h3>
-                <span className="font-mono text-xs text-[#64748B]">{cart.currency}</span>
+          {/* Right: Proposal Commercial Summary */}
+          {activeProposal && (
+            <aside className="bg-white border border-[#E6E2D8] rounded-xl p-5 space-y-4 sticky top-24">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-[#0F1D36]">Authorized Proposal Summary</h3>
+                <span className="font-mono text-[11px] font-semibold text-[#0F4C3A]">
+                  {activeProposal.proposalNumber}
+                </span>
               </div>
-              <div className="space-y-2 text-xs">
-                {cart.items.map((item) => (
-                  <div key={item.id} className="flex justify-between gap-2 text-[#475569]">
-                    <span className="truncate">
-                      {item.productName} ({item.packageName}) × {item.quantity}
-                    </span>
-                    <span className="font-mono tabular-nums text-[#0F1D36] shrink-0">
-                      {formatMoney(item.lineTotalMinor, cart.currency)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="pt-3 border-t border-[#E6E2D8] space-y-1.5 text-sm">
+              <div className="space-y-2 text-xs border-t border-[#E6E2D8] pt-3">
                 <div className="flex justify-between text-[#475569]">
-                  <span>Subtotal</span>
-                  <span className="font-mono tabular-nums">
-                    {formatMoney(cart.subtotalMinor, cart.currency)}
+                  <span>Authorized Subtotal</span>
+                  <span className="font-mono text-[#0F1D36]">
+                    {formatMoney(activeProposal.subtotalMinor, activeProposal.currency)}
                   </span>
                 </div>
-                {cart.discountMinor > 0 && (
-                  <div className="flex justify-between text-[#15803D]">
-                    <span>Discount</span>
-                    <span className="font-mono tabular-nums">
-                      −{formatMoney(cart.discountMinor, cart.currency)}
-                    </span>
-                  </div>
-                )}
                 <div className="flex justify-between text-[#475569]">
                   <span>Tax</span>
-                  <span className="font-mono tabular-nums">{formatMoney(cart.taxMinor, cart.currency)}</span>
+                  <span className="font-mono text-[#0F1D36]">
+                    {formatMoney(activeProposal.taxMinor, activeProposal.currency)}
+                  </span>
                 </div>
-                <div className="pt-2 border-t border-[#E6E2D8] flex justify-between font-bold text-[#0F1D36]">
-                  <span>Total Due</span>
-                  <span className="font-mono tabular-nums">
-                    {formatMoney(cart.totalMinor, cart.currency)}
+                <div className="pt-2 border-t border-[#E6E2D8] flex justify-between items-baseline">
+                  <span className="font-semibold text-[#0F1D36]">Authorized Total ({activeProposal.currency})</span>
+                  <span className="font-mono text-lg font-bold tabular-nums text-[#0F1D36]">
+                    {formatMoney(activeProposal.totalMinor, activeProposal.currency)}
                   </span>
                 </div>
               </div>
-              <p className="text-[11px] text-[#64748B] flex items-start gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#B8923A] shrink-0 mt-0.5" />
-                <span>Order created date: {formatPortalDate(new Date().toISOString())}.</span>
-              </p>
-            </div>
+              <div className="p-3 rounded-lg bg-[#FAF8F4] border border-[#E6E2D8] text-[11px] text-[#475569] flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#0F4C3A] shrink-0 mt-0.5" />
+                <span>
+                  Totals are bound strictly to your server-verified approved proposal and cannot be modified client-side.
+                </span>
+              </div>
+            </aside>
           )}
         </div>
       )}

@@ -19,12 +19,10 @@ const normalizedBase = rawBaseUrl.endsWith('/') ? rawBaseUrl : `${rawBaseUrl}/`;
 const configuredOrigin =
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_PUBLIC_ORIGIN) ||
   (typeof process !== 'undefined' && process.env && process.env.PUBLIC_ORIGIN) ||
-  '';
+  'https://destriatech.com';
 
 /**
  * Canonical public HTTPS origin for DESTRIA TECH INC.
- * Configurable via VITE_PUBLIC_ORIGIN / PUBLIC_ORIGIN once corporate domain is officially verified.
- * Remains empty string when unconfirmed to avoid publishing an unverified domain.
  */
 export const CANONICAL_BRAND_ORIGIN = configuredOrigin.replace(/\/+$/, '');
 

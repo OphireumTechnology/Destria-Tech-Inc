@@ -1,8 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { apiUrl } from '../lib/apiClient';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const viteEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+const supabaseUrl = viteEnv.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = viteEnv.VITE_SUPABASE_ANON_KEY || '';
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
@@ -245,19 +246,19 @@ export const supabaseService = {
   },
 
   generateDefaultBrief(category: string, client?: Partial<ClientProfile>): ProjectBrief {
-    const refCode = `OPM-BRF-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const refCode = `DTI-BRF-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     return {
       referenceCode: refCode,
       client: {
         fullName: client?.fullName || 'Prospective Enterprise Client',
         email: client?.email || 'client@enterprise.com',
-        phone: client?.phone || '+1 / +63 XXX XXX XXXX',
+        phone: client?.phone || '+1 (307) 419-4277',
         companyName: client?.companyName || 'Enterprise Partner',
-        industry: client?.industry || 'Technology & Digital Media',
+        industry: client?.industry || 'Technology & Digital Systems',
         location: client?.location || 'Global / Remote',
       },
       requirements: {
-        category: category || 'Enterprise Digital Platform',
+        category: category || 'Customized Enterprise Solution',
         businessProblem: 'Comprehensive digital capability expansion and workflow modernization.',
         keyFeatures: [
           'Enterprise RBAC & Authentication Architecture',
@@ -265,8 +266,8 @@ export const supabaseService = {
           'Resilient Multi-Cloud Database Replication',
           'Production-Grade Responsive Interface & Dashboard',
         ],
-        budgetPreference: 'Enterprise Tier / Flexible',
-        targetTimeline: 'Standard 4 to 8 Week Implementation',
+        budgetPreference: 'Subject to Formal Assessment',
+        targetTimeline: 'Defined in Formal Proposal',
       },
       technicalArchitecture: {
         recommendedModules: [
@@ -275,7 +276,7 @@ export const supabaseService = {
           'Real-Time Status & Progress Dashboard',
           'Automated GitHub Actions CI/CD Pipeline',
         ],
-        suggestedStack: ['React 19', 'TypeScript', 'Node.js', 'PostgreSQL / Supabase', '@google/genai SDK'],
+        suggestedStack: ['React 19', 'TypeScript', 'Node.js', 'PostgreSQL / Supabase', 'Enterprise AI APIs'],
         infrastructure: 'Managed cloud architecture with database backups and access controls.',
         securityMeasures: [
           'Row-Level Security (RLS) enforcement',
@@ -284,13 +285,13 @@ export const supabaseService = {
         ],
       },
       commercialDiscovery: {
-        budgetPreference: 'Subject to milestone discovery',
-        timelinePreference: 'Standard staged rollout',
+        budgetPreference: 'Subject to Formal Assessment & Formal Proposal',
+        timelinePreference: 'Staged engineering rollout',
         suggestedPhases: [
-          'Phase 1: Architecture Review & Technical Spec',
-          'Phase 2: Prototype Development & Core Integration',
-          'Phase 3: QA Verification & Security Audit',
-          'Phase 4: Production Deployment & SLA Handover',
+          'Phase 1: Initial Consultation & Technical Assessment',
+          'Phase 2: Architecture Design & Core Integration',
+          'Phase 3: QA Verification & Security Review',
+          'Phase 4: Production Deployment & Support Handover',
         ],
         consultationAgenda: [
           'Deep dive into operational workflows',

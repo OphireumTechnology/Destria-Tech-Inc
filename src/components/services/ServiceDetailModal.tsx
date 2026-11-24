@@ -1,9 +1,8 @@
 import React, { useEffect } from 'react';
 import { CatalogService } from '../../types';
 import {
-  formatCatalogPrice,
-  computeConfiguredServiceTotal,
-  COMMERCIAL_PRICING_NOTICE,
+  formatCatalogEngagement,
+  COMMERCIAL_ENGAGEMENT_NOTICE,
   EXTERNAL_CHARGES_DISCLOSURE,
   CATALOG_CATEGORIES,
 } from '../../data/serviceCatalog';
@@ -13,8 +12,6 @@ import { X, Check, AlertCircle, Shield, Bot, Plus, ArrowUpRight, Sliders } from 
 
 interface ServiceDetailModalProps {
   service: CatalogService | null;
-  currency: 'USD' | 'PHP';
-  phpRate: number;
   isSelected: boolean;
   selectedOptionIds: string[];
   onClose: () => void;
@@ -26,8 +23,6 @@ interface ServiceDetailModalProps {
 
 export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
   service,
-  currency,
-  phpRate,
   isSelected,
   selectedOptionIds,
   onClose,
@@ -47,10 +42,8 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
 
   if (!service) return null;
 
-  const isStandardized = service.engagementMode === 'standardized';
-  const priceInfo = formatCatalogPrice(service, currency, phpRate);
+  const engagementInfo = formatCatalogEngagement(service);
   const categoryMeta = CATALOG_CATEGORIES.find((c) => c.id === service.categoryId);
-  const configuredTotals = computeConfiguredServiceTotal(service, selectedOptionIds);
   const options = service.configurableOptions || [];
 
   return (
@@ -78,9 +71,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
               <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
                 <span className="text-[#00C2C7]">{categoryMeta?.label || service.categoryId}</span>
                 <span aria-hidden="true" className="text-slate-600">·</span>
-                <span className={isStandardized ? 'text-emerald-400' : 'text-[#D4AF37]'}>
-                  {isStandardized ? 'Standardized Package' : 'Custom-Scoped Engagement'}
-                </span>
+                <span className="text-[#D4AF37]">Customized Enterprise Solution</span>
               </div>
               <h3 id="service-detail-title" className="text-lg sm:text-xl font-bold text-white mt-0.5">
                 {service.title}
@@ -100,47 +91,26 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-6 text-xs sm:text-sm text-slate-300">
-          {/* Overview & Pricing Banner */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800">
-            <p className="text-slate-200 leading-relaxed max-w-xl">
-              {service.fullDescription}
-            </p>
-            <div className="shrink-0 sm:text-right font-mono tabular-nums">
-              <div className="text-base font-bold text-[#00C2C7]">{priceInfo.primaryLabel}</div>
-              {priceInfo.secondaryLabel && (
-                <div className="text-xs text-slate-200 mt-0.5">{priceInfo.secondaryLabel}</div>
-              )}
-              {priceInfo.phpEstimateLabel && (
-                <div className="text-[11px] text-slate-400 mt-1">{priceInfo.phpEstimateLabel} (estimate)</div>
-              )}
+          {/* Overview & Engagement Model Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-5 border-b border-slate-800">
+            <p className="text-slate-200 leading-relaxed max-w-xl">{service.fullDescription}</p>
+            <div className="shrink-0 sm:text-right font-mono">
+              <div className="text-xs sm:text-sm font-bold text-[#00C2C7]">{engagementInfo.primaryLabel}</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">{engagementInfo.secondaryLabel}</div>
             </div>
           </div>
 
-          {/* Interactive Supported Options Configurator for Standardized Packages */}
-          {isStandardized && options.length > 0 && (
+          {/* Optional Capability Modules for Technical Assessment */}
+          {options.length > 0 && (
             <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-xs font-mono uppercase tracking-wider text-[#00C2C7] flex items-center gap-1.5">
                   <Sliders className="w-3.5 h-3.5" />
-                  <span>Supported Package Options</span>
+                  <span>Optional Scope Modules for Assessment</span>
                 </h4>
-                <div className="text-xs font-mono text-white tabular-nums">
-                  Configured Est.:{' '}
-                  <span className="text-[#00C2C7] font-bold">
-                    {configuredTotals.oneTimeUsd > 0 ? `$${configuredTotals.oneTimeUsd.toLocaleString('en-US')}` : ''}
-                    {configuredTotals.oneTimeUsd > 0 && configuredTotals.monthlyUsd > 0 ? ' + ' : ''}
-                    {configuredTotals.monthlyUsd > 0 ? `$${configuredTotals.monthlyUsd.toLocaleString('en-US')}/mo` : ''}
-                  </span>
-                  {currency === 'PHP' && (
-                    <span className="text-slate-400 ml-1">
-                      (≈ ₱
-                      {Math.round(
-                        (configuredTotals.oneTimeUsd || configuredTotals.monthlyUsd) * phpRate
-                      ).toLocaleString('en-US')}
-                      )
-                    </span>
-                  )}
-                </div>
+                <span className="text-[11px] font-mono text-slate-400">
+                  Evaluated During Consultation
+                </span>
               </div>
 
               <div className="space-y-2">
@@ -167,10 +137,8 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                           <div className="text-[11px] text-slate-400 mt-0.5">{opt.description}</div>
                         </div>
                       </div>
-                      <span className="text-xs font-mono text-[#00C2C7] shrink-0 tabular-nums">
-                        {opt.deltaUsd > 0 ? `+$${opt.deltaUsd.toLocaleString('en-US')}` : ''}
-                        {opt.deltaUsd > 0 && opt.monthlyDeltaUsd ? ' · ' : ''}
-                        {opt.monthlyDeltaUsd ? `+$${opt.monthlyDeltaUsd.toLocaleString('en-US')}/mo` : ''}
+                      <span className="text-[10px] font-mono uppercase text-[#00C2C7] shrink-0">
+                        {opt.scopeCategory}
                       </span>
                     </label>
                   );
@@ -208,11 +176,11 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
             </div>
           </div>
 
-          {/* Included vs Excluded Scope */}
+          {/* Core Assessment Scope vs External Infrastructure */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
             <div>
               <h4 className="text-xs font-mono uppercase tracking-wider text-emerald-400 mb-2.5">
-                Included in Starting Scope
+                Core Framework Deliverables
               </h4>
               <ul className="space-y-2 text-xs text-slate-300">
                 {service.includedScope.map((item, i) => (
@@ -226,7 +194,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
 
             <div>
               <h4 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2.5">
-                Excluded / Billed Separately
+                External Infrastructure &amp; Third-Party Items
               </h4>
               <ul className="space-y-2 text-xs text-slate-400">
                 {service.excludedScope.map((item, i) => (
@@ -250,9 +218,9 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
             </div>
           )}
 
-          {/* Commercial Pricing & External Charges Notice */}
+          {/* Commercial Engagement & External Charges Notice */}
           <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800 space-y-2 text-[11px] text-slate-400 leading-relaxed">
-            <p>{COMMERCIAL_PRICING_NOTICE}</p>
+            <p>{COMMERCIAL_ENGAGEMENT_NOTICE}</p>
             <p>{EXTERNAL_CHARGES_DISCLOSURE}</p>
           </div>
         </div>
@@ -270,7 +238,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
               }`}
             >
               {isSelected ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-              <span>{isSelected ? 'Added to Solution Builder' : 'Add to Solution Builder'}</span>
+              <span>{isSelected ? 'Selected for Requirements' : 'Add to Project Requirements'}</span>
             </button>
 
             <button
@@ -282,7 +250,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
               className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[#00C2C7] border border-[#00C2C7]/40 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
             >
               <Bot className="w-3.5 h-3.5" />
-              <span>Ask AI Consultant</span>
+              <span>Consult AI Advisor</span>
             </button>
           </div>
 
@@ -294,7 +262,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
             }}
             className="px-4 py-2 rounded-lg bg-[#00C2C7] hover:bg-[#00d6dc] text-[#0B1220] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
           >
-            <span>{isStandardized ? 'Proceed to Solution Request' : 'Request Personalized Proposal'}</span>
+            <span>Request a Formal Proposal</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
           </button>
         </div>

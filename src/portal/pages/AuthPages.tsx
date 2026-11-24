@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowLeft, CheckCircle2, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Lock, Mail, Phone, ShieldCheck } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
+import { corporateIdentity } from '../../data/companyConfig';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
 import { portalRequest } from '../portalApi';
@@ -22,7 +23,7 @@ const AuthShell: React.FC<{
             className="inline-flex items-center gap-2 text-xs text-slate-300 hover:text-white transition-colors cursor-pointer mb-10"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Return to Destria Tech Inc Website</span>
+            <span>Return to DESTRIA TECH INC Website</span>
           </button>
           <div className="mb-8">
             <BrandLogo
@@ -30,25 +31,36 @@ const AuthShell: React.FC<{
               theme="portal-dark"
               size="lg"
               ring="gold"
-              title="DESTRIA TECH INC"
-              subtitle="DESTRIA NETWORK · Client Portal"
+              title={corporateIdentity.legalName}
+              subtitle={`${corporateIdentity.networkName} · Client Portal`}
               eager
             />
           </div>
           <h2 className="text-2xl font-bold text-white leading-snug tracking-tight">
-            One calm workspace for your services, projects, billing, and deliverables.
+            One secure workspace for enterprise engagements, formal proposals, projects, and deliverables.
           </h2>
           <p className="mt-4 text-sm text-slate-300 leading-relaxed">
-            Order technology, AI, and digital creative packages, share project briefs, collaborate directly with our engineering desk, and download verified deliverables securely.
+            Initiate customized technology inquiries, review authorized commercial proposals, collaborate with our engineering teams, and access verified deliverables securely.
           </p>
         </div>
 
         <div className="pt-6 border-t border-white/10 space-y-2 text-xs text-slate-400">
           <div className="flex items-center gap-2 text-slate-200">
             <ShieldCheck className="w-4 h-4 text-[#D4AF37] shrink-0" />
-            <span>Private client isolation & server-verified transactions</span>
+            <span>Private client isolation &amp; server-verified records</span>
           </div>
-          <p>DESTRIA TECH INC (DTI) · DESTRIA NETWORK</p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-300 pt-1">
+            <a href={corporateIdentity.contact.telephone.href} className="inline-flex items-center gap-1.5 text-[#00C2C7] hover:underline">
+              <Phone className="w-3.5 h-3.5" />
+              <span>{corporateIdentity.contact.telephone.display}</span>
+            </a>
+            <a href={`mailto:${corporateIdentity.contact.email}`} className="inline-flex items-center gap-1.5 hover:text-white">
+              <Mail className="w-3.5 h-3.5" />
+              <span>{corporateIdentity.contact.email}</span>
+            </a>
+          </div>
+          <p className="text-[11px] leading-relaxed">{corporateIdentity.headquarters.fullAddress}</p>
+          <p>{corporateIdentity.legalName} ({corporateIdentity.abbreviation}) · {corporateIdentity.networkName}</p>
         </div>
       </aside>
 

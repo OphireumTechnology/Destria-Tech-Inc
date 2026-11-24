@@ -5,7 +5,7 @@ import {
   MapPin, Mic, MicOff, Volume2, VolumeX, PhoneOff, Globe,
   Square, AlertCircle, Sparkles, CheckCircle2
 } from 'lucide-react';
-import { COMPANY_CONFIG } from '../../data/companyConfig';
+import { COMPANY_CONFIG, corporateIdentity, LEGAL_GOVERNANCE_STATEMENTS } from '../../data/companyConfig';
 import { BrandLogo } from '../BrandLogo';
 import { 
   aiConsultantService, 
@@ -15,7 +15,7 @@ import {
 } from '../../services/aiConsultantService';
 import { supabaseService, ProjectBrief, ConsultationAppointment } from '../../services/supabaseService';
 import { aiVoiceService, VoiceState, VoiceLanguage } from '../../services/aiVoiceService';
-import { SERVICE_CATALOG, formatCatalogPrice } from '../../data/serviceCatalog';
+import { SERVICE_CATALOG, formatCatalogEngagement } from '../../data/serviceCatalog';
 import { ProjectBriefModal } from './ProjectBriefModal';
 import { AppointmentBookingModal } from './AppointmentBookingModal';
 
@@ -47,10 +47,12 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
   const isVoiceActive = voiceStatus !== 'disconnected' && voiceStatus !== 'error';
 
-  // Conversation State
+  // Conversation State (v2 keys; purges legacy cached conversations that may hold retired pricing)
   const [state, setState] = useState<ConsultationState>(() => {
     try {
-      const saved = localStorage.getItem('opm_consultant_state');
+      localStorage.removeItem('opm_consultant_state');
+      localStorage.removeItem('opm_consultant_messages');
+      const saved = localStorage.getItem('dti_consultant_state_v2');
       return saved ? JSON.parse(saved) : INITIAL_CONSULTATION_STATE;
     } catch {
       return INITIAL_CONSULTATION_STATE;
@@ -59,7 +61,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
-      const saved = localStorage.getItem('opm_consultant_messages');
+      const saved = localStorage.getItem('dti_consultant_messages_v2');
       if (saved) return JSON.parse(saved);
     } catch {
       // ignore
@@ -68,14 +70,14 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       {
         id: 'msg-welcome',
         sender: 'ai',
-        text: `Welcome to DESTRIA TECH INC (DESTRIA NETWORK). I am your AI Solutions Consultant. Whether you require AI automation pipelines, enterprise software, cloud platforms, or multimedia production, I'm here to understand your requirements, architect a tailored preliminary brief, and schedule your consultation. Which area best matches your project?`,
+        text: `Welcome to ${corporateIdentity.legalName} (${corporateIdentity.networkName}). I am your AI Corporate Solutions Consultant. We deliver customized enterprise technology solutions across software architecture, AI systems, cloud infrastructure, cybersecurity, and digital transformation. How may I assist with your organization's objectives today?`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         stage: 'welcome',
         quickReplies: [
-          'Website & Digital Experiences',
           'AI Solutions & AI Agents',
-          'Blockchain & Web3 Development',
-          'Signature Transformation Packages',
+          'Enterprise Software & Custom Apps',
+          'Cloud Infrastructure & Cybersecurity',
+          'Request an Enterprise Consultation',
         ],
       },
     ];
@@ -175,9 +177,9 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
   // Persist conversation
   useEffect(() => {
     try {
-      localStorage.setItem('opm_consultant_messages', JSON.stringify(messages));
-      localStorage.setItem('opm_consultant_state', JSON.stringify(state));
-    } catch (e) {
+      localStorage.setItem('dti_consultant_messages_v2', JSON.stringify(messages));
+      localStorage.setItem('dti_consultant_state_v2', JSON.stringify(state));
+    } catch {
       // ignore
     }
   }, [messages, state]);
@@ -339,19 +341,27 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       if (currentBrief || state.generatedBrief) {
         setIsBriefModalOpen(true);
       } else {
-        const brief = supabaseService.generateDefaultBrief(state.requirements.category || 'Website & Web Platforms', state.client);
+        const brief = supabaseService.generateDefaultBrief(state.requirements.category || 'Customized Enterprise Solution', state.client);
         setCurrentBrief(brief);
         setIsBriefModalOpen(true);
       }
       return;
     }
 
-    if (reply === 'Schedule Consultation') {
+    if (
+      reply === 'Schedule Consultation' ||
+      reply === 'Request an Enterprise Consultation' ||
+      reply === 'Schedule Consultation Now'
+    ) {
       setIsBookingModalOpen(true);
       return;
     }
 
-    if (reply === 'Direct Solutions Contact' || reply === 'Direct Executive Contact') {
+    if (
+      reply === 'Direct Solutions Contact' ||
+      reply === 'Direct Executive Contact' ||
+      reply.startsWith('Call +1')
+    ) {
       setIsEscalationModalOpen(true);
       return;
     }
@@ -366,6 +376,8 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
     try {
       localStorage.removeItem('opm_consultant_messages');
       localStorage.removeItem('opm_consultant_state');
+      localStorage.removeItem('dti_consultant_messages_v2');
+      localStorage.removeItem('dti_consultant_state_v2');
     } catch {
       // ignore storage errors
     }
@@ -375,14 +387,14 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       {
         id: `msg-welcome-reset-${Date.now()}`,
         sender: 'ai',
-        text: `Consultation session reset. Welcome to DESTRIA TECH INC (DESTRIA NETWORK). Explore any of our 10 service divisions or describe your business goal to generate a tailored Project Brief.`,
+        text: `Consultation session reset. Welcome to ${corporateIdentity.legalName} (${corporateIdentity.networkName}). Explore any of our 10 customized enterprise technology divisions or describe your objectives to coordinate a consultation and formal proposal.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         stage: 'welcome',
         quickReplies: [
-          'Website & Digital Experiences',
           'AI Solutions & AI Agents',
-          'Blockchain & Web3 Development',
-          'Signature Transformation Packages',
+          'Enterprise Software & Custom Apps',
+          'Cloud Infrastructure & Cybersecurity',
+          'Request an Enterprise Consultation',
         ],
       },
     ]);
@@ -677,21 +689,21 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                             </div>
                           )}
 
-                          {/* Recommended Catalog Service Cards */}
+                          {/* Recommended Catalog Solution Cards */}
                           {isAi && msg.recommendedServiceIds && msg.recommendedServiceIds.length > 0 && (
                             <div className="mt-2.5 space-y-1.5">
                               {msg.recommendedServiceIds
                                 .map((id) => SERVICE_CATALOG.find((s) => s.id === id))
                                 .filter((s): s is NonNullable<typeof s> => Boolean(s))
                                 .map((svc) => {
-                                  const price = formatCatalogPrice(svc, 'USD', 58);
+                                  const engagement = formatCatalogEngagement(svc);
                                   return (
                                     <button
                                       key={svc.id}
                                       type="button"
                                       onClick={() =>
                                         handleSendMessage(
-                                          `Tell me more about ${svc.title} (${price.primaryLabel}), what is included, and what timeline applies.`
+                                          `Tell me more about ${svc.title} (${engagement.primaryLabel}), its capabilities, and the technical assessment process.`
                                         )
                                       }
                                       className="w-full text-left px-3 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-[#00C2C7]/25 hover:border-[#00C2C7]/60 transition-colors cursor-pointer flex items-center justify-between gap-2"
@@ -699,8 +711,8 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                                       <span className="text-[11px] font-semibold text-white truncate">
                                         {svc.title}
                                       </span>
-                                      <span className="text-[10px] font-mono text-[#00C2C7] shrink-0 tabular-nums">
-                                        {price.primaryLabel}
+                                      <span className="text-[10px] font-mono text-[#00C2C7] shrink-0">
+                                        {engagement.primaryLabel}
                                       </span>
                                     </button>
                                   );
@@ -929,6 +941,9 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                     <Send className="w-4 h-4" />
                   </button>
                 </form>
+                <p className="mt-2 text-[10px] text-slate-500 leading-snug">
+                  {LEGAL_GOVERNANCE_STATEMENTS.find((s) => s.id === 'ai-usage-disclaimer')?.clauses[0]}
+                </p>
               </div>
             </>
           )}
@@ -1052,10 +1067,10 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                   )}
 
                   {COMPANY_CONFIG.registeredAddress && (
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-slate-400 flex items-center gap-1.5 shrink-0">
                         <MapPin className="w-3.5 h-3.5 text-[#00C2C7]" />
-                        <span>Corporate Office:</span>
+                        <span>Corporate Headquarters:</span>
                       </span>
                       <span className="text-slate-300 text-right">{COMPANY_CONFIG.registeredAddress}</span>
                     </div>

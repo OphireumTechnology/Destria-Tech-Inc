@@ -558,6 +558,41 @@ export interface CustomPackageInquiryRecord {
   createdAt: string;
 }
 
+export interface ApprovedProposalItemRecord {
+  id: string;
+  productId: string;
+  packageId: string;
+  productSlug: string;
+  productName: string;
+  packageName: string;
+  billingType: 'one_time' | 'subscription_monthly' | 'credit_pack';
+  quantity: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+  creditsAllocated: number;
+  revisionLimit: number;
+}
+
+export interface ApprovedProposalRecord {
+  id: string;
+  proposalNumber: string;
+  userId: string;
+  inquiryId?: string;
+  title: string;
+  scopeSummary: string;
+  currency: PortalCurrency;
+  fxRateSnapshot: number;
+  subtotalMinor: number;
+  taxMinor: number;
+  totalMinor: number;
+  status: 'approved' | 'accepted' | 'expired' | 'revoked';
+  items: ApprovedProposalItemRecord[];
+  issuedBy: string;
+  issuedAt: string;
+  expiresAt: string;
+  acceptedOrderId?: string;
+}
+
 export interface PortalRepository {
   readonly mode: 'supabase' | 'local_dev';
   // Auth & Users
@@ -605,9 +640,33 @@ export interface PortalRepository {
   getPackageById(packageId: string): Promise<{ product: ProductRecord; pkg: ProductPackageRecord } | null>;
   getDiscountCode(code: string): Promise<DiscountCodeRecord | null>;
 
-  // Custom Enterprise Inquiry
+  // Custom Enterprise Inquiry & Authorized Commercial Proposals
   createCustomInquiry(input: Omit<CustomPackageInquiryRecord, 'id' | 'referenceNumber' | 'status' | 'createdAt'>): Promise<CustomPackageInquiryRecord>;
   listCustomInquiries(userId: string): Promise<CustomPackageInquiryRecord[]>;
+  createApprovedProposal(input: {
+    userId: string;
+    inquiryId?: string;
+    title: string;
+    scopeSummary: string;
+    currency: PortalCurrency;
+    items: Array<{
+      productId: string;
+      packageId: string;
+      productSlug: string;
+      productName: string;
+      packageName: string;
+      billingType: 'one_time' | 'subscription_monthly' | 'credit_pack';
+      quantity: number;
+      unitPriceMinor: number;
+      creditsAllocated: number;
+      revisionLimit: number;
+    }>;
+    issuedBy?: string;
+    expiresInDays?: number;
+  }): Promise<ApprovedProposalRecord>;
+  listApprovedProposals(userId: string): Promise<ApprovedProposalRecord[]>;
+  getApprovedProposalById(userId: string, proposalId: string): Promise<ApprovedProposalRecord | null>;
+  markProposalAccepted(userId: string, proposalId: string, orderId: string): Promise<ApprovedProposalRecord | null>;
 
   // Cart
   getCart(userId: string): Promise<ShoppingCartRecord>;

@@ -6,10 +6,10 @@ import {
   ServiceEngagementMode,
 } from '../types';
 
-export const DEFAULT_USD_TO_PHP_RATE = 58;
+import { COMMERCIAL_ENGAGEMENT_STATEMENT, CORPORATE_SERVICE_STATEMENT } from './companyConfig';
 
-export const COMMERCIAL_PRICING_NOTICE =
-  'All advertised prices represent starting investments. Final pricing is tailored to the scope, technical complexity, required features, integrations, workload, infrastructure, and delivery timeline of each engagement. A detailed proposal will be provided for review and approval before development begins.';
+export const COMMERCIAL_ENGAGEMENT_NOTICE = COMMERCIAL_ENGAGEMENT_STATEMENT;
+export const COMMERCIAL_SERVICE_NOTICE = CORPORATE_SERVICE_STATEMENT;
 
 export const EXTERNAL_CHARGES_DISCLOSURE =
   'Hosting, domain registrations, third-party subscriptions, API usage, telephony, payment processing, taxes, and other external charges are billed separately when applicable.';
@@ -99,7 +99,7 @@ export const CATALOG_CATEGORIES: CatalogCategoryMeta[] = [
     iconKind: 'cybersecurity',
     headline: 'Website Recovery, Performance Upgrades & Ongoing Care Plans',
     description:
-      'Targeted one-time remediation and modernization services paired with structured monthly Digital Care Memberships for existing websites and apps.',
+      'Targeted one-time remediation and modernization services paired with structured ongoing Digital Care Frameworks for existing websites and apps.',
   },
   {
     id: 'creative-multimedia',
@@ -152,7 +152,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'A disciplined corporate web foundation engineered for clarity, fast page loads, mobile responsiveness, and structured lead capture.',
     iconKind: 'website',
-    pricing: { model: 'one_time', startingUsd: 897 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Bespoke brand-aligned corporate landing architecture',
       'Mobile-first responsive layout & WCAG AA accessibility baseline',
@@ -176,7 +176,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Multi-page interactive business platform with CMS-ready content architecture, structured service showcases, analytics tracking, and conversion funnels.',
     iconKind: 'website',
-    pricing: { model: 'one_time', startingUsd: 2097 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Multi-page bespoke UX architecture & interactive UI transitions',
       'Headless CMS or structured content management integration',
@@ -200,7 +200,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'An intelligent flagship web ecosystem integrating conversational AI discovery, calendar booking workflows, CRM synchronization, and executive dashboards.',
     iconKind: 'ai',
-    pricing: { model: 'one_time', startingUsd: 4497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Custom flagship web platform with interactive technology showcases',
       'Embedded AI Solutions Assistant & automated brief capture',
@@ -229,7 +229,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'High-conversion digital storefront engineered for catalog scalability, friction-free checkout flows, inventory sync, and automated order notifications.',
     iconKind: 'enterprise',
-    pricing: { model: 'one_time', startingUsd: 5997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'High-speed product discovery, variant filtering & cart experience',
       'Secure payment gateway & regional checkout integration',
@@ -256,7 +256,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Comprehensive multi-tenant digital platform architecture featuring strict RBAC, relational data persistence, custom APIs, and enterprise SLA readiness.',
     iconKind: 'enterprise',
-    pricing: { model: 'one_time', startingUsd: 14997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Multi-tenant RBAC portals & SSO/OAuth authentication gateways',
       'Custom enterprise dashboards & real-time operational telemetry',
@@ -286,7 +286,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       '24/7 context-grounded website concierge trained on your verified corporate catalog and documentation, engineered to capture qualified leads and escalate cleanly to staff.',
     iconKind: 'ai',
-    pricing: { model: 'setup_plus_monthly', startingUsd: 447, monthlyUsd: 147 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'ai_implementation', proposalRequired: true },
     capabilities: [
       'Verified knowledge-base retrieval & service explanation',
       'Structured lead capture & inquiry classification',
@@ -300,7 +300,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     ],
     excludedScope: [
       ...STD_EXCLUDED,
-      'High-volume LLM API token usage beyond base monthly plan allowance',
+      'High-volume LLM API token usage under client-owned third-party API accounts',
     ],
     interactiveDemoType: 'ai_consultant',
     legacyServiceId: 'ai-solutions-automation',
@@ -315,7 +315,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Real-time bidirectional voice consultation agent supporting natural dialogue, explicit consent disclosure, calendar coordination, and executive call summaries.',
     iconKind: 'ai',
-    pricing: { model: 'setup_plus_monthly', startingUsd: 897, monthlyUsd: 297 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'ai_implementation', proposalRequired: true },
     capabilities: [
       'Bidirectional low-latency voice interaction with barge-in support',
       'Multilingual capability (English & Filipino/Tagalog switching)',
@@ -345,7 +345,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Automated inbox triage and executive response drafting pipeline that categorizes inbound messages by urgency and routes drafts through mandatory human sign-off.',
     iconKind: 'automation',
-    pricing: { model: 'setup_plus_monthly', startingUsd: 597, monthlyUsd: 237 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'ai_implementation', proposalRequired: true },
     capabilities: [
       'Automated inbound email classification & urgency scoring',
       'Context-aware executive response drafting',
@@ -370,7 +370,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Pipeline intelligence agent that scores inbound requirements against service fit, enriches CRM records, and coordinates timely follow-up briefs for sales teams.',
     iconKind: 'analytics',
-    pricing: { model: 'setup_plus_monthly', startingUsd: 747, monthlyUsd: 297 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'ai_implementation', proposalRequired: true },
     capabilities: [
       'Automated discovery & project scope qualification',
       'CRM record enrichment & next-step recommendations',
@@ -398,7 +398,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Smart scheduling agent that verifies real-time slot availability, handles timezone conversion, prevents double-bookings, and prepares pre-meeting briefs.',
     iconKind: 'automation',
-    pricing: { model: 'setup_plus_monthly', startingUsd: 447, monthlyUsd: 177 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'ai_implementation', proposalRequired: true },
     capabilities: [
       'Real-time calendar availability checks & conflict prevention',
       'Multi-timezone slot presentation & Google Calendar sync',
@@ -423,7 +423,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Coordinated multi-agent architecture uniting intake, research, architecture drafting, QA verification, and executive reporting behind strict permission boundaries.',
     iconKind: 'ai',
-    pricing: { model: 'setup_plus_monthly', startingUsd: 2997, monthlyUsd: 897 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'ai_implementation', proposalRequired: true },
     capabilities: [
       'Coordinated multi-agent workflows across departments',
       'Human approval gates, role isolation & audit logging',
@@ -449,7 +449,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Bespoke server-side AI architecture engineered for proprietary datasets, citation-grounded knowledge retrieval, multimodal workflows, and enterprise governance.',
     iconKind: 'ai',
-    pricing: { model: 'one_time', startingUsd: 1497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Private AI assistants & Retrieval-Augmented Generation (RAG)',
       'Enterprise knowledge assistants & document intelligence',
@@ -481,7 +481,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Objective engineering advisory evaluating whether distributed ledger, permissioned blockchain, or cryptographic verification architecture delivers measurable operational value.',
     iconKind: 'blockchain',
-    pricing: { model: 'one_time', startingUsd: 597 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Distributed ledger vs. relational database fit assessment',
       'Permissioned vs. public network architecture selection',
@@ -509,7 +509,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Modular smart contracts built with strict role permissions, event emission, comprehensive test coverage, and testnet verification.',
     iconKind: 'blockchain',
-    pricing: { model: 'one_time', startingUsd: 2997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Modular smart contracts with role-based access control',
       'Automated unit & invariant test suites on local/testnet',
@@ -537,7 +537,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Production bridge connecting enterprise backends and user interfaces to on-chain transactions, webhook listeners, and verifiable state records.',
     iconKind: 'blockchain',
-    pricing: { model: 'one_time', startingUsd: 4497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Blockchain API integration & RPC failover routing',
       'Real-time on-chain event indexing to PostgreSQL',
@@ -562,7 +562,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Intuitive Web3 application architecture built in React and TypeScript with clear signing prompts, network switching, and resilient state reconciliation.',
     iconKind: 'blockchain',
-    pricing: { model: 'one_time', startingUsd: 5997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Responsive Web3 frontend & wallet signature UX',
       'Smart contract interaction layer & optimistic UI states',
@@ -588,7 +588,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Custom tokenization architecture supporting mint/burn governance, transfer restrictions, and transparent registry reporting—engineered for legal and compliance review.',
     iconKind: 'blockchain',
-    pricing: { model: 'one_time', startingUsd: 7497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Tokenization architecture & programmable transfer rules',
       'Registry portal with issuance & lifecycle history',
@@ -616,7 +616,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Multi-organization distributed ledger architecture with participant node permissions, confidential data channels, and high-availability monitoring.',
     iconKind: 'blockchain',
-    pricing: { model: 'one_time', startingUsd: 14997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Permissioned enterprise blockchain networks',
       'Supply-chain traceability & multi-party attestation workflows',
@@ -642,7 +642,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Structured pre-deployment engineering security review identifying reentrancy, privilege escalation, signature replay, and key-management risks prior to formal third-party auditing.',
     iconKind: 'cybersecurity',
-    pricing: { model: 'one_time', startingUsd: 1497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Smart contract static analysis & vulnerability scanning',
       'Role-permission, multisig & key-lifecycle threat modeling',
@@ -670,7 +670,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Clean authentication and transaction-signing UX supporting standard browser and mobile Web3 wallets with clear user safety prompts.',
     iconKind: 'blockchain',
-    pricing: { model: 'one_time', startingUsd: 1497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Standard wallet connector & mobile deep-link flows',
       'Cryptographic Sign-In With Ethereum (SIWE) session verification',
@@ -697,7 +697,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Cryptographic hashing and anchored verification pipelines that prove document integrity and timestamp authenticity without exposing private payloads on-chain.',
     iconKind: 'blockchain',
-    pricing: { model: 'one_time', startingUsd: 2997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Blockchain-based document verification & cryptographic hashing',
       'Tamper-evident audit trails with zero on-chain PII exposure',
@@ -722,7 +722,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Standards-aligned verifiable credential issuance and verification workflows designed for enterprise onboarding, academic credentials, and partner access.',
     iconKind: 'cybersecurity',
-    pricing: { model: 'one_time', startingUsd: 4497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Digital identity & verifiable credential verification',
       'Issuer & verifier portal workflows with revocation registries',
@@ -753,7 +753,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'End-to-end custom software engineering delivering multi-role portals, workflow engines, and resilient backends designed to scale with your organization.',
     iconKind: 'enterprise',
-    pricing: { model: 'one_time', startingUsd: 5997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Tailored operational portals & internal workflow engines',
       'Strict role-based access control & audit logging',
@@ -777,7 +777,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Cross-platform mobile application engineering engineered for offline resilience, push notifications, secure authentication, and seamless backend synchronization.',
     iconKind: 'mobile',
-    pricing: { model: 'one_time', startingUsd: 4497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Cross-platform iOS & Android application engineering',
       'Offline-capable caching & real-time API synchronization',
@@ -803,7 +803,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Custom-scoped 3D spatial and operational simulation platforms connecting live or modeled telemetry to interactive web viewports.',
     iconKind: 'analytics',
-    pricing: { model: 'one_time', startingUsd: 5997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Interactive 3D spatial facility & asset modeling (Three.js/WebGL)',
       'Scenario simulation & capacity/throughput visualization',
@@ -829,7 +829,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Custom-scoped WebXR, Three.js, and interactive 3D experiences enabling customers to inspect products, spaces, and architectural concepts from any device.',
     iconKind: 'multimedia',
-    pricing: { model: 'one_time', startingUsd: 4497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Interactive 3D product configurators & virtual showrooms',
       'WebXR / mobile AR placement previews',
@@ -855,7 +855,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Executive technical due diligence, stack modernization planning, build-vs-buy evaluations, and security posture roadmaps.',
     iconKind: 'enterprise',
-    pricing: { model: 'hourly', startingUsd: 147, unitLabel: '/hour' },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'advisory', proposalRequired: true },
     capabilities: [
       'System architecture audits & bottleneck diagnosis',
       'AI, cloud & vendor selection advisory',
@@ -881,7 +881,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Event-driven business automations connecting forms, CRMs, spreadsheets, email approvals, and billing alerts with reliable error handling.',
     iconKind: 'automation',
-    pricing: { model: 'one_time', startingUsd: 447 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Automated cross-app task routing & status notifications',
       'Approval-gated workflow triggers & exception alerts',
@@ -903,7 +903,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Centralized KPI dashboards and reporting pipelines unifying sales, finance, operations, and customer engagement metrics.',
     iconKind: 'analytics',
-    pricing: { model: 'one_time', startingUsd: 747 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Executive KPI dashboards with clean tabular metrics',
       'Multi-source data aggregation & scheduled refreshes',
@@ -928,7 +928,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Production REST/GraphQL/webhook integration middleware engineered with schema validation, rate-limit resilience, and observability.',
     iconKind: 'automation',
-    pricing: { model: 'one_time', startingUsd: 897 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'REST, GraphQL & webhook synchronization services',
       'Schema mapping, transformation & payload validation',
@@ -953,7 +953,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Automated ETL/ELT pipelines, data quality validation gates, and structured warehousing engineered for analytical accuracy.',
     iconKind: 'analytics',
-    pricing: { model: 'one_time', startingUsd: 2997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Automated ETL/ELT ingestion & transformation pipelines',
       'Data deduplication, validation & lineage tracking',
@@ -975,7 +975,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Multimodal AI and OCR extraction pipelines transforming unstructured documents into validated JSON/database records with human confidence checks.',
     iconKind: 'ai',
-    pricing: { model: 'one_time', startingUsd: 1497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Automated PDF, scan & form field extraction',
       'Schema validation & anomaly flagging for human review',
@@ -997,7 +997,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Custom-scoped visual recognition and media classification pipelines tailored to quality inspection, cataloging, or physical-space analytics.',
     iconKind: 'ai',
-    pricing: { model: 'one_time', startingUsd: 2997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Custom-scoped image & video frame analysis pipelines',
       'Automated quality check flagging & media metadata tagging',
@@ -1023,7 +1023,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Custom-scoped telemetry ingestion, MQTT/HTTP device gateways, alert thresholds, and real-time operational monitoring interfaces.',
     iconKind: 'cloud',
-    pricing: { model: 'one_time', startingUsd: 2997 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Device-to-cloud telemetry ingestion & state storage',
       'Threshold alerting & maintenance trigger workflows',
@@ -1053,7 +1053,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Containerized cloud architecture, automated CI/CD pipelines, environment parity, and zero-downtime deployment workflows.',
     iconKind: 'cloud',
-    pricing: { model: 'one_time', startingUsd: 447 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Cloud Run, container & serverless deployment pipelines',
       'GitHub Actions CI/CD build, lint & automated checks',
@@ -1078,7 +1078,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'PostgreSQL / Cloud SQL schema architecture, Row-Level Security (RLS), query profiling, and safe zero-downtime migration pipelines.',
     iconKind: 'cloud',
-    pricing: { model: 'one_time', startingUsd: 597 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Normalized PostgreSQL schema & indexing design',
       'Row-Level Security (RLS) & tenant data isolation',
@@ -1100,7 +1100,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Practical application and infrastructure security hardening covering authentication boundaries, OWASP mitigation, secret hygiene, and backup readiness.',
     iconKind: 'cybersecurity',
-    pricing: { model: 'one_time', startingUsd: 447 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Application security posture & OWASP Top-10 review',
       'RBAC, session security & rate-limiting implementation',
@@ -1126,13 +1126,13 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     subcategory: 'one-time',
     title: 'Content Refinement & Digital Updates',
     shortDescription:
-      'Keep your site accurate and credible with prompt text updates, imagery swaps, pricing revisions, and layout polish.',
+      'Keep your site accurate and credible with prompt text updates, imagery swaps, content revisions, and layout polish.',
     fullDescription:
       'Rapid, clean execution of targeted content, copy, media, and section updates on your existing website without disrupting live traffic.',
     iconKind: 'website',
-    pricing: { model: 'one_time', startingUsd: 45 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
-      'Copy, pricing & visual asset updates',
+      'Copy, corporate messaging & visual asset updates',
       'Navigation link & contact detail corrections',
       'Clean formatting & responsive verification',
     ],
@@ -1150,7 +1150,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Design and build of additional responsive pages integrated cleanly into your existing site navigation, design system, and SEO structure.',
     iconKind: 'website',
-    pricing: { model: 'one_time', startingUsd: 147 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Brand-consistent new page layout & responsive styling',
       'Navigation integration & internal linking',
@@ -1170,7 +1170,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Systematic audit and CSS/layout remediation across mobile, tablet, and desktop breakpoints to ensure clean spacing and touch targets.',
     iconKind: 'mobile',
-    pricing: { model: 'one_time', startingUsd: 237 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Mobile & tablet breakpoint layout fixes',
       'Touch-target sizing & typography legibility tuning',
@@ -1190,7 +1190,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Root-cause debugging and repair for broken UI interactions, contact forms, script errors, or theme/plugin conflicts.',
     iconKind: 'cybersecurity',
-    pricing: { model: 'one_time', startingUsd: 147 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Console, server & form-submission bug diagnosis',
       'Plugin/dependency conflict resolution',
@@ -1210,7 +1210,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Asset compression, bundle splitting, caching strategy, lazy loading, and render-blocking elimination measured against Core Web Vitals.',
     iconKind: 'analytics',
-    pricing: { model: 'one_time', startingUsd: 297 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Image/media compression & lazy-loading implementation',
       'JavaScript/CSS bundle & font delivery optimization',
@@ -1230,7 +1230,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'End-to-end visual and structural modernization of an existing site with refreshed typography, responsive layouts, and clean URL redirects.',
     iconKind: 'website',
-    pricing: { model: 'one_time', startingUsd: 897 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Modern UI/UX overhaul aligned with brand positioning',
       'Content restructuring & conversion path clarity',
@@ -1250,7 +1250,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Controlled dependency and CMS upgrade workflow eliminating known security vulnerabilities and compatibility drift.',
     iconKind: 'cloud',
-    pricing: { model: 'one_time', startingUsd: 147 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Full pre-update snapshot & staging verification',
       'Core CMS, plugin & npm package updates',
@@ -1270,7 +1270,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'End-to-end hosting, domain/DNS, database, and SSL cutover management with verification before decommissioning legacy servers.',
     iconKind: 'cloud',
-    pricing: { model: 'one_time', startingUsd: 297 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Full file, asset & database export/import',
       'DNS, SSL certificate & email record preservation',
@@ -1290,7 +1290,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Technical search foundation audit and implementation covering semantic headings, OpenGraph tags, XML sitemaps, robots rules, and JSON-LD.',
     iconKind: 'analytics',
-    pricing: { model: 'one_time', startingUsd: 297 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Schema.org JSON-LD & OpenGraph / Twitter Card markup',
       'Canonical URLs, XML sitemaps & crawl error resolution',
@@ -1313,7 +1313,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Structured security assessment evaluating authentication, headers, dependency CVEs, access permissions, and configuration hygiene.',
     iconKind: 'cybersecurity',
-    pricing: { model: 'one_time', startingUsd: 447 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Dependency & configuration vulnerability audit',
       'Authentication, session & API exposure checks',
@@ -1336,7 +1336,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Emergency cleanup of malicious code, unauthorized admin accounts, and backdoors paired with credential rotation and post-clean hardening.',
     iconKind: 'cybersecurity',
-    pricing: { model: 'one_time', startingUsd: 597 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Full file & database malware sweep and removal',
       'Unauthorized account & backdoor eradication',
@@ -1356,7 +1356,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Targeted debugging and restoration of payment gateways, webhook listeners, OAuth refresh flows, and third-party API connectors.',
     iconKind: 'automation',
-    pricing: { model: 'one_time', startingUsd: 447 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Checkout, webhook signature & callback debugging',
       'API version migration & token refresh fixes',
@@ -1376,7 +1376,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Clean GitHub Actions or cloud build pipelines automating linting, compilation, preview environments, and safe production releases.',
     iconKind: 'cloud',
-    pricing: { model: 'one_time', startingUsd: 447 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Automated build, typecheck & lint gates',
       'Branch preview & zero-downtime release workflows',
@@ -1396,7 +1396,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Focused accessibility remediation covering ARIA landmarks, focus management, color contrast, reduced-motion support, and form labels.',
     iconKind: 'website',
-    pricing: { model: 'one_time', startingUsd: 597 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'WCAG AA contrast, focus-ring & keyboard-navigation fixes',
       'Semantic landmarks, alt text & ARIA attribute alignment',
@@ -1420,7 +1420,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Peace-of-mind monthly Digital Care Membership keeping smaller corporate sites backed up, patched, monitored, and current.',
     iconKind: 'cybersecurity',
-    pricing: { model: 'subscription_monthly', startingUsd: 87 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'managed_care', proposalRequired: true },
     capabilities: [
       'Scheduled off-site backups & uptime monitoring',
       'Monthly core & dependency security patch check',
@@ -1443,7 +1443,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Active engineering care plan designed for revenue-generating websites and web apps requiring reliable ongoing optimization and rapid support.',
     iconKind: 'cloud',
-    pricing: { model: 'subscription_monthly', startingUsd: 237 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'managed_care', proposalRequired: true },
     capabilities: [
       'Weekly backups, staging-tested updates & uptime alerts',
       'Quarterly speed & technical SEO health check',
@@ -1467,7 +1467,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Comprehensive monthly engineering retainer for mission-critical platforms, AI integrations, and high-traffic commercial operations.',
     iconKind: 'enterprise',
-    pricing: { model: 'subscription_monthly', startingUsd: 597 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'managed_care', proposalRequired: true },
     capabilities: [
       'Daily backups, continuous observability & priority SLA response',
       'Ongoing API, AI pipeline & database health tuning',
@@ -1490,7 +1490,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Strategic visual identity engineering delivering vector marks, brand guidelines, executive stationery, and digital design tokens.',
     iconKind: 'multimedia',
-    pricing: { model: 'one_time', startingUsd: 147 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Vector logo/monogram & visual identity architecture',
       'Color palette, typography & digital UI design tokens',
@@ -1512,7 +1512,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'End-to-end audio-visual storytelling combining studio cinematography, ACES color mastering, motion graphics, and crisp sound design.',
     iconKind: 'multimedia',
-    pricing: { model: 'one_time', startingUsd: 147 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Commercial brand films, promos & executive interviews',
       'ACES color grading, VFX compositing & audio mastering',
@@ -1534,7 +1534,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Precision 3D modeling, studio-lit rendering, and WebGL-optimized scenes that showcase products and spaces before physical buildout.',
     iconKind: 'multimedia',
-    pricing: { model: 'one_time', startingUsd: 297 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       '3D product modeling, materials & studio lighting renders',
       'Architectural & interior spatial visualizations',
@@ -1553,7 +1553,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Ongoing monthly creative campaign direction, branded visual assets, landing optimization, and transparent performance reporting.',
     iconKind: 'analytics',
-    pricing: { model: 'subscription_monthly', startingUsd: 297 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'managed_care', proposalRequired: true },
     capabilities: [
       'Monthly campaign creative & branded social media assets',
       'Audience messaging & funnel conversion optimization',
@@ -1575,7 +1575,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Seamless commercial integration connecting rich multimedia product presentation with secure checkout, tax/shipping logic, and CRM sync.',
     iconKind: 'website',
-    pricing: { model: 'one_time', startingUsd: 1497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Rich media product galleries & quick-configure UX',
       'Payment gateway, shipping & tax calculation wiring',
@@ -1594,7 +1594,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Executive advisory sessions translating operational pain points and growth targets into prioritized digital, creative, and AI initiatives.',
     iconKind: 'enterprise',
-    pricing: { model: 'hourly', startingUsd: 147, unitLabel: '/hour' },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'advisory', proposalRequired: true },
     capabilities: [
       'Cross-disciplinary brand, AI & software roadmap planning',
       'Workflow bottleneck & ROI prioritization workshops',
@@ -1613,7 +1613,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Live instructor-led corporate training sessions tailored to your stack—covering safe AI adoption, content management, and workflow tools.',
     iconKind: 'ai',
-    pricing: { model: 'per_session', startingUsd: 297, unitLabel: '/session' },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'training', proposalRequired: true },
     capabilities: [
       'Live remote or scheduled corporate on-site workshops',
       'Team AI literacy, prompt governance & safety practices',
@@ -1635,7 +1635,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Monthly support retainer giving your organization direct access to Destria Tech Inc engineers for timely operational assistance and guidance.',
     iconKind: 'cloud',
-    pricing: { model: 'subscription_monthly', startingUsd: 87 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'managed_care', proposalRequired: true },
     capabilities: [
       'Dedicated ticket & priority email/chat support channel',
       'User account, DNS & minor configuration troubleshooting',
@@ -1658,7 +1658,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Tailored for salons, aesthetic clinics, spas, and wellness studios seeking elevated aesthetics paired with automated client scheduling.',
     iconKind: 'multimedia',
-    pricing: { model: 'one_time', startingUsd: 1497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Service & treatment showcase with booking integration',
       'Automated appointment reminders & client intake forms',
@@ -1677,7 +1677,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Built for restaurants, cafes, resorts, and hospitality groups wanting high-appetite visual storytelling and direct guest conversion.',
     iconKind: 'website',
-    pricing: { model: 'one_time', startingUsd: 1797 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Interactive digital menus & QR dining experiences',
       'Direct reservation & private-event inquiry workflows',
@@ -1696,7 +1696,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Engineered for developers, brokerages, and construction firms needing high-trust project showcases and structured buyer qualification.',
     iconKind: 'enterprise',
-    pricing: { model: 'one_time', startingUsd: 2097 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Searchable property & development portfolio directory',
       'Floor-plan, virtual tour & aerial media integration',
@@ -1715,7 +1715,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Accessible, structured digital platforms for schools, academies, and training institutions focused on clear enrollment pathways.',
     iconKind: 'website',
-    pricing: { model: 'one_time', startingUsd: 1197 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Program & curriculum explorer with admissions intake',
       'News, events & downloadable parent/student resources',
@@ -1734,7 +1734,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Designed for medical clinics, dental practices, and diagnostic centers prioritizing patient clarity, trust, and streamlined scheduling.',
     iconKind: 'cybersecurity',
-    pricing: { model: 'one_time', startingUsd: 2397 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Practitioner & specialty directory with booking requests',
       'Privacy-conscious intake forms & consent acknowledgements',
@@ -1756,7 +1756,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Custom operational software for freight, courier, and fleet organizations replacing manual dispatch spreadsheets with live tracking workflows.',
     iconKind: 'automation',
-    pricing: { model: 'one_time', startingUsd: 4497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Dispatch coordination & shipment milestone tracking',
       'Client self-service tracking portal & proof-of-delivery logs',
@@ -1778,7 +1778,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Built for CPA practices, tax consultancies, and bookkeeping firms seeking encrypted document intake and clear client status visibility.',
     iconKind: 'analytics',
-    pricing: { model: 'one_time', startingUsd: 2097 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Secure client document upload & checklist tracking',
       'Consultation scheduling & service engagement intake',
@@ -1797,7 +1797,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Storytelling-rich platforms for foundations, NGOs, and civic organizations designed to communicate mission impact and mobilize supporters.',
     iconKind: 'multimedia',
-    pricing: { model: 'one_time', startingUsd: 1497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Impact storytelling, campaign pages & annual report hubs',
       'Donation & volunteer registration workflows',
@@ -1816,7 +1816,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Executive-grade digital presence designed for high-trust advisory practices where credibility and streamlined consultation booking drive revenue.',
     iconKind: 'website',
-    pricing: { model: 'one_time', startingUsd: 1197 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Partner profiles, practice-area architecture & case briefs',
       'Qualification intake & calendar consultation booking',
@@ -1835,7 +1835,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Scalable commerce infrastructure engineered for distributors, multi-SKU retailers, and wholesale brands expanding digital sales.',
     iconKind: 'enterprise',
-    pricing: { model: 'one_time', startingUsd: 2397 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Catalog search, variant/tier pricing & bulk RFQ checkout',
       'Merchant order management & stock sync hooks',
@@ -1854,7 +1854,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Visual-first hospitality and tour platforms uniting immersive multimedia storytelling with clear availability and reservation pathways.',
     iconKind: 'multimedia',
-    pricing: { model: 'one_time', startingUsd: 2097 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Cinematic destination galleries & package showcases',
       'Direct reservation & custom itinerary request engine',
@@ -1873,7 +1873,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Custom-scoped industrial and agri-tech software bridging field operations, batch/quality documentation, and executive oversight.',
     iconKind: 'cloud',
-    pricing: { model: 'one_time', startingUsd: 4497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'project', proposalRequired: true },
     capabilities: [
       'Production batch logging, traceability & distributor portals',
       'Sensor/telemetry dashboard readiness & offline field forms',
@@ -1902,7 +1902,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Designed for ambitious emerging organizations establishing an authoritative digital presence backed by reliable monthly technical care.',
     iconKind: 'website',
-    pricing: { model: 'setup_plus_monthly', startingUsd: 1197, monthlyUsd: 87 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'ai_implementation', proposalRequired: true },
     capabilities: [
       'Essential Digital Presence corporate web build',
       'Brand visual alignment & technical SEO setup',
@@ -1927,7 +1927,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Comprehensive growth package uniting bespoke web engineering, intelligent lead/calendar automation, and ongoing Professional Care optimization.',
     iconKind: 'automation',
-    pricing: { model: 'setup_plus_monthly', startingUsd: 2997, monthlyUsd: 237 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'ai_implementation', proposalRequired: true },
     capabilities: [
       'Signature Business Experience bespoke web platform',
       'Intelligent workflow automation & calendar booking sync',
@@ -1952,7 +1952,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Built for established enterprises ready to integrate server-side AI assistants, automated customer engagement, and dedicated technical stewardship.',
     iconKind: 'ai',
-    pricing: { model: 'setup_plus_monthly', startingUsd: 5997, monthlyUsd: 597 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'ai_implementation', proposalRequired: true },
     capabilities: [
       'Executive Digital Intelligence flagship web experience',
       'AI Concierge / Scheduling Assistant with human escalation',
@@ -1981,7 +1981,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     fullDescription:
       'Our premier full-spectrum engagement for complex organizations modernizing core software, deploying governed multi-agent AI, and securing scalable cloud infrastructure.',
     iconKind: 'enterprise',
-    pricing: { model: 'setup_plus_monthly', startingUsd: 14997, monthlyUsd: 1497 },
+    engagement: { engagementLabel: 'Customized Enterprise Solution', assessmentBasis: 'Subject to Formal Assessment', deliveryType: 'ai_implementation', proposalRequired: true },
     capabilities: [
       'Enterprise Digital Architecture / bespoke multi-tenant software',
       'AI Enterprise Command multi-agent orchestration & RAG',
@@ -1998,60 +1998,24 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
   },
 ];
 
-export function formatCatalogPrice(
-  service: CatalogService,
-  currency: 'USD' | 'PHP' = 'USD',
-  phpRate: number = DEFAULT_USD_TO_PHP_RATE
-): { primaryLabel: string; secondaryLabel?: string; phpEstimateLabel?: string } {
-  const fmtUsd = (val: number) => `$${val.toLocaleString('en-US')}`;
-  const fmtPhp = (val: number) => `Est. ~₱${Math.round(val * phpRate).toLocaleString('en-US')}`;
-
-  const { model, startingUsd, monthlyUsd, unitLabel } = service.pricing;
-
-  if (model === 'subscription_monthly') {
-    return {
-      primaryLabel: `Plans starting at ${fmtUsd(startingUsd)}/month`,
-      phpEstimateLabel: currency === 'PHP' ? `${fmtPhp(startingUsd)}/month` : undefined,
-    };
-  }
-
-  if (model === 'setup_plus_monthly' && monthlyUsd) {
-    const isAiAgent = service.subcategory === 'agent-plan';
-    return {
-      primaryLabel: isAiAgent
-        ? `Implementation starting at ${fmtUsd(startingUsd)}`
-        : `Starting at ${fmtUsd(startingUsd)}`,
-      secondaryLabel: isAiAgent
-        ? `Ongoing service starting at ${fmtUsd(monthlyUsd)}/month`
-        : `Ongoing care starting at ${fmtUsd(monthlyUsd)}/month`,
-      phpEstimateLabel:
-        currency === 'PHP'
-          ? `${fmtPhp(startingUsd)} setup · ${fmtPhp(monthlyUsd)}/month`
-          : undefined,
-    };
-  }
-
-  if (model === 'hourly') {
-    return {
-      primaryLabel: `Starting at ${fmtUsd(startingUsd)}${unitLabel || '/hour'}`,
-      phpEstimateLabel: currency === 'PHP' ? `${fmtPhp(startingUsd)}${unitLabel || '/hour'}` : undefined,
-    };
-  }
-
-  if (model === 'per_session') {
-    return {
-      primaryLabel: `Starting at ${fmtUsd(startingUsd)}${unitLabel || '/session'}`,
-      phpEstimateLabel: currency === 'PHP' ? `${fmtPhp(startingUsd)}${unitLabel || '/session'}` : undefined,
-    };
-  }
-
+export function formatCatalogEngagement(service: CatalogService): {
+  primaryLabel: string;
+  secondaryLabel: string;
+} {
+  const deliveryLabels: Record<CatalogService['engagement']['deliveryType'], string> = {
+    project: 'Subject to Formal Assessment',
+    managed_care: 'Ongoing Enterprise Support · Subject to Formal Assessment',
+    ai_implementation: 'Implementation & Managed Operations · Subject to Formal Assessment',
+    advisory: 'Executive Advisory · Subject to Formal Assessment',
+    training: 'Customized Corporate Program · Subject to Formal Assessment',
+  };
   return {
-    primaryLabel: `Starting at ${fmtUsd(startingUsd)}`,
-    phpEstimateLabel: currency === 'PHP' ? fmtPhp(startingUsd) : undefined,
+    primaryLabel: service.engagement.engagementLabel,
+    secondaryLabel: deliveryLabels[service.engagement.deliveryType] || service.engagement.assessmentBasis,
   };
 }
 
-const STANDARDIZED_IDS = new Set<string>([
+const CONSULTATION_ASSESSMENT_IDS = new Set<string>([
   'essential-digital-presence',
   'signature-business-experience',
   'ai-concierge-elite',
@@ -2071,25 +2035,25 @@ const STANDARDIZED_IDS = new Set<string>([
 ]);
 
 const OPTIONS_BY_SERVICE_OR_GROUP = (service: CatalogService): CatalogServiceOption[] => {
-  if (service.categoryId === 'website-digital' && service.engagementMode === 'standardized') {
+  if (service.categoryId === 'website-digital' && service.engagementMode === 'consultation_assessment') {
     return [
       {
         id: 'opt-bilingual-i18n',
-        label: 'Bilingual EN / Filipino Switcher',
-        description: 'Localized UI navigation and dual-language content templates.',
-        deltaUsd: 240,
+        label: 'Multi-Language Localization Architecture',
+        description: 'Localized UI navigation and international multi-language content templates.',
+        scopeCategory: 'enhancement',
       },
       {
         id: 'opt-cms-workshop',
         label: 'Editorial & CMS Handover Workshop',
-        description: 'Live 90-minute training session plus recorded documentation.',
-        deltaUsd: 150,
+        description: 'Live executive handover workshop plus structured technical documentation.',
+        scopeCategory: 'governance',
       },
       {
         id: 'opt-priority-sprint',
-        label: 'Priority 10-Day Fast-Track Delivery',
-        description: 'Dedicated accelerated engineering sprint for faster launch.',
-        deltaUsd: 390,
+        label: 'Accelerated Delivery Track',
+        description: 'Dedicated engineering allocation structured during formal proposal scoping.',
+        scopeCategory: 'acceleration',
       },
     ];
   }
@@ -2099,45 +2063,42 @@ const OPTIONS_BY_SERVICE_OR_GROUP = (service: CatalogService): CatalogServiceOpt
       {
         id: 'opt-weekly-staging',
         label: 'Dedicated Staging & Pre-Deploy QA',
-        description: 'Verify monthly updates in an isolated staging environment first.',
-        deltaUsd: 0,
-        monthlyDeltaUsd: 65,
+        description: 'Verify scheduled updates in an isolated staging environment prior to release.',
+        scopeCategory: 'governance',
       },
       {
         id: 'opt-uptime-sms',
-        label: '24/7 Real-Time Incident Alert Routing',
-        description: 'Priority executive alerting on endpoint or SSL anomalies.',
-        deltaUsd: 0,
-        monthlyDeltaUsd: 45,
+        label: 'Priority Real-Time Incident Alert Routing',
+        description: 'Structured executive incident escalation on endpoint or SSL anomalies.',
+        scopeCategory: 'governance',
       },
     ];
   }
 
-  if (service.subcategory === 'agent-plan' && service.engagementMode === 'standardized') {
+  if (service.subcategory === 'agent-plan' && service.engagementMode === 'consultation_assessment') {
     return [
       {
         id: 'opt-extra-knowledge-pack',
-        label: 'Extended Knowledge Base Ingestion (50 Docs)',
-        description: 'Index additional service manuals, PDFs, and policy documents.',
-        deltaUsd: 190,
-        monthlyDeltaUsd: 45,
+        label: 'Extended Enterprise Knowledge Ingestion',
+        description: 'Index additional service manuals, technical specifications, and policy documents.',
+        scopeCategory: 'enhancement',
       },
       {
         id: 'opt-crm-webhook-sync',
-        label: 'Direct CRM / Email Webhook Sync',
-        description: 'Automatic structured lead dispatch to your existing CRM.',
-        deltaUsd: 220,
+        label: 'Direct CRM / Enterprise Webhook Integration',
+        description: 'Structured requirement dispatch to your existing CRM or ERP workflow.',
+        scopeCategory: 'integration',
       },
     ];
   }
 
-  if (service.engagementMode === 'standardized') {
+  if (service.engagementMode === 'consultation_assessment') {
     return [
       {
         id: 'opt-priority-turnaround',
-        label: 'Priority Express Scheduling',
-        description: 'Expedited engineering queue assignment and verification.',
-        deltaUsd: 95,
+        label: 'Priority Engineering Assessment Queue',
+        description: 'Expedited technical review and implementation scheduling upon approval.',
+        scopeCategory: 'acceleration',
       },
     ];
   }
@@ -2148,8 +2109,8 @@ const OPTIONS_BY_SERVICE_OR_GROUP = (service: CatalogService): CatalogServiceOpt
 export const SERVICE_CATALOG: CatalogService[] = RAW_SERVICE_CATALOG.map((item) => {
   const mode: ServiceEngagementMode =
     item.engagementMode ||
-    (STANDARDIZED_IDS.has(item.id) || item.subcategory === 'care-membership'
-      ? 'standardized'
+    (CONSULTATION_ASSESSMENT_IDS.has(item.id) || item.subcategory === 'care-membership'
+      ? 'consultation_assessment'
       : 'custom_proposal');
 
   const withMode: CatalogService = {
@@ -2167,57 +2128,23 @@ export function getCatalogServiceById(serviceId: string): CatalogService | undef
   return SERVICE_CATALOG.find((s) => s.id === serviceId);
 }
 
-export function computeConfiguredServiceTotal(
-  service: CatalogService,
-  selectedOptionIds: string[] = []
-): { oneTimeUsd: number; monthlyUsd: number } {
-  const options = (service.configurableOptions || []).filter((o) =>
-    selectedOptionIds.includes(o.id)
-  );
-  const optionOneTime = options.reduce((sum, o) => sum + (o.deltaUsd || 0), 0);
-  const optionMonthly = options.reduce((sum, o) => sum + (o.monthlyDeltaUsd || 0), 0);
-
-  if (service.pricing.model === 'subscription_monthly') {
-    return {
-      oneTimeUsd: optionOneTime,
-      monthlyUsd: service.pricing.startingUsd + optionMonthly,
-    };
-  }
-
-  if (service.pricing.model === 'setup_plus_monthly') {
-    return {
-      oneTimeUsd: service.pricing.startingUsd + optionOneTime,
-      monthlyUsd: (service.pricing.monthlyUsd || 0) + optionMonthly,
-    };
-  }
-
-  return {
-    oneTimeUsd: service.pricing.startingUsd + optionOneTime,
-    monthlyUsd: optionMonthly,
-  };
-}
-
-export interface DivisionPriceSummary {
+export interface DivisionSummary {
   categoryId: Exclude<CatalogCategoryId, 'all'>;
   number: string;
   label: string;
-  minStartingUsd: number;
-  maxStartingUsd: number;
   count: number;
+  engagementModel: 'Customized Enterprise Solutions';
 }
 
-export const CATALOG_DIVISION_PRICE_RANGES: DivisionPriceSummary[] = CATALOG_CATEGORIES.filter(
+export const CATALOG_DIVISION_SUMMARIES: DivisionSummary[] = CATALOG_CATEGORIES.filter(
   (c): c is CatalogCategoryMeta & { id: Exclude<CatalogCategoryId, 'all'> } => c.id !== 'all'
 ).map((cat) => {
   const items = SERVICE_CATALOG.filter((s) => s.categoryId === cat.id);
-  const prices = items.map((s) => s.pricing.startingUsd);
   return {
     categoryId: cat.id,
     number: cat.number,
     label: cat.label,
-    minStartingUsd: prices.length > 0 ? Math.min(...prices) : 0,
-    maxStartingUsd: prices.length > 0 ? Math.max(...prices) : 0,
     count: items.length,
+    engagementModel: 'Customized Enterprise Solutions',
   };
 });
-

@@ -53,9 +53,12 @@ export interface ProductPackage {
   productId: string;
   name: string;
   tierCode: string;
-  priceUsdMinor: number;
-  pricePhpMinor: number;
+  priceUsdMinor?: number;
+  pricePhpMinor?: number;
   isCustomQuote: boolean;
+  engagementLabel?: string;
+  assessmentBasis?: string;
+  proposalRequired?: boolean;
   billingType: 'one_time' | 'subscription_monthly' | 'credit_pack';
   creditsIncluded: number;
   turnaroundLabel: string;
@@ -66,7 +69,7 @@ export interface ProductPackage {
   supportLevel: string;
   features: string[];
   isPopular?: boolean;
-  isIllustrativePricing: boolean;
+  isIllustrativePricing?: boolean;
 }
 
 export interface Product {
@@ -84,6 +87,41 @@ export interface Product {
   isActive: boolean;
   isFeatured: boolean;
   packages: ProductPackage[];
+}
+
+export interface PortalApprovedProposalItem {
+  id: string;
+  productId: string;
+  packageId: string;
+  productSlug: string;
+  productName: string;
+  packageName: string;
+  billingType: 'one_time' | 'subscription_monthly' | 'credit_pack';
+  quantity: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+  creditsAllocated: number;
+  revisionLimit: number;
+}
+
+export interface PortalApprovedProposal {
+  id: string;
+  proposalNumber: string;
+  userId: string;
+  inquiryId?: string;
+  title: string;
+  scopeSummary: string;
+  currency: PortalCurrency;
+  fxRateSnapshot: number;
+  subtotalMinor: number;
+  taxMinor: number;
+  totalMinor: number;
+  status: 'approved' | 'accepted' | 'expired' | 'revoked';
+  items: PortalApprovedProposalItem[];
+  issuedBy: string;
+  issuedAt: string;
+  expiresAt: string;
+  acceptedOrderId?: string;
 }
 
 export interface CartSummary {

@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Check, Search, ShoppingCart, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowLeft, Check, Mail, Phone, Search, Send, ShieldCheck, X } from 'lucide-react';
 import { PortalLayout } from '../components/PortalLayout';
 import { portalRequest } from '../portalApi';
 import { usePortalRouter } from '../PortalRouter';
 import { usePortalAuth } from '../PortalAuthContext';
 import {
+  COMMERCIAL_ENGAGEMENT_STATEMENT,
+  CORPORATE_SERVICE_STATEMENT,
+  corporateIdentity,
+} from '../../data/companyConfig';
+import {
   formatMoney,
   formatPortalDate,
   formatStatusLabel,
-  PortalCurrency,
+  PortalApprovedProposal,
   Product,
   ProductCategory,
   statusToneClass,
@@ -16,25 +21,20 @@ import {
 
 export const PortalStorePage: React.FC = () => {
   const { navigate, query } = usePortalRouter();
-  const { profile, user, refreshSession } = usePortalAuth();
+  const { profile, user } = usePortalAuth();
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState(query.get('category') || 'all');
   const [search, setSearch] = useState(query.get('q') || '');
-  const [currency, setCurrency] = useState<PortalCurrency>(profile?.preferredCurrency || 'USD');
   const [loading, setLoading] = useState(true);
-  const [addingId, setAddingId] = useState<string | null>(null);
-  const [toast, setToast] = useState('');
-  const [showCompare, setShowCompare] = useState(false);
-  const [customModalOpen, setCustomModalOpen] = useState(false);
+  const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
 
-  // Custom enterprise inquiry state
+  // Enterprise service inquiry state (Zero public pricing / budget ranges)
   const [custCompany, setCustCompany] = useState(profile?.companyName || '');
   const [custContact, setCustContact] = useState(profile?.fullName || '');
   const [custEmail, setCustEmail] = useState(user?.email || '');
-  const [custServices, setCustServices] = useState('AI Video Production, Corporate Branding');
+  const [custServices, setCustServices] = useState('Customized Enterprise Technology Solution');
   const [custVolume, setCustVolume] = useState('');
-  const [custBudget, setCustBudget] = useState('');
   const [custSchedule, setCustSchedule] = useState('');
   const [custDesc, setCustDesc] = useState('');
   const [custBusy, setCustBusy] = useState(false);
@@ -44,8 +44,13 @@ export const PortalStorePage: React.FC = () => {
   useEffect(() => {
     const qCat = query.get('category');
     const qSearch = query.get('q');
+    const qInquire = query.get('inquire');
     if (qCat) setSelectedCategory(qCat);
     if (qSearch !== null) setSearch(qSearch);
+    if (qInquire) {
+      setCustServices(qInquire);
+      setInquiryModalOpen(true);
+    }
   }, [query]);
 
   useEffect(() => {
@@ -71,26 +76,14 @@ export const PortalStorePage: React.FC = () => {
     };
   }, [selectedCategory, search]);
 
-  const handleAddToCart = async (packageId: string, goCheckout = false) => {
-    setAddingId(packageId);
-    setToast('');
-    try {
-      await portalRequest('/cart/preferences', { method: 'PATCH', body: { currency } });
-      await portalRequest('/cart/items', { method: 'POST', body: { packageId, quantity: 1 } });
-      await refreshSession();
-      if (goCheckout) {
-        navigate('/portal/checkout');
-      } else {
-        setToast('Added to your shopping cart.');
-      }
-    } catch (err: any) {
-      setToast(err?.message || 'Unable to add package to cart.');
-    } finally {
-      setAddingId(null);
-    }
+  const openInquiryForSolution = (solutionName: string) => {
+    setCustServices(solutionName);
+    setCustError('');
+    setCustSuccess('');
+    setInquiryModalOpen(true);
   };
 
-  const handleSubmitCustomInquiry = async (e: React.FormEvent) => {
+  const handleSubmitServiceInquiry = async (e: React.FormEvent) => {
     e.preventDefault();
     setCustError('');
     setCustSuccess('');
@@ -104,28 +97,28 @@ export const PortalStorePage: React.FC = () => {
           email: custEmail,
           requiredServices: custServices.split(',').map((s) => s.trim()).filter(Boolean),
           estimatedMonthlyVolume: custVolume,
-          budgetRange: custBudget,
+          budgetRange: 'Subject to Formal Assessment',
           expectedSchedule: custSchedule,
           projectDescription: custDesc,
         },
       });
-      setCustSuccess(`Inquiry ${res.inquiry.referenceNumber} submitted. Our operations team will follow up with a custom quotation.`);
+      setCustSuccess(
+        `Service Inquiry ${res.inquiry.referenceNumber} has been logged. Our solutions team will coordinate consultation, technical assessment, and formal proposal preparation.`
+      );
       setCustDesc('');
     } catch (err: any) {
-      setCustError(err?.message || 'Unable to submit inquiry.');
+      setCustError(err?.message || 'Unable to submit service inquiry.');
     } finally {
       setCustBusy(false);
     }
   };
 
-  const creditPackages = products.filter((p) => p.categorySlug === 'subscription-credit-packages');
-
   return (
     <PortalLayout
-      title="Service Store & Credit Packages"
-      subtitle="Browse database-backed multimedia services, AI creative packages, and flexible credit plans."
+      title="Technology Solutions Directory"
+      subtitle="Explore customized enterprise solution frameworks. Commercial terms and scope are structured exclusively following consultation and formal technical assessment."
     >
-      {/* Top Toolbar */}
+      {/* Top Toolbar (Zero currency switches or pricing comparison tables) */}
       <div className="bg-white border border-[#E6E2D8] rounded-xl p-4 mb-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="relative flex-1 min-w-[240px]">
@@ -134,41 +127,25 @@ export const PortalStorePage: React.FC = () => {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search services, deliverables, or credit packages..."
+              placeholder="Search enterprise solutions, deliverables, or capability frameworks..."
               className="w-full pl-9 pr-3 py-2 text-sm bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg text-[#0F1D36] focus:outline-none focus:border-[#0F4C3A]"
             />
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="inline-flex rounded-lg border border-[#E6E2D8] p-0.5 bg-[#FAF8F4]">
-              {(['USD', 'PHP'] as PortalCurrency[]).map((curr) => (
-                <button
-                  key={curr}
-                  onClick={() => setCurrency(curr)}
-                  className={`px-3 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer ${
-                    currency === curr
-                      ? 'bg-[#0F1D36] text-white'
-                      : 'text-[#475569] hover:text-[#0F1D36]'
-                  }`}
-                >
-                  {curr}
-                </button>
-              ))}
-            </div>
-
             <button
-              onClick={() => setShowCompare((v) => !v)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E6E2D8] bg-white hover:bg-[#FAF8F4] text-xs font-semibold text-[#0F1D36] cursor-pointer whitespace-nowrap"
+              type="button"
+              onClick={() => navigate('/portal/cart')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#E6E2D8] bg-white hover:bg-[#FAF8F4] text-xs font-semibold text-[#0F1D36] cursor-pointer whitespace-nowrap"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>{showCompare ? 'Hide Comparison' : 'Compare Credit Packages'}</span>
+              <span>View Inquiries &amp; Proposals</span>
             </button>
-
             <button
-              onClick={() => setCustomModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0F1D36] hover:bg-[#172B4D] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+              type="button"
+              onClick={() => openInquiryForSolution('Customized Enterprise Technology Solution')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
             >
-              <span>Request Custom Package</span>
+              <span>Request a Consultation</span>
             </button>
           </div>
         </div>
@@ -176,6 +153,7 @@ export const PortalStorePage: React.FC = () => {
         {/* Category Filter Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           <button
+            type="button"
             onClick={() => setSelectedCategory('all')}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
               selectedCategory === 'all'
@@ -183,11 +161,12 @@ export const PortalStorePage: React.FC = () => {
                 : 'bg-[#FAF8F4] text-[#475569] hover:text-[#0F1D36]'
             }`}
           >
-            All Categories
+            All Solution Divisions
           </button>
           {categories.map((cat) => (
             <button
               key={cat.id}
+              type="button"
               onClick={() => setSelectedCategory(cat.slug)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                 selectedCategory === cat.slug
@@ -201,100 +180,30 @@ export const PortalStorePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Illustrative Pricing Disclosure */}
-      <div className="mb-6 px-4 py-3 rounded-xl bg-white border border-[#E6E2D8] text-xs text-[#475569] flex flex-wrap items-center justify-between gap-2">
-        <span>
-          Displayed prices are initial illustrative package configurations loaded from the backend catalog and editable by authorized product management.
-        </span>
-        {toast && (
-          <div className="flex items-center gap-2 font-semibold text-[#0F4C3A]">
-            <span>{toast}</span>
-            <button onClick={() => navigate('/portal/cart')} className="underline cursor-pointer">
-              View Cart
-            </button>
+      {/* Commercial Engagement Governance Notice */}
+      <div className="mb-6 px-5 py-4 rounded-xl bg-white border border-[#E6E2D8] text-xs text-[#334155] space-y-2">
+        <div className="flex items-start gap-2.5">
+          <ShieldCheck className="w-4 h-4 text-[#0F4C3A] shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold text-[#0F1D36]">Customized Enterprise Engagement Policy</p>
+            <p className="leading-relaxed">{CORPORATE_SERVICE_STATEMENT}</p>
+            <p className="text-[#475569] leading-relaxed">{COMMERCIAL_ENGAGEMENT_STATEMENT}</p>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Package Comparison Table */}
-      {showCompare && creditPackages.length > 0 && (
-        <section className="mb-8 bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-[#E6E2D8]">
-            <h2 className="text-base font-semibold text-[#0F1D36]">
-              Subscription & Credit Package Comparison
-            </h2>
-            <p className="text-xs text-[#64748B] mt-0.5">
-              Compare credit allocations, turnaround windows, revision limits, and support tiers side by side.
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#FAF8F4] border-b border-[#E6E2D8] text-[#475569]">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Package</th>
-                  <th className="px-4 py-3 font-semibold text-right">Illustrative Price</th>
-                  <th className="px-4 py-3 font-semibold text-right">Credits</th>
-                  <th className="px-4 py-3 font-semibold">Turnaround</th>
-                  <th className="px-4 py-3 font-semibold text-right">Revisions</th>
-                  <th className="px-4 py-3 font-semibold">Support Level</th>
-                  <th className="px-4 py-3 font-semibold text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#EFECE4]">
-                {creditPackages.map((item) => {
-                  const pkg = item.packages[0];
-                  const priceMinor = currency === 'PHP' ? pkg.pricePhpMinor : pkg.priceUsdMinor;
-                  return (
-                    <tr key={item.id} className="hover:bg-[#FAF8F4]/70">
-                      <td className="px-4 py-3 font-semibold text-[#0F1D36]">{item.name}</td>
-                      <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums text-[#0F1D36]">
-                        {pkg.isCustomQuote ? 'Custom Quotation' : formatMoney(priceMinor, currency)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums text-[#0F4C3A] font-semibold">
-                        {pkg.isCustomQuote ? 'Custom' : pkg.creditsIncluded.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-[#475569]">{pkg.turnaroundLabel}</td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums">{pkg.revisionLimit}</td>
-                      <td className="px-4 py-3 text-[#475569]">{pkg.supportLevel}</td>
-                      <td className="px-4 py-3 text-right">
-                        {pkg.isCustomQuote ? (
-                          <button
-                            onClick={() => setCustomModalOpen(true)}
-                            className="font-semibold text-[#0F1D36] underline cursor-pointer"
-                          >
-                            Request Quote
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleAddToCart(pkg.id)}
-                            className="px-3 py-1.5 rounded-md bg-[#0F4C3A] text-white font-semibold hover:bg-[#0B3B2D] cursor-pointer"
-                          >
-                            Add to Cart
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {/* Product Grid */}
+      {/* Solutions Grid (Zero public prices, zero Add-to-Cart) */}
       {loading ? (
-        <div className="p-8 text-sm text-[#64748B]">Loading catalog from backend...</div>
+        <div className="p-8 text-sm text-[#64748B]">Loading Technology Solutions Directory...</div>
       ) : products.length === 0 ? (
         <div className="bg-white border border-[#E6E2D8] rounded-xl p-10 text-center">
-          <p className="text-sm font-semibold text-[#0F1D36]">No matching services found</p>
-          <p className="mt-1 text-xs text-[#64748B]">Try another search term or select a different category.</p>
+          <p className="text-sm font-semibold text-[#0F1D36]">No matching solutions found</p>
+          <p className="mt-1 text-xs text-[#64748B]">Try another search term or select a different division.</p>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
           {products.map((product) => {
             const pkg = product.packages[0];
-            const priceMinor = currency === 'PHP' ? pkg.pricePhpMinor : pkg.priceUsdMinor;
             const catName = categories.find((c) => c.slug === product.categorySlug)?.name || product.categorySlug;
 
             return (
@@ -305,29 +214,22 @@ export const PortalStorePage: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between gap-2 text-xs text-[#64748B]">
                     <span>{catName}</span>
-                    {pkg.isPopular && <span className="font-semibold text-[#B8923A]">Recommended</span>}
+                    {pkg?.isPopular && <span className="font-semibold text-[#B8923A]">Featured Framework</span>}
                   </div>
                   <h3 className="mt-1.5 text-base font-bold text-[#0F1D36]">{product.name}</h3>
                   <p className="mt-1.5 text-xs text-[#475569] leading-relaxed">{product.shortDescription}</p>
 
-                  <div className="mt-4 pt-3 border-t border-[#F2EFE8] flex items-baseline justify-between gap-2">
-                    <div>
-                      <span className="font-mono text-xl font-bold tabular-nums text-[#0F1D36]">
-                        {pkg.isCustomQuote ? 'Custom Quote' : formatMoney(priceMinor, currency)}
-                      </span>
-                      {!pkg.isCustomQuote && pkg.billingType === 'subscription_monthly' && (
-                        <span className="text-xs text-[#64748B] ml-1">/ cycle</span>
-                      )}
+                  <div className="mt-4 pt-3 border-t border-[#F2EFE8] space-y-1">
+                    <div className="text-xs font-bold uppercase tracking-wider text-[#0F4C3A]">
+                      {pkg?.engagementLabel || 'Customized Enterprise Solution'}
                     </div>
-                    {pkg.creditsIncluded > 0 && (
-                      <span className="font-mono text-xs font-semibold text-[#0F4C3A] tabular-nums">
-                        {pkg.creditsIncluded.toLocaleString()} credits
-                      </span>
-                    )}
+                    <div className="text-[11px] text-[#64748B]">
+                      Commercial Scope: {pkg?.assessmentBasis || 'Subject to Formal Assessment'}
+                    </div>
                   </div>
 
                   <ul className="mt-3 space-y-1.5 text-xs text-[#334155]">
-                    {pkg.features.slice(0, 4).map((feat) => (
+                    {(pkg?.features || []).slice(0, 4).map((feat) => (
                       <li key={feat} className="flex items-start gap-2">
                         <Check className="w-3.5 h-3.5 text-[#0F4C3A] shrink-0 mt-0.5" />
                         <span>{feat}</span>
@@ -338,31 +240,20 @@ export const PortalStorePage: React.FC = () => {
 
                 <div className="mt-5 pt-4 border-t border-[#F2EFE8] flex items-center gap-2">
                   <button
+                    type="button"
                     onClick={() => navigate(`/portal/store/${product.slug}`)}
                     className="flex-1 py-2 px-3 rounded-lg border border-[#E6E2D8] text-xs font-semibold text-[#0F1D36] hover:bg-[#FAF8F4] cursor-pointer whitespace-nowrap"
                   >
-                    View Details
+                    Explore Solution
                   </button>
-                  {pkg.isCustomQuote ? (
-                    <button
-                      onClick={() => {
-                        setCustServices(product.name);
-                        setCustomModalOpen(true);
-                      }}
-                      className="flex-1 py-2 px-3 rounded-lg bg-[#0F1D36] hover:bg-[#172B4D] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
-                    >
-                      Request Quote
-                    </button>
-                  ) : (
-                    <button
-                      disabled={addingId === pkg.id}
-                      onClick={() => handleAddToCart(pkg.id)}
-                      className="flex-1 py-2 px-3 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] disabled:opacity-60 text-white text-xs font-semibold cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
-                    >
-                      <ShoppingCart className="w-3.5 h-3.5" />
-                      <span>{addingId === pkg.id ? 'Adding...' : 'Add to Cart'}</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => openInquiryForSolution(product.name)}
+                    className="flex-1 py-2 px-3 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Request This Solution</span>
+                  </button>
                 </div>
               </article>
             );
@@ -370,30 +261,48 @@ export const PortalStorePage: React.FC = () => {
         </div>
       )}
 
-      {/* Custom Enterprise Package Request Modal */}
-      {customModalOpen && (
+      {/* Service Inquiry & Formal Proposal Request Modal */}
+      {inquiryModalOpen && (
         <div className="fixed inset-0 z-50 bg-[#0F1D36]/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white border border-[#E6E2D8] rounded-xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between pb-4 border-b border-[#E6E2D8]">
               <div>
-                <h2 className="text-lg font-bold text-[#0F1D36]">Request a Custom Enterprise Package</h2>
-                <p className="text-xs text-[#64748B]">Logged directly for follow-up by our authorized operations team.</p>
+                <h2 className="text-lg font-bold text-[#0F1D36]">Initiate Service Inquiry</h2>
+                <p className="text-xs text-[#64748B]">
+                  Submit your project requirements for consultation, technical assessment, and formal proposal preparation.
+                </p>
               </div>
               <button
-                onClick={() => setCustomModalOpen(false)}
+                type="button"
+                onClick={() => setInquiryModalOpen(false)}
                 className="p-1.5 rounded-lg text-[#64748B] hover:text-[#0F1D36] cursor-pointer"
+                aria-label="Close modal"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitCustomInquiry} className="mt-4 space-y-3.5">
+            <form onSubmit={handleSubmitServiceInquiry} className="mt-4 space-y-3.5">
               {custError && <div className="p-3 rounded-lg bg-rose-50 text-xs text-[#B91C1C]">{custError}</div>}
-              {custSuccess && <div className="p-3 rounded-lg bg-emerald-50 text-xs text-[#15803D]">{custSuccess}</div>}
+              {custSuccess && (
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-[#15803D] space-y-2">
+                  <p>{custSuccess}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInquiryModalOpen(false);
+                      navigate('/portal/cart');
+                    }}
+                    className="font-semibold underline cursor-pointer"
+                  >
+                    Open Inquiries &amp; Proposals →
+                  </button>
+                </div>
+              )}
 
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-[#334155] mb-1">Business / Company Name</label>
+                  <label className="block text-xs font-semibold text-[#334155] mb-1">Organization / Company Name</label>
                   <input
                     required
                     value={custCompany}
@@ -402,7 +311,7 @@ export const PortalStorePage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[#334155] mb-1">Contact Person</label>
+                  <label className="block text-xs font-semibold text-[#334155] mb-1">Authorized Contact Person</label>
                   <input
                     required
                     value={custContact}
@@ -413,7 +322,7 @@ export const PortalStorePage: React.FC = () => {
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-[#334155] mb-1">Email Address</label>
+                  <label className="block text-xs font-semibold text-[#334155] mb-1">Corporate Email Address</label>
                   <input
                     type="email"
                     required
@@ -423,17 +332,17 @@ export const PortalStorePage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[#334155] mb-1">Estimated Monthly Volume</label>
+                  <label className="block text-xs font-semibold text-[#334155] mb-1">Operational Scale / Volume</label>
                   <input
                     value={custVolume}
                     onChange={(e) => setCustVolume(e.target.value)}
-                    placeholder="e.g. 50 videos / 200 graphics"
+                    placeholder="e.g. Multi-region enterprise rollout"
                     className="w-full px-3 py-2 text-sm border border-[#D8D3C8] rounded-lg"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-[#334155] mb-1">Required Services</label>
+                <label className="block text-xs font-semibold text-[#334155] mb-1">Requested Solution Frameworks</label>
                 <input
                   required
                   value={custServices}
@@ -443,39 +352,53 @@ export const PortalStorePage: React.FC = () => {
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-[#334155] mb-1">Budget Range</label>
+                  <label className="block text-xs font-semibold text-[#334155] mb-1">Commercial Assessment Basis</label>
                   <input
-                    value={custBudget}
-                    onChange={(e) => setCustBudget(e.target.value)}
-                    placeholder="e.g. $1,500 – $5,000 / month"
-                    className="w-full px-3 py-2 text-sm border border-[#D8D3C8] rounded-lg"
+                    readOnly
+                    value="Subject to Formal Assessment"
+                    className="w-full px-3 py-2 text-sm bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg text-[#475569]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[#334155] mb-1">Expected Delivery Schedule</label>
+                  <label className="block text-xs font-semibold text-[#334155] mb-1">Target Delivery Window</label>
                   <input
                     value={custSchedule}
                     onChange={(e) => setCustSchedule(e.target.value)}
-                    placeholder="e.g. Q1 launch / weekly sprints"
+                    placeholder="e.g. Q2 architectural assessment"
                     className="w-full px-3 py-2 text-sm border border-[#D8D3C8] rounded-lg"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-[#334155] mb-1">Project Description</label>
+                <label className="block text-xs font-semibold text-[#334155] mb-1">Project Requirements &amp; Technical Context</label>
                 <textarea
                   required
                   rows={4}
                   value={custDesc}
                   onChange={(e) => setCustDesc(e.target.value)}
-                  placeholder="Describe objectives, channels, brand requirements, and deliverables..."
+                  placeholder="Describe business objectives, systems integration scope, compliance requirements, and expected deliverables..."
                   className="w-full px-3 py-2 text-sm border border-[#D8D3C8] rounded-lg"
                 />
               </div>
+
+              <div className="p-3 rounded-lg bg-[#FAF8F4] border border-[#E6E2D8] text-[11px] text-[#475569] flex flex-wrap items-center justify-between gap-2">
+                <span>Prefer direct executive coordination?</span>
+                <div className="flex items-center gap-3 font-semibold text-[#0F1D36]">
+                  <a href={corporateIdentity.contact.telephone.href} className="inline-flex items-center gap-1 hover:text-[#0F4C3A]">
+                    <Phone className="w-3 h-3" />
+                    <span>{corporateIdentity.contact.telephone.display}</span>
+                  </a>
+                  <a href={`mailto:${corporateIdentity.contact.email}`} className="inline-flex items-center gap-1 hover:text-[#0F4C3A]">
+                    <Mail className="w-3 h-3" />
+                    <span>{corporateIdentity.contact.email}</span>
+                  </a>
+                </div>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setCustomModalOpen(false)}
+                  onClick={() => setInquiryModalOpen(false)}
                   className="px-4 py-2 rounded-lg border border-[#E6E2D8] text-xs font-semibold text-[#334155] cursor-pointer"
                 >
                   Close
@@ -485,7 +408,7 @@ export const PortalStorePage: React.FC = () => {
                   disabled={custBusy}
                   className="px-5 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] disabled:opacity-60 text-white text-xs font-semibold cursor-pointer"
                 >
-                  {custBusy ? 'Submitting...' : 'Submit Custom Inquiry'}
+                  {custBusy ? 'Submitting...' : 'Submit Project Requirements'}
                 </button>
               </div>
             </form>
@@ -498,12 +421,8 @@ export const PortalStorePage: React.FC = () => {
 
 export const PortalProductDetailPage: React.FC<{ slug: string }> = ({ slug }) => {
   const { navigate } = usePortalRouter();
-  const { profile, refreshSession } = usePortalAuth();
   const [product, setProduct] = useState<Product | null>(null);
-  const [currency, setCurrency] = useState<PortalCurrency>(profile?.preferredCurrency || 'USD');
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -523,46 +442,25 @@ export const PortalProductDetailPage: React.FC<{ slug: string }> = ({ slug }) =>
     };
   }, [slug]);
 
-  const handleAction = async (buyNow: boolean) => {
-    if (!product) return;
-    const pkg = product.packages[0];
-    if (pkg.isCustomQuote) {
-      navigate('/portal/store');
-      return;
-    }
-    setBusy(true);
-    setNotice('');
-    try {
-      await portalRequest('/cart/preferences', { method: 'PATCH', body: { currency } });
-      await portalRequest('/cart/items', { method: 'POST', body: { packageId: pkg.id, quantity: 1 } });
-      await refreshSession();
-      if (buyNow) navigate('/portal/checkout');
-      else setNotice('Package added to your shopping cart.');
-    } catch (err: any) {
-      setNotice(err?.message || 'Could not add item.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   if (loading) {
     return (
-      <PortalLayout title="Service Details">
-        <div className="p-8 text-sm text-[#64748B]">Loading service specification...</div>
+      <PortalLayout title="Solution Specifications">
+        <div className="p-8 text-sm text-[#64748B]">Loading solution architecture...</div>
       </PortalLayout>
     );
   }
 
   if (!product) {
     return (
-      <PortalLayout title="Service Not Found">
+      <PortalLayout title="Solution Not Found">
         <div className="bg-white border border-[#E6E2D8] rounded-xl p-8 text-center">
-          <p className="text-sm text-[#334155]">This service could not be found in the catalog.</p>
+          <p className="text-sm text-[#334155]">This solution framework could not be found in the directory.</p>
           <button
+            type="button"
             onClick={() => navigate('/portal/store')}
             className="mt-4 px-4 py-2 rounded-lg bg-[#0F4C3A] text-white text-xs font-semibold cursor-pointer"
           >
-            Back to Service Store
+            Back to Solutions Directory
           </button>
         </div>
       </PortalLayout>
@@ -570,31 +468,31 @@ export const PortalProductDetailPage: React.FC<{ slug: string }> = ({ slug }) =>
   }
 
   const pkg = product.packages[0];
-  const priceMinor = currency === 'PHP' ? pkg.pricePhpMinor : pkg.priceUsdMinor;
 
   return (
     <PortalLayout title={product.name} subtitle={product.shortDescription}>
       <button
+        type="button"
         onClick={() => navigate('/portal/store')}
         className="mb-5 inline-flex items-center gap-1.5 text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
-        <span>Back to Service Store</span>
+        <span>Back to Solutions Directory</span>
       </button>
 
       <div className="grid lg:grid-cols-[1.5fr_1fr] gap-6 items-start">
         <div className="space-y-6">
           <section className="bg-white border border-[#E6E2D8] rounded-xl p-6">
-            <h2 className="text-base font-bold text-[#0F1D36]">Service Overview</h2>
+            <h2 className="text-base font-bold text-[#0F1D36]">Solution Overview</h2>
             <p className="mt-2 text-sm text-[#334155] leading-relaxed">{product.fullDescription}</p>
 
             <div className="mt-6 grid sm:grid-cols-2 gap-6 pt-5 border-t border-[#EFECE4]">
               <div>
                 <h3 className="text-xs font-semibold text-[#0F1D36] uppercase tracking-wider mb-2.5">
-                  Package Inclusions
+                  Solution Capabilities &amp; Scope
                 </h3>
                 <ul className="space-y-2 text-sm text-[#334155]">
-                  {pkg.features.map((f) => (
+                  {(pkg?.features || []).map((f) => (
                     <li key={f} className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-[#0F4C3A] shrink-0 mt-0.5" />
                       <span>{f}</span>
@@ -604,7 +502,7 @@ export const PortalProductDetailPage: React.FC<{ slug: string }> = ({ slug }) =>
               </div>
               <div>
                 <h3 className="text-xs font-semibold text-[#0F1D36] uppercase tracking-wider mb-2.5">
-                  Sample Deliverables
+                  Representative Deliverables
                 </h3>
                 <ul className="space-y-2 text-sm text-[#334155]">
                   {product.sampleDeliverables.map((d) => (
@@ -612,7 +510,7 @@ export const PortalProductDetailPage: React.FC<{ slug: string }> = ({ slug }) =>
                   ))}
                 </ul>
                 <h3 className="text-xs font-semibold text-[#0F1D36] uppercase tracking-wider mt-5 mb-2">
-                  Required Client Materials
+                  Client Discovery Inputs
                 </h3>
                 <ul className="space-y-1.5 text-sm text-[#475569]">
                   {product.requiredClientMaterials.map((m) => (
@@ -624,8 +522,9 @@ export const PortalProductDetailPage: React.FC<{ slug: string }> = ({ slug }) =>
           </section>
 
           <section className="bg-white border border-[#E6E2D8] rounded-xl p-6">
-            <h2 className="text-base font-bold text-[#0F1D36] mb-3">Terms & Conditions</h2>
+            <h2 className="text-base font-bold text-[#0F1D36] mb-3">Engagement Governance &amp; Terms</h2>
             <p className="text-sm text-[#475569] leading-relaxed">{product.termsSummary}</p>
+            <p className="mt-3 text-xs text-[#475569] leading-relaxed">{COMMERCIAL_ENGAGEMENT_STATEMENT}</p>
             <h3 className="text-sm font-bold text-[#0F1D36] mt-6 mb-3">Frequently Asked Questions</h3>
             <div className="divide-y divide-[#EFECE4]">
               {product.faqs.map((faq) => (
@@ -638,87 +537,63 @@ export const PortalProductDetailPage: React.FC<{ slug: string }> = ({ slug }) =>
           </section>
         </div>
 
-        {/* Sticky Purchase Summary */}
+        {/* Sticky Enterprise Engagement Summary (Zero Public Pricing) */}
         <aside className="bg-white border border-[#E6E2D8] rounded-xl p-6 sticky top-24 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#64748B]">Illustrative Price</span>
-            <div className="inline-flex rounded-md border border-[#E6E2D8] p-0.5 bg-[#FAF8F4]">
-              {(['USD', 'PHP'] as PortalCurrency[]).map((curr) => (
-                <button
-                  key={curr}
-                  onClick={() => setCurrency(curr)}
-                  className={`px-2.5 py-1 text-[11px] font-mono font-semibold rounded cursor-pointer ${
-                    currency === curr ? 'bg-[#0F1D36] text-white' : 'text-[#475569]'
-                  }`}
-                >
-                  {curr}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="font-mono text-3xl font-bold tabular-nums text-[#0F1D36]">
-            {pkg.isCustomQuote ? 'Custom Quote' : formatMoney(priceMinor, currency)}
+          <div className="space-y-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#0F4C3A]">
+              {pkg?.engagementLabel || 'Customized Enterprise Solution'}
+            </span>
+            <h2 className="text-xl font-bold text-[#0F1D36]">Subject to Formal Assessment</h2>
+            <p className="text-xs text-[#64748B] leading-relaxed">
+              Commercial terms, deliverables, and deployment schedules are formally structured following consultation and technical scoping.
+            </p>
           </div>
 
           <dl className="divide-y divide-[#F2EFE8] text-xs">
             <div className="py-2 flex justify-between gap-2">
-              <dt className="text-[#64748B]">Estimated Turnaround</dt>
-              <dd className="font-medium text-[#0F1D36] text-right">{pkg.turnaroundLabel}</dd>
+              <dt className="text-[#64748B]">Delivery Cadence</dt>
+              <dd className="font-medium text-[#0F1D36] text-right">{pkg?.turnaroundLabel || 'Per Approved SOW'}</dd>
             </div>
             <div className="py-2 flex justify-between gap-2">
-              <dt className="text-[#64748B]">Revision Allowance</dt>
-              <dd className="font-mono font-semibold text-[#0F1D36]">{pkg.revisionLimit} rounds</dd>
+              <dt className="text-[#64748B]">Support Structure</dt>
+              <dd className="font-medium text-[#0F1D36] text-right">{pkg?.supportLevel || 'Enterprise Advisory'}</dd>
             </div>
             <div className="py-2 flex justify-between gap-2">
-              <dt className="text-[#64748B]">Support Level</dt>
-              <dd className="font-medium text-[#0F1D36] text-right">{pkg.supportLevel}</dd>
+              <dt className="text-[#64748B]">Engagement Authorization</dt>
+              <dd className="font-medium text-[#0F1D36] text-right">Formal Proposal Required</dd>
             </div>
-            {pkg.creditsIncluded > 0 && (
-              <div className="py-2 flex justify-between gap-2">
-                <dt className="text-[#64748B]">Credits Included</dt>
-                <dd className="font-mono font-semibold text-[#0F4C3A]">
-                  {pkg.creditsIncluded.toLocaleString()} credits
-                </dd>
-              </div>
-            )}
             <div className="py-2 flex justify-between gap-2">
-              <dt className="text-[#64748B]">Usage Limits</dt>
-              <dd className="font-medium text-[#0F1D36] text-right">{pkg.usageLimits}</dd>
+              <dt className="text-[#64748B]">Operational Scope</dt>
+              <dd className="font-medium text-[#0F1D36] text-right">{pkg?.usageLimits || 'Defined in SOW'}</dd>
             </div>
           </dl>
 
-          {notice && (
-            <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-[#15803D]">
-              {notice}
-            </div>
-          )}
-
-          {pkg.isCustomQuote ? (
+          <div className="space-y-2.5 pt-2">
             <button
-              onClick={() => navigate('/portal/store')}
-              className="w-full py-2.5 px-4 rounded-lg bg-[#0F1D36] hover:bg-[#172B4D] text-white text-sm font-semibold cursor-pointer"
+              type="button"
+              onClick={() => navigate(`/portal/store?inquire=${encodeURIComponent(product.name)}`)}
+              className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-sm font-semibold cursor-pointer"
             >
-              Request Custom Quotation
+              Request a Formal Proposal
             </button>
-          ) : (
-            <div className="space-y-2.5 pt-2">
-              <button
-                disabled={busy}
-                onClick={() => handleAction(true)}
-                className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] disabled:opacity-60 text-white text-sm font-semibold cursor-pointer"
-              >
-                Buy Now
-              </button>
-              <button
-                disabled={busy}
-                onClick={() => handleAction(false)}
-                className="w-full py-2.5 px-4 rounded-lg border border-[#0F1D36] text-[#0F1D36] hover:bg-[#FAF8F4] disabled:opacity-60 text-sm font-semibold cursor-pointer"
-              >
-                Add to Cart
-              </button>
-            </div>
-          )}
+            <button
+              type="button"
+              onClick={() => navigate('/portal/cart')}
+              className="w-full py-2.5 px-4 rounded-lg border border-[#0F1D36] text-[#0F1D36] hover:bg-[#FAF8F4] text-sm font-semibold cursor-pointer"
+            >
+              Review My Inquiries &amp; Proposals
+            </button>
+          </div>
+
+          <div className="pt-3 border-t border-[#F2EFE8] text-xs text-[#475569] space-y-1">
+            <p className="font-semibold text-[#0F1D36]">Direct Corporate Contact</p>
+            <a href={corporateIdentity.contact.telephone.href} className="block text-[#0F4C3A] font-medium hover:underline">
+              {corporateIdentity.contact.telephone.display}
+            </a>
+            <a href={`mailto:${corporateIdentity.contact.email}`} className="block text-[#475569] hover:text-[#0F1D36]">
+              {corporateIdentity.contact.email}
+            </a>
+          </div>
         </aside>
       </div>
     </PortalLayout>
@@ -729,21 +604,24 @@ export const PortalMyServicesPage: React.FC = () => {
   const { navigate } = usePortalRouter();
   const [orders, setOrders] = useState<any[]>([]);
   const [inquiries, setInquiries] = useState<any[]>([]);
+  const [proposals, setProposals] = useState<PortalApprovedProposal[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       portalRequest<{ orders: any[] }>('/orders'),
       portalRequest<{ inquiries: any[] }>('/custom-inquiries'),
+      portalRequest<{ proposals: PortalApprovedProposal[] }>('/proposals'),
     ])
-      .then(([ord, inq]) => {
+      .then(([ord, inq, prop]) => {
         setOrders(ord.orders || []);
         setInquiries(inq.inquiries || []);
+        setProposals(prop.proposals || []);
       })
       .finally(() => setLoading(false));
   }, []);
 
-  const purchasedItems = orders.flatMap((order) =>
+  const engagedItems = orders.flatMap((order) =>
     (order.items || []).map((item: any) => ({
       ...item,
       orderId: order.id,
@@ -757,27 +635,28 @@ export const PortalMyServicesPage: React.FC = () => {
 
   return (
     <PortalLayout
-      title="My Services"
-      subtitle="Active purchased services, packages, and custom enterprise package inquiries."
+      title="My Engagements & Inquiries"
+      subtitle="Authorized enterprise engagements, approved commercial proposals, and active consultation inquiries."
     >
       <div className="space-y-6">
         <section className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-[#E6E2D8] flex items-center justify-between">
-            <h2 className="text-base font-semibold text-[#0F1D36]">Purchased Services & Packages</h2>
+          <div className="px-5 py-4 border-b border-[#E6E2D8] flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-[#0F1D36]">Authorized Active &amp; Historical Engagements</h2>
             <button
+              type="button"
               onClick={() => navigate('/portal/store')}
               className="px-3.5 py-2 rounded-lg bg-[#0F4C3A] text-white text-xs font-semibold cursor-pointer"
             >
-              Browse Store
+              Explore Solutions Directory
             </button>
           </div>
           {loading ? (
-            <div className="p-6 text-sm text-[#64748B]">Loading your services...</div>
-          ) : purchasedItems.length === 0 ? (
+            <div className="p-6 text-sm text-[#64748B]">Loading your engagements...</div>
+          ) : engagedItems.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-sm font-semibold text-[#0F1D36]">No purchased services yet</p>
+              <p className="text-sm font-semibold text-[#0F1D36]">No authorized engagements recorded yet</p>
               <p className="mt-1 text-xs text-[#64748B]">
-                Once you place an order in the Service Store, your services will appear here.
+                Submit a service inquiry through the Solutions Directory to initiate consultation and formal proposal issuance.
               </p>
             </div>
           ) : (
@@ -785,19 +664,20 @@ export const PortalMyServicesPage: React.FC = () => {
               <table className="w-full text-left text-sm">
                 <thead className="bg-[#FAF8F4] text-xs text-[#64748B] border-b border-[#E6E2D8]">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Service</th>
+                    <th className="px-4 py-3 font-medium">Engagement</th>
                     <th className="px-4 py-3 font-medium">Order</th>
-                    <th className="px-4 py-3 font-medium">Payment</th>
-                    <th className="px-4 py-3 font-medium">Fulfillment</th>
-                    <th className="px-4 py-3 font-medium text-right">Amount</th>
+                    <th className="px-4 py-3 font-medium">Settlement</th>
+                    <th className="px-4 py-3 font-medium">Delivery</th>
+                    <th className="px-4 py-3 font-medium text-right">Authorized Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EFECE4]">
-                  {purchasedItems.map((item) => (
+                  {engagedItems.map((item) => (
                     <tr key={item.id} className="hover:bg-[#FAF8F4]/70">
                       <td className="px-4 py-3 font-medium text-[#0F1D36]">{item.productName}</td>
                       <td className="px-4 py-3">
                         <button
+                          type="button"
                           onClick={() => navigate(`/portal/orders/${item.orderId}`)}
                           className="font-mono text-xs text-[#0F4C3A] font-semibold hover:underline cursor-pointer"
                         >
@@ -821,10 +701,47 @@ export const PortalMyServicesPage: React.FC = () => {
           )}
         </section>
 
+        {proposals.length > 0 && (
+          <section className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#E6E2D8] flex items-center justify-between">
+              <h2 className="text-base font-semibold text-[#0F1D36]">Issued Formal Proposals</h2>
+              <button
+                type="button"
+                onClick={() => navigate('/portal/cart')}
+                className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
+              >
+                Manage Proposals →
+              </button>
+            </div>
+            <div className="divide-y divide-[#EFECE4]">
+              {proposals.map((prop) => (
+                <div key={prop.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs text-[#64748B]">
+                      <span className="font-mono font-semibold text-[#0F1D36]">{prop.proposalNumber}</span> · Issued{' '}
+                      {formatPortalDate(prop.issuedAt)}
+                    </div>
+                    <p className="text-sm font-semibold text-[#0F1D36] mt-0.5">{prop.title}</p>
+                    <p className="text-xs text-[#475569]">{prop.scopeSummary}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono text-sm font-bold text-[#0F1D36]">
+                      {formatMoney(prop.totalMinor, prop.currency)}
+                    </div>
+                    <span className={`text-xs ${statusToneClass(prop.status)}`}>
+                      {formatStatusLabel(prop.status)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {inquiries.length > 0 && (
           <section className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-[#E6E2D8]">
-              <h2 className="text-base font-semibold text-[#0F1D36]">Custom Enterprise Package Requests</h2>
+              <h2 className="text-base font-semibold text-[#0F1D36]">Submitted Service Inquiries</h2>
             </div>
             <div className="divide-y divide-[#EFECE4]">
               {inquiries.map((inq) => (

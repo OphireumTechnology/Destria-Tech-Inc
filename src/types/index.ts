@@ -38,28 +38,27 @@ export type TechIconKind =
   | 'multimedia'
   | 'analytics';
 
-export type PricingModel =
-  | 'one_time'
-  | 'subscription_monthly'
-  | 'setup_plus_monthly'
-  | 'hourly'
-  | 'per_session';
+export type CatalogDeliveryType =
+  | 'project'
+  | 'managed_care'
+  | 'ai_implementation'
+  | 'advisory'
+  | 'training';
 
-export type ServiceEngagementMode = 'standardized' | 'custom_proposal';
+export type ServiceEngagementMode = 'consultation_assessment' | 'custom_proposal';
 
 export interface CatalogServiceOption {
   id: string;
   label: string;
   description: string;
-  deltaUsd: number;
-  monthlyDeltaUsd?: number;
+  scopeCategory?: 'enhancement' | 'integration' | 'governance' | 'acceleration';
 }
 
-export interface CatalogPricing {
-  model: PricingModel;
-  startingUsd: number;
-  monthlyUsd?: number;
-  unitLabel?: string;
+export interface CatalogServiceEngagement {
+  engagementLabel: 'Customized Enterprise Solution';
+  assessmentBasis: 'Subject to Formal Assessment';
+  deliveryType: CatalogDeliveryType;
+  proposalRequired: true;
 }
 
 export interface CatalogService {
@@ -70,7 +69,7 @@ export interface CatalogService {
   shortDescription: string;
   fullDescription: string;
   iconKind: TechIconKind;
-  pricing: CatalogPricing;
+  engagement: CatalogServiceEngagement;
   engagementMode?: ServiceEngagementMode;
   configurableOptions?: CatalogServiceOption[];
   capabilities: string[];

@@ -1,30 +1,15 @@
-import { DatabaseRepository, SolutionRequestRecord, AppointmentRecord, EmailOutboxRecord } from '../db/types';
-import { escapeHtml } from '../validation';
-import { logStructured } from '../logger';
-import { COMPANY_CONFIG } from '../../data/companyConfig';
+import { COMPANY_CONFIG, COMMERCIAL_ENGAGEMENT_STATEMENT, corporateIdentity } from '../../data/companyConfig';
 import { BRAND_ASSETS } from '../../data/brandAssets';
+import { getCatalogServiceById } from '../../data/serviceCatalog';
+import { AppointmentRecord, DatabaseRepository, SolutionRequestRecord } from '../db/types';
+import { logStructured } from '../logger';
 
-function renderOfficialEmailHeader(subtitle: string): string {
-  return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-bottom:1px solid #1E293B;padding-bottom:16px;margin-bottom:20px;">
-      <tr>
-        <td width="56" valign="middle" style="padding-right:12px;">
-          <img
-            src="${escapeHtml(BRAND_ASSETS.hostedPrimaryLogoUrl)}"
-            alt="${escapeHtml(BRAND_ASSETS.altText)}"
-            width="48"
-            height="48"
-            style="display:block;width:48px;height:48px;border-radius:9999px;border:1.5px solid #D4AF37;object-fit:cover;background:#ffffff;"
-          />
-        </td>
-        <td valign="middle">
-          <div style="font-size:16px;font-weight:700;letter-spacing:0.04em;color:#FFFFFF;margin:0;">DESTRIA TECH INC</div>
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.12em;color:#D4AF37;margin-top:2px;">DESTRIA NETWORK</div>
-          <div style="font-size:12px;color:#00C2C7;margin-top:2px;">${escapeHtml(subtitle)}</div>
-        </td>
-      </tr>
-    </table>
-  `;
+export interface EmailMessage {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  replyTo?: string;
 }
 
 export interface EmailSendResult {
@@ -35,33 +20,31 @@ export interface EmailSendResult {
 
 export interface EmailTransport {
   readonly isConfigured: boolean;
-  send(params: {
-    to: string;
-    from: string;
-    subject: string;
-    html: string;
-    text: string;
-    idempotencyKey?: string;
-  }): Promise<EmailSendResult>;
+  send(message: EmailMessage): Promise<EmailSendResult>;
 }
 
+/**
+ * Production Resend transactional email transport.
+ * Honestly reports 'unconfigured' when RESEND_API_KEY is absent instead of faking delivery.
+ */
 export class ResendEmailTransport implements EmailTransport {
   private readonly apiKey: string;
-  public readonly isConfigured: boolean;
+  private readonly fromAddress: string;
 
-  constructor(apiKey?: string) {
-    this.apiKey = (apiKey ?? process.env.RESEND_API_KEY ?? '').trim();
-    this.isConfigured = Boolean(this.apiKey && !this.apiKey.includes('your_') && this.apiKey.length >= 10);
+  constructor(
+    apiKey = process.env.RESEND_API_KEY || '',
+    fromAddress = process.env.EMAIL_FROM ||
+      `${corporateIdentity.legalName} <${corporateIdentity.contact.email}>`
+  ) {
+    this.apiKey = apiKey.trim();
+    this.fromAddress = fromAddress.trim();
   }
 
-  async send(params: {
-    to: string;
-    from: string;
-    subject: string;
-    html: string;
-    text: string;
-    idempotencyKey?: string;
-  }): Promise<EmailSendResult> {
+  public get isConfigured(): boolean {
+    return Boolean(this.apiKey);
+  }
+
+  async send(message: EmailMessage): Promise<EmailSendResult> {
     if (!this.isConfigured) {
       return {
         status: 'unconfigured',
@@ -75,376 +58,487 @@ export class ResendEmailTransport implements EmailTransport {
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          ...(params.idempotencyKey ? { 'Idempotency-Key': params.idempotencyKey } : {}),
         },
         body: JSON.stringify({
-          from: params.from,
-          to: [params.to],
-          subject: params.subject,
-          html: params.html,
-          text: params.text,
+          from: this.fromAddress,
+          to: [message.to],
+          subject: message.subject,
+          html: message.html,
+          text: message.text,
+          ...(message.replyTo ? { reply_to: message.replyTo } : {}),
         }),
       });
 
-      const payload = await response.json().catch(() => ({}));
+      const body = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
       if (!response.ok) {
         return {
           status: 'failed',
-          error: payload?.message || payload?.error || `Resend API error HTTP ${response.status}`,
+          error: body.message || `Resend HTTP ${response.status}`,
         };
       }
 
       return {
         status: 'sent',
-        providerReference: typeof payload?.id === 'string' ? payload.id : undefined,
+        providerReference: body.id || `resend_${Date.now()}`,
       };
     } catch (err: any) {
       return {
         status: 'failed',
-        error: err?.message || 'Network failure calling email provider',
+        error: err?.message || 'Network failure dispatching email via Resend.',
       };
     }
   }
 }
 
+function escapeHtml(raw: string): string {
+  return raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderEmailShell(title: string, badge: string, bodyHtml: string): string {
+  const safeLogoUrl = escapeHtml(BRAND_ASSETS.hostedPrimaryLogoUrl);
+  const officialPhone = escapeHtml(corporateIdentity.contact.telephone.display);
+  const officialPhoneHref = escapeHtml(corporateIdentity.contact.telephone.href);
+  const officialEmail = escapeHtml(corporateIdentity.contact.email);
+  const officialAddress = escapeHtml(corporateIdentity.headquarters.fullAddress);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0B1220;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#E2E8F0;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#0B1220;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background-color:#111827;border:1px solid #1E293B;border-radius:16px;overflow:hidden;">
+          <tr>
+            <td style="padding:24px 28px;background:linear-gradient(135deg,#0B1F3B,#111827);border-bottom:1px solid #1E293B;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td width="54" valign="middle" style="padding-right:14px;">
+                    <img src="${safeLogoUrl}" alt="${escapeHtml(BRAND_ASSETS.altText)}" width="44" height="44" style="display:block;width:44px;height:44px;border-radius:9999px;border:1px solid #D4AF37;object-fit:cover;" />
+                  </td>
+                  <td valign="middle">
+                    <div style="font-size:11px;font-family:monospace;letter-spacing:1.5px;color:#00C2C7;text-transform:uppercase;margin-bottom:4px;">${escapeHtml(badge)}</div>
+                    <div style="font-size:19px;font-weight:800;color:#FFFFFF;letter-spacing:-0.3px;">${escapeHtml(corporateIdentity.legalName)}</div>
+                    <div style="font-size:11px;color:#94A3B8;margin-top:2px;">${escapeHtml(corporateIdentity.networkName)} &middot; ${escapeHtml(corporateIdentity.jurisdiction)}</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              ${bodyHtml}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 28px;background-color:#0B1220;border-top:1px solid #1E293B;font-size:11px;color:#94A3B8;line-height:1.6;">
+              <strong style="color:#E2E8F0;">${escapeHtml(corporateIdentity.legalName)} (${escapeHtml(corporateIdentity.abbreviation)})</strong> &middot; ${escapeHtml(corporateIdentity.networkName)}<br/>
+              Headquarters: ${officialAddress}<br/>
+              Telephone: <a href="${officialPhoneHref}" style="color:#00C2C7;text-decoration:none;">${officialPhone}</a> &middot; Email: <a href="mailto:${officialEmail}" style="color:#00C2C7;text-decoration:none;">${officialEmail}</a><br/>
+              Website: <a href="${escapeHtml(corporateIdentity.contact.website)}" style="color:#00C2C7;text-decoration:none;">${escapeHtml(corporateIdentity.contact.website)}</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 export class TransactionalEmailService {
-  private readonly fromAddress: string;
   private readonly adminInbox: string;
 
   constructor(
     private readonly db: DatabaseRepository,
-    private readonly transport: EmailTransport = new ResendEmailTransport()
+    private readonly transport: EmailTransport,
+    adminInbox = process.env.ADMIN_NOTIFICATION_EMAIL || corporateIdentity.contact.email
   ) {
-    this.fromAddress =
-      process.env.EMAIL_FROM || 'DESTRIA TECH INC <no-reply@destria-placeholder.invalid>';
-    this.adminInbox =
-      process.env.ADMIN_NOTIFICATION_EMAIL || 'admin@destria-placeholder.invalid';
+    this.adminInbox = adminInbox.trim();
   }
 
   public isConfigured(): boolean {
     return this.transport.isConfigured;
   }
 
-  private async dispatchOutboxItem(item: EmailOutboxRecord, correlationId?: string): Promise<EmailOutboxRecord['status']> {
-    const attemptNumber = item.deliveryAttempts + 1;
+  private async enqueueAndDispatch(params: {
+    dedupeKey: string;
+    entityType: 'solution_request' | 'appointment';
+    entityReference: string;
+    recipientEmail: string;
+    notificationType:
+      | 'customer_confirmation'
+      | 'admin_alert'
+      | 'appointment_request'
+      | 'appointment_update';
+    subject: string;
+    htmlBody: string;
+    textBody: string;
+    replyTo?: string;
+    correlationId?: string;
+  }): Promise<'sent' | 'failed' | 'unconfigured'> {
+    const { record } = await this.db.createOutboxRecord({
+      dedupeKey: params.dedupeKey,
+      entityType: params.entityType,
+      entityReference: params.entityReference,
+      recipientEmail: params.recipientEmail,
+      notificationType: params.notificationType,
+      subject: params.subject,
+      htmlBody: params.htmlBody,
+      textBody: params.textBody,
+    });
+
+    if (record.status === 'sent') {
+      return 'sent';
+    }
+
     const result = await this.transport.send({
-      to: item.recipientEmail,
-      from: this.fromAddress,
-      subject: item.subject,
-      html: item.htmlBody,
-      text: item.textBody,
-      idempotencyKey: item.dedupeKey,
+      to: params.recipientEmail,
+      subject: params.subject,
+      html: params.htmlBody,
+      text: params.textBody,
+      replyTo: params.replyTo,
     });
 
     if (result.status === 'sent') {
-      await this.db.updateOutboxStatus(item.id, {
+      await this.db.updateOutboxStatus(record.id, {
         status: 'sent',
         providerReference: result.providerReference,
-        deliveryAttempts: attemptNumber,
+        deliveryAttempts: record.deliveryAttempts + 1,
         sentAt: new Date().toISOString(),
         nextRetryAt: null,
       });
       logStructured('info', 'email_dispatched', {
-        correlationId,
-        entityType: item.entityType,
-        entityReference: item.entityReference,
-        notificationType: item.notificationType,
-        recipientEmail: item.recipientEmail,
+        correlationId: params.correlationId,
+        entityType: params.entityType,
+        entityReference: params.entityReference,
+        notificationType: params.notificationType,
+        recipientEmail: params.recipientEmail,
         providerReference: result.providerReference,
       });
       return 'sent';
     }
 
     if (result.status === 'unconfigured') {
-      await this.db.updateOutboxStatus(item.id, {
+      await this.db.updateOutboxStatus(record.id, {
         status: 'unconfigured',
-        deliveryAttempts: attemptNumber,
+        deliveryAttempts: record.deliveryAttempts,
         lastError: result.error,
         nextRetryAt: null,
       });
       logStructured('warn', 'email_dispatch_skipped_unconfigured', {
-        correlationId,
-        entityType: item.entityType,
-        entityReference: item.entityReference,
-        notificationType: item.notificationType,
+        correlationId: params.correlationId,
+        entityType: params.entityType,
+        entityReference: params.entityReference,
+        notificationType: params.notificationType,
       });
       return 'unconfigured';
     }
 
-    const backoffMinutes = Math.min(60, Math.pow(2, attemptNumber));
+    const attempts = record.deliveryAttempts + 1;
+    const backoffMinutes = Math.min(60, Math.pow(2, attempts));
     const nextRetryAt = new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString();
-    await this.db.updateOutboxStatus(item.id, {
+    await this.db.updateOutboxStatus(record.id, {
       status: 'failed',
-      deliveryAttempts: attemptNumber,
+      deliveryAttempts: attempts,
       lastError: result.error,
       nextRetryAt,
     });
     logStructured('error', 'email_dispatch_failed', {
-      correlationId,
-      entityType: item.entityType,
-      entityReference: item.entityReference,
-      notificationType: item.notificationType,
-      attemptNumber,
+      correlationId: params.correlationId,
+      entityType: params.entityType,
+      entityReference: params.entityReference,
+      notificationType: params.notificationType,
+      attemptNumber: attempts,
       error: result.error,
     });
     return 'failed';
   }
 
   public async enqueueAndSendSolutionRequestEmails(
-    requestRecord: SolutionRequestRecord,
+    request: SolutionRequestRecord,
     correlationId?: string
   ): Promise<{
-    customerStatus: EmailOutboxRecord['status'];
-    adminStatus: EmailOutboxRecord['status'];
+    customerStatus: 'sent' | 'failed' | 'unconfigured';
+    adminStatus: 'sent' | 'failed' | 'unconfigured';
     overallStatus: 'sent' | 'failed' | 'unconfigured';
   }> {
-    const safeName = escapeHtml(requestRecord.fullName);
-    const safeOrg = escapeHtml(requestRecord.company);
-    const safeEmail = escapeHtml(requestRecord.email);
-    const safePhone = escapeHtml(requestRecord.contactNumber);
-    const safeNotes = escapeHtml(requestRecord.projectDescription);
-    const safeTimeline = escapeHtml(requestRecord.targetTimeline || 'To be confirmed');
-
-    const serviceRowsHtml =
-      requestRecord.selectedServices.length > 0
-        ? requestRecord.selectedServices
-            .map(
-              (s) =>
-                `<li><strong>${escapeHtml(s.title)}</strong> — Starting at $${Number(
-                  s.startingUsd
-                ).toLocaleString('en-US')}${
-                  s.monthlyUsd ? ` + $${Number(s.monthlyUsd).toLocaleString('en-US')}/mo` : ''
-                }</li>`
-            )
+    const servicesListHtml =
+      request.selectedServiceIds.length > 0
+        ? request.selectedServiceIds
+            .map((id) => {
+              const svc = getCatalogServiceById(id);
+              const title = svc ? svc.title : id;
+              const opts = request.selectedOptionsMap[id] || [];
+              const optNote = opts.length > 0 ? ` (${opts.length} scope module(s) requested)` : '';
+              return `<li style="margin:6px 0;color:#E2E8F0;"><strong>${escapeHtml(title)}</strong> &mdash; <span style="color:#00C2C7;">Customized Enterprise Solution</span>${escapeHtml(optNote)}</li>`;
+            })
             .join('')
-        : `<li><strong>${escapeHtml(requestRecord.serviceTitle)}</strong></li>`;
+        : `<li style="margin:6px 0;color:#E2E8F0;">${escapeHtml(request.serviceTitle)} &mdash; <span style="color:#00C2C7;">Customized Enterprise Solution</span></li>`;
 
-    const servicesText =
-      requestRecord.selectedServices.length > 0
-        ? requestRecord.selectedServices
-            .map(
-              (s) =>
-                `- ${s.title}: Starting at $${Number(s.startingUsd).toLocaleString('en-US')}${
-                  s.monthlyUsd ? ` + $${Number(s.monthlyUsd).toLocaleString('en-US')}/mo` : ''
-                }`
-            )
-            .join('\n')
-        : `- ${requestRecord.serviceTitle}`;
-
-    // 1. Customer Confirmation Email
-    const customerSubject = `Destria Tech Inc Solution Request Received [${requestRecord.referenceCode}]`;
-    const contactFooterLines = [
-      COMPANY_CONFIG.corporateEmail ? `Corporate Email: ${COMPANY_CONFIG.corporateEmail}` : null,
-      COMPANY_CONFIG.corporatePhone ? `Corporate Phone: ${COMPANY_CONFIG.corporatePhone}` : null,
-      COMPANY_CONFIG.registeredAddress ? `Office: ${COMPANY_CONFIG.registeredAddress}` : null,
-    ].filter((line): line is string => Boolean(line));
+    const customerHtml = renderEmailShell(
+      `Service Inquiry Received — ${request.referenceCode}`,
+      'ENTERPRISE SERVICE INQUIRY CONFIRMATION',
+      `
+      <p style="margin:0 0 14px;font-size:15px;color:#FFFFFF;">Hello ${escapeHtml(request.fullName)},</p>
+      <p style="margin:0 0 18px;font-size:13px;line-height:1.6;color:#CBD5E1;">
+        Thank you for engaging <strong style="color:#FFFFFF;">${escapeHtml(corporateIdentity.legalName)}</strong>.
+        Your enterprise service inquiry has been logged and assigned to our solutions architecture review desk.
+      </p>
+      <div style="background-color:#0B1220;border:1px solid #1E293B;border-radius:12px;padding:16px;margin-bottom:18px;">
+        <div style="font-size:11px;font-family:monospace;color:#00C2C7;text-transform:uppercase;">Reference Code</div>
+        <div style="font-size:20px;font-family:monospace;font-weight:800;color:#FFFFFF;margin-top:4px;">${escapeHtml(request.referenceCode)}</div>
+        <div style="font-size:12px;color:#94A3B8;margin-top:8px;">Organization: <strong style="color:#E2E8F0;">${escapeHtml(request.company)}</strong></div>
+        ${request.targetTimeline ? `<div style="font-size:12px;color:#94A3B8;margin-top:4px;">Target Timeline: <strong style="color:#E2E8F0;">${escapeHtml(request.targetTimeline)}</strong></div>` : ''}
+        <div style="font-size:12px;color:#94A3B8;margin-top:4px;">Commercial Structure: <strong style="color:#00C2C7;">Subject to Formal Assessment</strong></div>
+      </div>
+      <div style="font-size:12px;font-weight:700;color:#FFFFFF;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.6px;">Selected Solution Frameworks</div>
+      <ul style="margin:0 0 18px;padding-left:18px;font-size:13px;line-height:1.5;">${servicesListHtml}</ul>
+      <div style="background-color:#0F172A;border-left:3px solid #D4AF37;padding:12px 14px;font-size:12px;color:#CBD5E1;line-height:1.55;">
+        <strong style="color:#D4AF37;">Commercial Engagement Policy:</strong> ${escapeHtml(COMMERCIAL_ENGAGEMENT_STATEMENT)}
+      </div>
+      <p style="margin:18px 0 0;font-size:12px;color:#94A3B8;">
+        For direct corporate assistance, call <a href="${escapeHtml(corporateIdentity.contact.telephone.href)}" style="color:#00C2C7;text-decoration:none;">${escapeHtml(corporateIdentity.contact.telephone.display)}</a> or reply to <a href="mailto:${escapeHtml(corporateIdentity.contact.email)}" style="color:#00C2C7;text-decoration:none;">${escapeHtml(corporateIdentity.contact.email)}</a>.
+      </p>`
+    );
 
     const customerText = [
-      `Dear ${requestRecord.fullName},`,
+      `${corporateIdentity.legalName} — Enterprise Service Inquiry Confirmation`,
+      `Reference Code: ${request.referenceCode}`,
+      `Client: ${request.fullName} (${request.company})`,
+      `Selected Solutions: ${request.serviceTitle}`,
+      `Commercial Structure: Subject to Formal Assessment`,
       '',
-      `We have received your custom solution request under ${requestRecord.company} with reference ${requestRecord.referenceCode}.`,
+      COMMERCIAL_ENGAGEMENT_STATEMENT,
       '',
-      'Selected Services & Options:',
-      servicesText,
-      '',
-      `Preliminary Starting Estimate: $${requestRecord.estimatedOneTimeStartingUsd.toLocaleString('en-US')} USD${
-        requestRecord.estimatedMonthlyStartingUsd > 0
-          ? ` + $${requestRecord.estimatedMonthlyStartingUsd.toLocaleString('en-US')}/month`
-          : ''
-      }`,
-      `Target Timeline: ${requestRecord.targetTimeline || 'To be confirmed'}`,
-      '',
-      'Important Notice: All figures represent preliminary starting estimates only and do not constitute a binding quotation or contract until finalized by our engineering team.',
-      '',
-      `${COMPANY_CONFIG.name} · ${COMPANY_CONFIG.platformName}`,
-      ...contactFooterLines,
+      `Official Telephone: ${corporateIdentity.contact.telephone.display}`,
+      `Official Email: ${corporateIdentity.contact.email}`,
+      `Headquarters: ${corporateIdentity.headquarters.fullAddress}`,
     ].join('\n');
 
-    const htmlFooterContact = [
-      COMPANY_CONFIG.corporateEmail ? escapeHtml(COMPANY_CONFIG.corporateEmail) : null,
-      COMPANY_CONFIG.corporatePhone ? escapeHtml(COMPANY_CONFIG.corporatePhone) : null,
-    ]
-      .filter(Boolean)
-      .join(' · ');
+    const adminHtml = renderEmailShell(
+      `New Enterprise Service Inquiry: ${request.referenceCode}`,
+      'EXECUTIVE REVIEW NOTIFICATION',
+      `
+      <p style="margin:0 0 14px;font-size:14px;color:#FFFFFF;">A new customized enterprise service inquiry has been recorded.</p>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="6" style="font-size:13px;color:#CBD5E1;background-color:#0B1220;border:1px solid #1E293B;border-radius:10px;">
+        <tr><td style="color:#94A3B8;">Reference:</td><td style="font-family:monospace;color:#00C2C7;font-weight:700;">${escapeHtml(request.referenceCode)}</td></tr>
+        <tr><td style="color:#94A3B8;">Client:</td><td>${escapeHtml(request.fullName)}</td></tr>
+        <tr><td style="color:#94A3B8;">Email:</td><td>${escapeHtml(request.email)}</td></tr>
+        <tr><td style="color:#94A3B8;">Phone:</td><td>${escapeHtml(request.contactNumber)}</td></tr>
+        <tr><td style="color:#94A3B8;">Company:</td><td>${escapeHtml(request.company)}</td></tr>
+        <tr><td style="color:#94A3B8;">Solutions:</td><td>${escapeHtml(request.serviceTitle)}</td></tr>
+        <tr><td style="color:#94A3B8;">Commercial Status:</td><td style="color:#00C2C7;font-weight:700;">Subject to Formal Assessment</td></tr>
+      </table>
+      <div style="margin-top:16px;padding:14px;background-color:#0F172A;border:1px solid #1E293B;border-radius:10px;font-size:13px;color:#E2E8F0;line-height:1.5;">
+        <div style="font-size:11px;font-family:monospace;color:#94A3B8;margin-bottom:6px;">PROJECT REQUIREMENTS</div>
+        ${escapeHtml(request.projectDescription)}
+      </div>`
+    );
 
-    const customerHtml = `
-      <div style="font-family:Inter,Arial,sans-serif;background:#111827;color:#E2E8F0;padding:24px;border-radius:12px;">
-        ${renderOfficialEmailHeader('Official Solution Request Confirmation')}
-        <p>Dear ${safeName},</p>
-        <p>Your preliminary project summary has been registered with reference <strong>${escapeHtml(requestRecord.referenceCode)}</strong>.</p>
-        <h4 style="color:#fff;">Selected Services</h4>
-        <ul>${serviceRowsHtml}</ul>
-        <p><strong>Preliminary Starting Investment:</strong> $${requestRecord.estimatedOneTimeStartingUsd.toLocaleString('en-US')} USD${
-          requestRecord.estimatedMonthlyStartingUsd > 0
-            ? ` + $${requestRecord.estimatedMonthlyStartingUsd.toLocaleString('en-US')}/month`
-            : ''
-        }</p>
-        <p><strong>Target Timeline:</strong> ${safeTimeline}</p>
-        <p style="font-size:12px;color:#94A3B8;border-top:1px solid #1E293B;padding-top:12px;">
-          Note: All displayed figures represent preliminary starting estimates only and require formal engineering scoping before binding quotation.<br/>
-          ${escapeHtml(COMPANY_CONFIG.name)} (${escapeHtml(COMPANY_CONFIG.platformName)})${htmlFooterContact ? ` · ${htmlFooterContact}` : ''}
-        </p>
-      </div>
-    `;
+    const adminText = `New Enterprise Service Inquiry ${request.referenceCode}\nClient: ${request.fullName} <${request.email}> | ${request.contactNumber}\nCompany: ${request.company}\nSolutions: ${request.serviceTitle}\nCommercial Status: Subject to Formal Assessment\nRequirements:\n${request.projectDescription}`;
 
-    const customerOutbox = await this.db.createOutboxRecord({
-      dedupeKey: `sol-cust-${requestRecord.referenceCode}`,
+    const customerStatus = await this.enqueueAndDispatch({
+      dedupeKey: `sol:${request.referenceCode}:customer`,
       entityType: 'solution_request',
-      entityReference: requestRecord.referenceCode,
-      recipientEmail: requestRecord.email,
+      entityReference: request.referenceCode,
+      recipientEmail: request.email,
       notificationType: 'customer_confirmation',
-      subject: customerSubject,
+      subject: `[${request.referenceCode}] ${corporateIdentity.legalName} — Enterprise Service Inquiry Received`,
       htmlBody: customerHtml,
       textBody: customerText,
+      replyTo: this.adminInbox,
+      correlationId,
     });
 
-    const customerStatus =
-      customerOutbox.record.status === 'sent'
-        ? 'sent'
-        : await this.dispatchOutboxItem(customerOutbox.record, correlationId);
-
-    // 2. Admin Notification Email
-    const adminSubject = `[New Solution Request] ${requestRecord.referenceCode} — ${requestRecord.company}`;
-    const adminText = [
-      `Reference Code: ${requestRecord.referenceCode}`,
-      `Submitted: ${requestRecord.createdAt}`,
-      `Client: ${requestRecord.fullName} (${requestRecord.email} | ${requestRecord.contactNumber})`,
-      `Organization: ${requestRecord.company}`,
-      `Target Timeline: ${requestRecord.targetTimeline || 'Not specified'}`,
-      `Preliminary Starting Estimate: $${requestRecord.estimatedOneTimeStartingUsd.toLocaleString('en-US')} USD (+ $${requestRecord.estimatedMonthlyStartingUsd.toLocaleString('en-US')}/mo)`,
-      '',
-      'Selected Services:',
-      servicesText,
-      '',
-      'Project Notes:',
-      requestRecord.projectDescription,
-    ].join('\n');
-
-    const adminHtml = `
-      <div style="font-family:Inter,Arial,sans-serif;background:#0F172A;color:#E2E8F0;padding:24px;border-radius:12px;">
-        ${renderOfficialEmailHeader(`New Client Solution Request: ${requestRecord.referenceCode}`)}
-        <p><strong>Name:</strong> ${safeName}<br/>
-        <strong>Email:</strong> ${safeEmail}<br/>
-        <strong>Phone:</strong> ${safePhone}<br/>
-        <strong>Organization:</strong> ${safeOrg}<br/>
-        <strong>Timeline:</strong> ${safeTimeline}<br/>
-        <strong>Submitted:</strong> ${escapeHtml(requestRecord.createdAt)}</p>
-        <h4>Selected Services</h4>
-        <ul>${serviceRowsHtml}</ul>
-        <p><strong>Preliminary Server Estimate:</strong> $${requestRecord.estimatedOneTimeStartingUsd.toLocaleString('en-US')} USD${
-          requestRecord.estimatedMonthlyStartingUsd > 0
-            ? ` + $${requestRecord.estimatedMonthlyStartingUsd.toLocaleString('en-US')}/mo`
-            : ''
-        }</p>
-        <h4>Requirements Notes</h4>
-        <p style="white-space:pre-line;background:#1E293B;padding:12px;border-radius:8px;">${safeNotes}</p>
-      </div>
-    `;
-
-    const adminOutbox = await this.db.createOutboxRecord({
-      dedupeKey: `sol-adm-${requestRecord.referenceCode}`,
+    const adminStatus = await this.enqueueAndDispatch({
+      dedupeKey: `sol:${request.referenceCode}:admin`,
       entityType: 'solution_request',
-      entityReference: requestRecord.referenceCode,
+      entityReference: request.referenceCode,
       recipientEmail: this.adminInbox,
       notificationType: 'admin_alert',
-      subject: adminSubject,
+      subject: `[NEW ENTERPRISE INQUIRY] ${request.referenceCode} — ${request.company}`,
       htmlBody: adminHtml,
       textBody: adminText,
+      replyTo: request.email,
+      correlationId,
     });
 
-    const adminStatus =
-      adminOutbox.record.status === 'sent'
-        ? 'sent'
-        : await this.dispatchOutboxItem(adminOutbox.record, correlationId);
-
-    const overallStatus: 'sent' | 'failed' | 'unconfigured' =
+    const overallStatus =
       customerStatus === 'sent' && adminStatus === 'sent'
         ? 'sent'
-        : customerStatus === 'unconfigured' || adminStatus === 'unconfigured'
+        : customerStatus === 'unconfigured' && adminStatus === 'unconfigured'
         ? 'unconfigured'
         : 'failed';
 
-    await this.db.updateSolutionRequestEmailStatus(requestRecord.referenceCode, overallStatus);
+    await this.db.updateSolutionRequestEmailStatus(request.referenceCode, overallStatus);
 
     return { customerStatus, adminStatus, overallStatus };
   }
 
+  public async sendSolutionRequestNotifications(
+    request: SolutionRequestRecord,
+    correlationId?: string
+  ) {
+    return this.enqueueAndSendSolutionRequestEmails(request, correlationId);
+  }
+
   public async enqueueAndSendAppointmentEmails(
     appointment: AppointmentRecord,
-    correlationId?: string
+    correlationId?: string,
+    kind: 'created' | 'rescheduled' | 'cancelled' = 'created'
   ): Promise<{
-    customerStatus: EmailOutboxRecord['status'];
-    adminStatus: EmailOutboxRecord['status'];
+    customerStatus: 'sent' | 'failed' | 'unconfigured';
+    adminStatus: 'sent' | 'failed' | 'unconfigured';
   }> {
-    const isConfirmedCalendar = appointment.status === 'confirmed';
-    const statusLabel = isConfirmedCalendar
-      ? 'Calendar Appointment Confirmed'
-      : 'Pending Scheduling Request';
+    const isConfirmed = appointment.status === 'confirmed';
+    const statusLabel =
+      kind === 'cancelled'
+        ? 'Cancelled'
+        : isConfirmed
+        ? 'Confirmed Calendar Appointment'
+        : 'Pending Scheduling Request';
 
-    const subject = `Destria Tech Inc Consultation (${statusLabel}) [${appointment.referenceCode}]`;
-    const htmlBody = `
-      <div style="font-family:Inter,Arial,sans-serif;background:#111827;color:#E2E8F0;padding:24px;border-radius:12px;">
-        ${renderOfficialEmailHeader(statusLabel)}
-        <p>Reference Code: <strong>${escapeHtml(appointment.referenceCode)}</strong></p>
-        <p>Client: ${escapeHtml(appointment.fullName)} (${escapeHtml(appointment.companyName)})<br/>
-        Date: ${escapeHtml(appointment.scheduledDate)}<br/>
-        Time Slot: ${escapeHtml(appointment.scheduledTimeSlot)} (${escapeHtml(appointment.clientTimezone)})<br/>
-        Channel: ${escapeHtml(appointment.consultationType)}</p>
+    const customerHtml = renderEmailShell(
+      `Consultation ${statusLabel} — ${appointment.referenceCode}`,
+      `CONSULTATION ${statusLabel.toUpperCase()}`,
+      `
+      <p style="margin:0 0 14px;font-size:15px;color:#FFFFFF;">Hello ${escapeHtml(appointment.fullName)},</p>
+      <p style="margin:0 0 16px;font-size:13px;line-height:1.6;color:#CBD5E1;">
         ${
-          appointment.meetingLink
-            ? `<p>Meeting Link: <a href="${escapeHtml(appointment.meetingLink)}">${escapeHtml(appointment.meetingLink)}</a></p>`
-            : `<p>A coordinator will confirm calendar invitation details with you shortly.</p>`
+          kind === 'cancelled'
+            ? 'Your consultation request has been marked as cancelled and the reserved time slot has been released.'
+            : isConfirmed
+            ? 'Your consultation has been confirmed and synchronized with our executive calendar.'
+            : 'Your consultation scheduling request has been securely recorded. Our solutions coordinator will confirm your session and send final meeting details shortly.'
         }
-      </div>
-    `;
-    const textBody = [
-      `${statusLabel}: ${appointment.referenceCode}`,
-      `Client: ${appointment.fullName} (${appointment.companyName})`,
-      `Date: ${appointment.scheduledDate} | Slot: ${appointment.scheduledTimeSlot} (${appointment.clientTimezone})`,
-      `Channel: ${appointment.consultationType}`,
-      appointment.meetingLink ? `Meeting Link: ${appointment.meetingLink}` : 'Meeting link / final confirmation will be issued upon calendar review.',
-    ].join('\n');
+      </p>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="6" style="font-size:13px;color:#CBD5E1;background-color:#0B1220;border:1px solid #1E293B;border-radius:10px;">
+        <tr><td style="color:#94A3B8;">Reference:</td><td style="font-family:monospace;color:#00C2C7;font-weight:700;">${escapeHtml(appointment.referenceCode)}</td></tr>
+        <tr><td style="color:#94A3B8;">Status:</td><td style="font-weight:700;color:#FFFFFF;">${escapeHtml(statusLabel)}</td></tr>
+        <tr><td style="color:#94A3B8;">Date:</td><td>${escapeHtml(appointment.scheduledDate)}</td></tr>
+        <tr><td style="color:#94A3B8;">Time Slot:</td><td>${escapeHtml(appointment.scheduledTimeSlot)} (${escapeHtml(appointment.clientTimezone)})</td></tr>
+        <tr><td style="color:#94A3B8;">Channel:</td><td>${escapeHtml(appointment.consultationType.toUpperCase())}</td></tr>
+        ${appointment.meetingLink ? `<tr><td style="color:#94A3B8;">Meeting Link:</td><td><a href="${escapeHtml(appointment.meetingLink)}" style="color:#00C2C7;">${escapeHtml(appointment.meetingLink)}</a></td></tr>` : ''}
+        ${appointment.meetingLocation ? `<tr><td style="color:#94A3B8;">Reference Location:</td><td>${escapeHtml(appointment.meetingLocation)}</td></tr>` : ''}
+      </table>
+      <p style="margin:16px 0 0;font-size:12px;color:#94A3B8;">
+        Corporate Telephone: <a href="${escapeHtml(corporateIdentity.contact.telephone.href)}" style="color:#00C2C7;text-decoration:none;">${escapeHtml(corporateIdentity.contact.telephone.display)}</a> &middot; Email: <a href="mailto:${escapeHtml(corporateIdentity.contact.email)}" style="color:#00C2C7;text-decoration:none;">${escapeHtml(corporateIdentity.contact.email)}</a>
+      </p>`
+    );
 
-    const custOutbox = await this.db.createOutboxRecord({
-      dedupeKey: `apt-cust-${appointment.referenceCode}`,
+    const customerText = `${corporateIdentity.legalName} Consultation (${statusLabel})\nReference: ${appointment.referenceCode}\nDate: ${appointment.scheduledDate} ${appointment.scheduledTimeSlot} (${appointment.clientTimezone})\nChannel: ${appointment.consultationType}${appointment.meetingLink ? `\nMeeting Link: ${appointment.meetingLink}` : ''}\nTelephone: ${corporateIdentity.contact.telephone.display}\nEmail: ${corporateIdentity.contact.email}\nHeadquarters: ${corporateIdentity.headquarters.fullAddress}`;
+
+    const adminHtml = renderEmailShell(
+      `Consultation ${kind.toUpperCase()}: ${appointment.referenceCode}`,
+      'EXECUTIVE CONSULTATION ALERT',
+      `
+      <p style="margin:0 0 12px;font-size:14px;color:#FFFFFF;">Consultation ${escapeHtml(kind)}: <strong>${escapeHtml(appointment.referenceCode)}</strong> (${escapeHtml(statusLabel)})</p>
+      <p style="font-size:13px;color:#CBD5E1;">
+        Client: ${escapeHtml(appointment.fullName)} (${escapeHtml(appointment.companyName)})<br/>
+        Email: ${escapeHtml(appointment.email)} | Phone: ${escapeHtml(appointment.phone)}<br/>
+        Slot: ${escapeHtml(appointment.scheduledDate)} ${escapeHtml(appointment.scheduledTimeSlot)}<br/>
+        Channel: ${escapeHtml(appointment.consultationType.toUpperCase())} | Calendar Sync: ${escapeHtml(appointment.calendarSyncStatus)}
+      </p>`
+    );
+
+    const adminText = `Consultation ${kind}: ${appointment.referenceCode} (${statusLabel})\nClient: ${appointment.fullName} <${appointment.email}> | ${appointment.phone}\nDate/Slot: ${appointment.scheduledDate} ${appointment.scheduledTimeSlot}`;
+
+    const dedupeSuffix = kind === 'created' ? 'created' : `${kind}:${Date.now()}`;
+    const notifType = kind === 'created' ? 'appointment_request' : 'appointment_update';
+
+    const customerStatus = await this.enqueueAndDispatch({
+      dedupeKey: `apt:${appointment.referenceCode}:customer:${dedupeSuffix}`,
       entityType: 'appointment',
       entityReference: appointment.referenceCode,
       recipientEmail: appointment.email,
-      notificationType: 'appointment_request',
-      subject,
-      htmlBody,
-      textBody,
+      notificationType: notifType,
+      subject: `[${appointment.referenceCode}] ${corporateIdentity.legalName} — Consultation ${statusLabel}`,
+      htmlBody: customerHtml,
+      textBody: customerText,
+      replyTo: this.adminInbox,
+      correlationId,
     });
-    const customerStatus =
-      custOutbox.record.status === 'sent'
-        ? 'sent'
-        : await this.dispatchOutboxItem(custOutbox.record, correlationId);
 
-    const admOutbox = await this.db.createOutboxRecord({
-      dedupeKey: `apt-adm-${appointment.referenceCode}`,
+    const adminStatus = await this.enqueueAndDispatch({
+      dedupeKey: `apt:${appointment.referenceCode}:admin:${dedupeSuffix}`,
       entityType: 'appointment',
       entityReference: appointment.referenceCode,
       recipientEmail: this.adminInbox,
       notificationType: 'admin_alert',
-      subject: `[Consultation Request] ${appointment.referenceCode} — ${appointment.scheduledDate} ${appointment.scheduledTimeSlot}`,
-      htmlBody,
-      textBody,
+      subject: `[CONSULTATION ${kind.toUpperCase()}] ${appointment.referenceCode} — ${appointment.scheduledDate} ${appointment.scheduledTimeSlot}`,
+      htmlBody: adminHtml,
+      textBody: adminText,
+      replyTo: appointment.email,
+      correlationId,
     });
-    const adminStatus =
-      admOutbox.record.status === 'sent'
-        ? 'sent'
-        : await this.dispatchOutboxItem(admOutbox.record, correlationId);
 
     return { customerStatus, adminStatus };
   }
 
   public async processRetryQueue(limit = 20): Promise<number> {
-    const items = await this.db.listRetryableOutbox(limit);
+    if (!this.db.isConfigured || !this.transport.isConfigured) return 0;
+    const retryable = await this.db.listRetryableOutbox(limit);
     let processed = 0;
-    for (const item of items) {
-      await this.dispatchOutboxItem(item);
+
+    for (const item of retryable) {
+      const result = await this.transport.send({
+        to: item.recipientEmail,
+        subject: item.subject,
+        html: item.htmlBody,
+        text: item.textBody,
+      });
+
+      const attempts = item.deliveryAttempts + 1;
+      if (result.status === 'sent') {
+        await this.db.updateOutboxStatus(item.id, {
+          status: 'sent',
+          providerReference: result.providerReference,
+          deliveryAttempts: attempts,
+          sentAt: new Date().toISOString(),
+          nextRetryAt: null,
+        });
+        logStructured('info', 'email_dispatched', {
+          entityType: item.entityType,
+          entityReference: item.entityReference,
+          notificationType: item.notificationType,
+          recipientEmail: item.recipientEmail,
+          providerReference: result.providerReference,
+        });
+      } else if (result.status === 'failed') {
+        const nextRetryAt =
+          attempts >= 5
+            ? null
+            : new Date(Date.now() + Math.min(60, Math.pow(2, attempts)) * 60 * 1000).toISOString();
+        await this.db.updateOutboxStatus(item.id, {
+          status: 'failed',
+          deliveryAttempts: attempts,
+          lastError: result.error,
+          nextRetryAt,
+        });
+      }
       processed += 1;
     }
+
     return processed;
   }
+
+  public async sendAppointmentNotifications(
+    appointment: AppointmentRecord,
+    kind: 'created' | 'rescheduled' | 'cancelled',
+    correlationId?: string
+  ) {
+    return this.enqueueAndSendAppointmentEmails(appointment, correlationId, kind);
+  }
 }
+
+export const NotificationEmailService = TransactionalEmailService;

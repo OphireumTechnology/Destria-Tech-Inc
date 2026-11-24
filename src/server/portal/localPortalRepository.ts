@@ -1,12 +1,15 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { corporateIdentity } from '../../data/companyConfig';
 import {
+  ApprovedProposalRecord,
   ClientActivityLogRecord,
   ClientAddressRecord,
   CreditTransactionRecord,
   CreditTransactionType,
   CreditWalletRecord,
+  USD_TO_PHP_REFERENCE_RATE,
   CustomPackageInquiryRecord,
   DiscountCodeRecord,
   InvoiceRecord,
@@ -50,6 +53,7 @@ interface PortalStoreState {
   products: ProductRecord[];
   discountCodes: DiscountCodeRecord[];
   customInquiries: CustomPackageInquiryRecord[];
+  approvedProposals: ApprovedProposalRecord[];
   carts: ShoppingCartRecord[];
   orders: OrderRecord[];
   payments: PaymentRecord[];
@@ -74,6 +78,7 @@ interface PortalStoreState {
     ticket: number;
     revision: number;
     inquiry: number;
+    proposal: number;
   };
 }
 
@@ -100,6 +105,7 @@ function createEmptyState(): PortalStoreState {
     products: structuredClone(PORTAL_INITIAL_PRODUCTS),
     discountCodes: structuredClone(PORTAL_DISCOUNT_CODES),
     customInquiries: [],
+    approvedProposals: [],
     carts: [],
     orders: [],
     payments: [],
@@ -117,7 +123,7 @@ function createEmptyState(): PortalStoreState {
     supportTickets: [],
     notifications: [],
     activities: [],
-    counters: { order: 1000, invoice: 1000, project: 100, ticket: 100, revision: 1, inquiry: 100 },
+    counters: { order: 1000, invoice: 1000, project: 100, ticket: 100, revision: 1, inquiry: 100, proposal: 100 },
   };
 }
 
@@ -620,6 +626,100 @@ export class LocalPortalRepository implements PortalRepository {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  // ---- Server-Authorized Commercial Proposals ----
+  async createApprovedProposal(input: {
+    userId: string;
+    inquiryId?: string;
+    title: string;
+    scopeSummary: string;
+    currency: PortalCurrency;
+    items: Array<{
+      productId: string;
+      packageId: string;
+      productSlug: string;
+      productName: string;
+      packageName: string;
+      billingType: 'one_time' | 'subscription_monthly' | 'credit_pack';
+      quantity: number;
+      unitPriceMinor: number;
+      creditsAllocated: number;
+      revisionLimit: number;
+    }>;
+    issuedBy?: string;
+    expiresInDays?: number;
+  }): Promise<ApprovedProposalRecord> {
+    this.state.counters.proposal += 1;
+    const ts = this.now();
+    const hydratedItems = input.items.map((item) => ({
+      ...item,
+      id: crypto.randomUUID(),
+      lineTotalMinor: item.unitPriceMinor * item.quantity,
+    }));
+    const subtotalMinor = hydratedItems.reduce((sum, item) => sum + item.lineTotalMinor, 0);
+    const taxMinor = 0;
+    const totalMinor = subtotalMinor + taxMinor;
+    const expiresAt = new Date(
+      Date.now() + (input.expiresInDays ?? 30) * 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    const record: ApprovedProposalRecord = {
+      id: crypto.randomUUID(),
+      proposalNumber: `DTI-PROP-${new Date().getFullYear()}-${String(this.state.counters.proposal).padStart(4, '0')}`,
+      userId: input.userId,
+      inquiryId: input.inquiryId,
+      title: input.title,
+      scopeSummary: input.scopeSummary,
+      currency: input.currency,
+      fxRateSnapshot: USD_TO_PHP_REFERENCE_RATE,
+      subtotalMinor,
+      taxMinor,
+      totalMinor,
+      status: 'approved',
+      items: hydratedItems,
+      issuedBy: input.issuedBy || `${corporateIdentity.legalName} Commercial Review Desk`,
+      issuedAt: ts,
+      expiresAt,
+    };
+
+    this.state.approvedProposals.push(record);
+    await this.addNotification({
+      userId: input.userId,
+      type: 'order_created',
+      title: `Formal Commercial Proposal ${record.proposalNumber}`,
+      body: `Your approved customized enterprise proposal "${record.title}" is ready for review inside your Client Portal.`,
+      linkPath: '/portal/cart',
+    });
+    this.persist();
+    return record;
+  }
+
+  async listApprovedProposals(userId: string): Promise<ApprovedProposalRecord[]> {
+    return this.state.approvedProposals
+      .filter((p) => p.userId === userId)
+      .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
+  }
+
+  async getApprovedProposalById(userId: string, proposalId: string): Promise<ApprovedProposalRecord | null> {
+    return (
+      this.state.approvedProposals.find((p) => p.id === proposalId && p.userId === userId) || null
+    );
+  }
+
+  async markProposalAccepted(
+    userId: string,
+    proposalId: string,
+    orderId: string
+  ): Promise<ApprovedProposalRecord | null> {
+    const proposal = this.state.approvedProposals.find(
+      (p) => p.id === proposalId && p.userId === userId
+    );
+    if (!proposal) return null;
+    proposal.status = 'accepted';
+    proposal.acceptedOrderId = orderId;
+    this.persist();
+    return proposal;
+  }
+
   // ---- Cart ----
   async getCart(userId: string): Promise<ShoppingCartRecord> {
     let cart = this.state.carts.find((c) => c.userId === userId);
@@ -686,10 +786,10 @@ export class LocalPortalRepository implements PortalRepository {
       totalMinor: input.totalMinor,
       paymentStatus: input.paymentStatus,
       issuingCompany: {
-        name: process.env.DESTRIA_LEGAL_NAME || 'DESTRIA TECH INC',
-        registrationNo: process.env.DESTRIA_REGISTRATION_NO || 'DESTRIA NETWORK',
-        address: process.env.DESTRIA_REGISTERED_ADDRESS || '',
-        email: process.env.DESTRIA_CORPORATE_EMAIL || '',
+        name: process.env.DESTRIA_LEGAL_NAME || corporateIdentity.legalName,
+        registrationNo: process.env.DESTRIA_REGISTRATION_NO || corporateIdentity.networkName,
+        address: process.env.DESTRIA_REGISTERED_ADDRESS || corporateIdentity.headquarters.fullAddress,
+        email: process.env.DESTRIA_CORPORATE_EMAIL || corporateIdentity.contact.email,
       },
       clientBilling: input.billingDetails,
       lineItems: order.items.map((item) => ({

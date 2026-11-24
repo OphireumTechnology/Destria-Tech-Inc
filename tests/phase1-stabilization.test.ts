@@ -445,10 +445,20 @@ test('4-8. Solution request lifecycle: valid submission, restart persistence, id
     assert.equal(createdJson.success, true);
     assert.match(createdJson.referenceId, /^OPM-SOL-\d{4}-/);
     assert.equal(createdJson.deduplicated, false);
-    // Server computes authoritative sum: essential-digital-presence ($897) + ai-concierge-elite ($447 + $147/mo) = $1,344 + $147/mo
-    assert.equal(createdJson.inquiry.estimatedOneTimeStartingUsd, 1344);
-    assert.equal(createdJson.inquiry.estimatedMonthlyStartingUsd, 147);
+    // Server enforces zero-public-pricing policy: tampered amounts are discarded and commercial scope is subject to formal assessment
+    assert.equal(createdJson.inquiry.estimatedOneTimeStartingUsd, 0);
+    assert.equal(createdJson.inquiry.estimatedMonthlyStartingUsd, 0);
+    assert.equal(createdJson.inquiry.estimatedBudget, 'Subject to Formal Assessment');
     assert.equal(createdJson.emailDelivery.overallStatus, 'sent');
+    assert.ok(store.outbox.length >= 2);
+    for (const emailItem of store.outbox) {
+      assert.equal(/\$\s*\d|₱\s*\d/i.test(emailItem.htmlBody), false, 'New inquiry emails must not contain service pricing');
+      assert.equal(/\$\s*\d|₱\s*\d/i.test(emailItem.textBody), false, 'New inquiry text emails must not contain service pricing');
+      assert.ok(
+        emailItem.textBody.includes('+1 (307) 419-4277') || emailItem.htmlBody.includes('+1 (307) 419-4277'),
+        'New inquiry emails should include official corporate telephone'
+      );
+    }
     createdReference = createdJson.referenceId;
 
     // 6. Duplicate idempotencyKey returns original record cleanly without duplicating rows
@@ -698,7 +708,9 @@ test('13-14. AI Consultant deterministic grounding without GEMINI_API_KEY, input
     });
     assert.equal(chatRes.status, 200);
     const chatJson = await chatRes.json();
-    assert.ok(chatJson.replyText.includes('starting investments'));
+    assert.equal(/\$\s*\d|₱\s*\d/i.test(chatJson.replyText), false, 'AI reply must never disclose service pricing');
+    assert.ok(chatJson.replyText.includes('+1 (307) 419-4277'));
+    assert.ok(chatJson.replyText.includes('info@destriatech.com'));
     assert.ok(Array.isArray(chatJson.recommendedServiceIds));
 
     // 14. Honeypot & invalid inquiry payloads return 400

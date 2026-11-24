@@ -75,8 +75,8 @@ export const PortalOrdersPage: React.FC = () => {
 
   return (
     <PortalLayout
-      title="My Orders"
-      subtitle="Track order confirmation, payment verification, fulfillment milestones, and receipts."
+      title="Authorized Orders"
+      subtitle="Historical and active engagement orders created from approved DESTRIA TECH INC proposals."
     >
       <div className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
         <div className="p-4 border-b border-[#E6E2D8] flex flex-wrap items-center justify-between gap-3">
@@ -86,7 +86,7 @@ export const PortalOrdersPage: React.FC = () => {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search order number or service..."
+              placeholder="Search order number or engagement..."
               className="w-full pl-9 pr-3 py-2 text-sm bg-[#FAF8F4] border border-[#E6E2D8] rounded-lg focus:outline-none focus:border-[#0F4C3A]"
             />
           </div>
@@ -108,23 +108,23 @@ export const PortalOrdersPage: React.FC = () => {
               onClick={() => navigate('/portal/store')}
               className="px-3.5 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
             >
-              New Order
+              Initiate Service Inquiry
             </button>
           </div>
         </div>
 
         {loading ? (
-          <div className="p-10 text-center text-sm text-[#64748B]">Loading orders...</div>
+          <div className="p-10 text-center text-sm text-[#64748B]">Loading authorized orders...</div>
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center space-y-3">
             <ShoppingBag className="w-8 h-8 text-[#94A3B8] mx-auto" />
-            <p className="text-sm font-semibold text-[#0F1D36]">No matching orders found</p>
+            <p className="text-sm font-semibold text-[#0F1D36]">No matching authorized orders found</p>
             <button
               type="button"
               onClick={() => navigate('/portal/store')}
               className="px-4 py-2 rounded-lg bg-[#0F4C3A] text-white text-xs font-semibold cursor-pointer"
             >
-              Explore Service Store
+              Explore Solutions Directory
             </button>
           </div>
         ) : (
@@ -521,8 +521,8 @@ export const PortalCreditsPage: React.FC = () => {
 
   return (
     <PortalLayout
-      title="Credits & Usage"
-      subtitle="Immutable credit ledger. Credits are allocated strictly upon server-verified payment confirmation."
+      title="Authorized Credits & Ledger"
+      subtitle="Immutable credit ledger preserving existing allocations and contract-authorized credit entitlements."
     >
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
@@ -544,15 +544,15 @@ export const PortalCreditsPage: React.FC = () => {
         <div className="px-5 py-4 border-b border-[#E6E2D8] flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-[#0F1D36]">Credit Transaction Ledger</h2>
-            <p className="text-xs text-[#64748B]">Append-only record of allocations, service redemptions, and adjustments.</p>
+            <p className="text-xs text-[#64748B]">Append-only audit record of authorized allocations, redemptions, and adjustments.</p>
           </div>
           <button
             type="button"
-            onClick={() => navigate('/portal/store?category=subscription-credit-packages')}
+            onClick={() => navigate('/portal/store')}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
           >
             <Coins className="w-3.5 h-3.5" />
-            <span>Purchase Credit Package</span>
+            <span>Request a Formal Proposal</span>
           </button>
         </div>
 
@@ -560,7 +560,7 @@ export const PortalCreditsPage: React.FC = () => {
           <div className="p-8 text-center text-sm text-[#64748B]">Loading ledger...</div>
         ) : transactions.length === 0 ? (
           <div className="p-10 text-center text-sm text-[#64748B]">
-            No credit transactions recorded yet. Purchase a verified credit package to populate your ledger.
+            No credit transactions recorded yet. Credit allocations appear once authorized under a formal commercial agreement.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -644,30 +644,30 @@ export const PortalSubscriptionsPage: React.FC = () => {
 
   return (
     <PortalLayout
-      title="Subscriptions"
-      subtitle="Manage recurring monthly creative plans, billing cycles, and renewal preferences."
+      title="Authorized Retainers & Subscriptions"
+      subtitle="Manage existing recurring enterprise retainers and executed subscription obligations."
     >
       <div className="mb-5 flex justify-end">
         <button
           type="button"
-          onClick={() => navigate('/portal/store?category=subscription-credit-packages')}
+          onClick={() => navigate('/portal/store')}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
         >
-          <span>Compare Subscription Plans</span>
+          <span>Request a Formal Proposal</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {loading ? (
         <div className="bg-white border border-[#E6E2D8] rounded-xl p-10 text-center text-sm text-[#64748B]">
-          Loading subscriptions...
+          Loading authorized retainers...
         </div>
       ) : subscriptions.length === 0 ? (
         <div className="bg-white border border-[#E6E2D8] rounded-xl p-10 text-center space-y-3">
           <RefreshCw className="w-8 h-8 text-[#94A3B8] mx-auto" />
-          <p className="text-sm font-semibold text-[#0F1D36]">No active or pending subscriptions</p>
+          <p className="text-sm font-semibold text-[#0F1D36]">No active or pending enterprise retainers</p>
           <p className="text-xs text-[#64748B] max-w-md mx-auto">
-            Explore our Starter, Creator, Professional, Business, or Custom Enterprise retainer plans in the Service Store.
+            Recurring enterprise managed services and support retainers are structured strictly through formal consultation and approved commercial proposals.
           </p>
         </div>
       ) : (
@@ -678,7 +678,7 @@ export const PortalSubscriptionsPage: React.FC = () => {
                 <div>
                   <h3 className="text-base font-semibold text-[#0F1D36]">{sub.planName}</h3>
                   <p className="font-mono text-sm text-[#0F4C3A] font-semibold mt-0.5">
-                    {formatMoney(sub.amountMinor, sub.currency)} / month
+                    {formatMoney(sub.amountMinor, sub.currency)} / cycle (Authorized Contract)
                   </p>
                 </div>
                 <span className={`text-xs ${statusToneClass(sub.status)}`}>
@@ -702,10 +702,10 @@ export const PortalSubscriptionsPage: React.FC = () => {
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() => navigate('/portal/store?category=subscription-credit-packages')}
+                  onClick={() => navigate('/portal/store')}
                   className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
                 >
-                  Upgrade / Change Plan
+                  Request Scope Amendment
                 </button>
                 {sub.status !== 'cancelled' && (
                   <button
@@ -713,7 +713,7 @@ export const PortalSubscriptionsPage: React.FC = () => {
                     onClick={() => setCancelTarget(sub)}
                     className="text-xs font-semibold text-[#B91C1C] hover:underline cursor-pointer"
                   >
-                    Cancel Subscription
+                    Cancel Retainer
                   </button>
                 )}
               </div>

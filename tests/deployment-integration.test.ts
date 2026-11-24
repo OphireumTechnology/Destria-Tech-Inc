@@ -243,6 +243,14 @@ test('Centralized API client resolves Railway production, VITE_API_BASE_URL over
     PRODUCTION_RAILWAY_API_URL
   );
   assert.equal(
+    resolveApiBaseUrl({ envBaseUrl: '', hostname: 'destriatech.com' }),
+    PRODUCTION_RAILWAY_API_URL
+  );
+  assert.equal(
+    resolveApiBaseUrl({ envBaseUrl: '', hostname: 'www.destriatech.com' }),
+    PRODUCTION_RAILWAY_API_URL
+  );
+  assert.equal(
     resolveApiBaseUrl({ envBaseUrl: '', hostname: 'ophireumtechnology.github.io' }),
     PRODUCTION_RAILWAY_API_URL
   );
@@ -307,19 +315,29 @@ test('Backend CORS allows authorized OPHIREUM origins, blocks unauthorized githu
     assert.equal(roguePreflight.status, 403);
     assert.equal(roguePreflight.headers.get('access-control-allow-origin'), null);
 
-    // 3. Cross-origin AI Consultant check
+    // 1b. Verify official destriatech.com CORS origin is allowed
+    const destriaHealth = await fetch(`${baseUrl}/api/health`, {
+      headers: { Origin: 'https://destriatech.com' },
+    });
+    assert.equal(destriaHealth.status, 200);
+    assert.equal(destriaHealth.headers.get('access-control-allow-origin'), 'https://destriatech.com');
+
+    // 3. Cross-origin AI Consultant check (must enforce zero public pricing policy)
     const aiRes = await fetch(`${baseUrl}/api/consultant/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Origin: 'https://ophireummultimedia.com',
+        Origin: 'https://destriatech.com',
       },
       body: JSON.stringify({ userMessage: 'Tell me about Essential Digital Presence pricing.' }),
     });
     assert.equal(aiRes.status, 200);
-    assert.equal(aiRes.headers.get('access-control-allow-origin'), 'https://ophireummultimedia.com');
+    assert.equal(aiRes.headers.get('access-control-allow-origin'), 'https://destriatech.com');
     const aiJson = await aiRes.json();
-    assert.ok(aiJson.replyText.includes('$897'));
+    assert.equal(aiJson.replyText.includes('$897'), false);
+    assert.equal(/\$\s*\d|₱\s*\d/i.test(aiJson.replyText), false);
+    assert.ok(aiJson.replyText.includes('+1 (307) 419-4277'));
+    assert.ok(aiJson.replyText.includes('info@destriatech.com'));
 
     // 4. Cross-origin Inquiry Submission -> Admin Login -> Admin Dashboard Read
     const inqRes = await fetch(`${baseUrl}/api/inquiries`, {
@@ -411,21 +429,20 @@ test('Deployment configuration & frontend secret isolation checks pass', () => {
   }
 });
 
-test('Pages clean portal entry generation and legacy URL migration', () => {
-  const html = fs.readFileSync('index.html', 'utf8');
+test('Pages portal recovery preserves nested paths and query strings on both hosting origins', () => {
+  const html = fs.readFileSync('public/404.html', 'utf8');
   const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(script);
   for (const [hostname, prefix] of [['destriatech.com', ''], ['www.destriatech.com', ''], ['ophireumtechnology.github.io', '/Destria-Tech-Inc']]) {
     let destination = '';
-    const base = { href: '' };
-    const location = { hostname, pathname: prefix + '/', hash: '#/portal/login?next=dashboard' };
-    new Function('location', 'document', 'history', script)(location, { querySelector: () => base }, { replaceState: (_a: unknown, _b: unknown, v: string) => { destination = v; } });
-    assert.equal(destination, prefix + '/portal/login?next=dashboard');
-    assert.equal(base.href, prefix + '/');
+    const location = { hostname, pathname: prefix + '/portal/login', search: '?next=dashboard', replace: (v: string) => { destination = v; } };
+    new Function('location', script)(location);
+    assert.equal(destination, prefix + '/#/portal/login?next=dashboard');
+    destination = '';
+    location.pathname = prefix + '/missing';
+    new Function('location', script)(location);
+    assert.equal(destination, '');
   }
   const router = fs.readFileSync('src/portal/PortalRouter.tsx', 'utf8');
-  assert.ok(router.includes('hostingPrefix() + cleanTarget'));
-  const generator = fs.readFileSync('scripts/build-pages-routes.mjs', 'utf8');
-  assert.ok(generator.includes("'forgot-password'"));
-  assert.ok(generator.includes("'dist/404.html'"));
+  assert.ok(router.includes("['destriatech.com', 'www.destriatech.com'].includes(window.location.hostname)"));
 });

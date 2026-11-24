@@ -302,7 +302,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                 )}
                 {submittedResult.appointment.meetingLocation && (
                   <div className="py-1">
-                    <span className="text-slate-400 block text-[10px]">Office Location:</span>
+                    <span className="text-slate-400 block text-[10px]">Corporate Reference:</span>
                     <span className="text-white">{submittedResult.appointment.meetingLocation}</span>
                   </div>
                 )}
@@ -399,9 +399,9 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                     }`}
                   >
                     <Building className="w-4 h-4 text-[#C0C7D1] mb-1.5" />
-                    <div className="font-bold text-white text-xs">In-Person</div>
+                    <div className="font-bold text-white text-xs">Executive Briefing</div>
                     <div className="text-[10px] text-slate-400 mt-0.5">
-                      {COMPANY_CONFIG.registeredAddress || 'Corporate Office (Confirmed Upon Scheduling)'}
+                      Arranged strictly by prior appointment with corporate leadership
                     </div>
                   </button>
                 </div>

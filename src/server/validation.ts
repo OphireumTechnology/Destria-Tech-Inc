@@ -1,18 +1,24 @@
-import { SERVICE_CATALOG, computeConfiguredServiceTotal } from '../data/serviceCatalog';
-import { servicesData } from '../data/servicesData';
+import {
+  getCatalogServiceById,
+  SERVICE_CATALOG,
+} from '../data/serviceCatalog';
+import { AVAILABLE_SLOTS } from '../services/supabaseService';
 import { CatalogService } from '../types';
 
+export const ALLOWED_APPOINTMENT_SLOTS = AVAILABLE_SLOTS;
+
 export interface ValidatedInquiryPayload {
-  type: 'contact_form' | 'solution_builder';
+  idempotencyKey?: string;
+  type: 'solution_builder' | 'contact_inquiry';
   fullName: string;
   email: string;
   contactNumber: string;
   company: string;
   industry?: string;
   targetTimeline?: string;
-  idempotencyKey?: string;
-  matchedCatalogServices: CatalogService[];
+  selectedServices: string[];
   selectedServiceIds: string[];
+  matchedCatalogServices: CatalogService[];
   selectedOptionsMap: Record<string, string[]>;
   serviceId: string;
   serviceTitle: string;
@@ -20,13 +26,14 @@ export interface ValidatedInquiryPayload {
   estimatedMonthlyStartingUsd: number;
   estimatedBudget: string;
   preferredCurrency: 'USD' | 'PHP';
-  phpConversionRate?: number;
+  phpConversionRate: number;
   projectDescription: string;
   fileName?: string;
   privacyConsent: boolean;
 }
 
 export interface ValidatedAppointmentPayload {
+  idempotencyKey?: string;
   fullName: string;
   email: string;
   phone: string;
@@ -35,201 +42,218 @@ export interface ValidatedAppointmentPayload {
   consultationType: 'video' | 'phone' | 'in_person';
   scheduledDate: string;
   scheduledTimeSlot: string;
+  durationMinutes: number;
   clientTimezone: string;
-  idempotencyKey?: string;
   notes?: string;
 }
 
-export const ALLOWED_APPOINTMENT_SLOTS = [
-  '09:00 AM - 09:30 AM',
-  '10:00 AM - 10:30 AM',
-  '11:00 AM - 11:30 AM',
-  '01:30 PM - 02:00 PM',
-  '02:30 PM - 03:00 PM',
-  '03:30 PM - 04:00 PM',
-  '04:30 PM - 05:00 PM',
-] as const;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const ALLOWED_CONSULTATION_TYPES = new Set(['video', 'phone', 'in_person']);
 
-export function stripControlChars(input: string): string {
-  return input.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim();
-}
-
-export function sanitizePlainText(input: unknown, maxLen: number): string {
-  if (typeof input !== 'string') return '';
-  return stripControlChars(input)
-    .replace(/[<>]/g, '')
+export function sanitizeText(value: unknown, maxLen: number): string {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .trim()
     .slice(0, maxLen);
 }
 
-export function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+export const sanitizePlainText = sanitizeText;
+
+export function isValidEmail(email: string): boolean {
+  return email.length <= 254 && EMAIL_REGEX.test(email);
 }
 
-const EMAIL_REGEX = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
-const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-const UUID_OR_KEY_REGEX = /^[a-zA-Z0-9\-_]{8,128}$/;
+export function sanitizeChatInput(raw: unknown):
+  | {
+      ok: true;
+      userMessage: string;
+      language: string;
+      history: Array<{ sender: 'user' | 'ai'; text: string }>;
+      stateContext: {
+        category?: string;
+        businessProblem?: string;
+        currentStage?: string;
+      };
+    }
+  | { ok: false; error: string } {
+  if (!raw || typeof raw !== 'object') {
+    return { ok: false, error: 'Request body must be a JSON object.' };
+  }
+  const body = raw as Record<string, unknown>;
+  const userMessage = sanitizeText(body.userMessage, 1500);
+  if (!userMessage) {
+    return { ok: false, error: 'userMessage is required and must be a non-empty string.' };
+  }
 
+  const language = sanitizeText(body.language, 16) || 'en-US';
+  const rawHistory = Array.isArray(body.conversationHistory) ? body.conversationHistory : [];
+  const history: Array<{ sender: 'user' | 'ai'; text: string }> = [];
+  for (const item of rawHistory.slice(-20)) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    const sender = entry.sender === 'ai' ? 'ai' : 'user';
+    const text = sanitizeText(entry.text, 1500);
+    if (text) {
+      history.push({ sender, text });
+    }
+  }
+
+  const rawState =
+    body.stateContext && typeof body.stateContext === 'object'
+      ? (body.stateContext as Record<string, unknown>)
+      : {};
+
+  return {
+    ok: true,
+    userMessage,
+    language,
+    history,
+    stateContext: {
+      category: sanitizeText(rawState.category, 120) || undefined,
+      businessProblem: sanitizeText(rawState.businessProblem, 500) || undefined,
+      currentStage: sanitizeText(rawState.currentStage, 60) || undefined,
+    },
+  };
+}
+
+/**
+ * Validates and normalizes inquiry/solution-builder submissions.
+ * Enforces DESTRIA TECH INC's customized enterprise engagement policy:
+ *  - Verifies every requested service ID against the authoritative catalog.
+ *  - Rejects client-submitted price figures or automated cost calculations.
+ *  - Records engagement status strictly as "Subject to Formal Assessment".
+ */
 export function validateInquiryPayload(raw: unknown): {
   ok: true;
   data: ValidatedInquiryPayload;
 } | {
   ok: false;
   error: string;
+  errors: string[];
 } {
+  const errors: string[] = [];
   if (!raw || typeof raw !== 'object') {
-    return { ok: false, error: 'Invalid request payload.' };
+    return {
+      ok: false,
+      error: 'Request body must be a JSON object.',
+      errors: ['Request body must be a JSON object.'],
+    };
   }
   const body = raw as Record<string, unknown>;
 
-  // Honeypot spam filter
-  if (typeof body.websiteHoneypot === 'string' && body.websiteHoneypot.trim().length > 0) {
-    return { ok: false, error: 'Submission blocked by automated anti-spam verification.' };
-  }
-
-  const fullName = sanitizePlainText(body.fullName, 120);
-  const email = stripControlChars(typeof body.email === 'string' ? body.email : '').toLowerCase().slice(0, 180);
-  const contactNumber = sanitizePlainText(body.contactNumber, 40);
-  const company = sanitizePlainText(body.company, 140);
-  const projectDescription = sanitizePlainText(body.projectDescription, 4000);
-  const industry = sanitizePlainText(body.industry, 100) || undefined;
-  const targetTimeline = sanitizePlainText(body.targetTimeline, 120) || undefined;
-  const fileName = sanitizePlainText(body.fileName, 180) || undefined;
-  const privacyConsent = body.privacyConsent === true;
-
-  if (fullName.length < 2) {
-    return { ok: false, error: 'Full name is required (minimum 2 characters).' };
-  }
-  if (!EMAIL_REGEX.test(email)) {
-    return { ok: false, error: 'A valid business or personal email address is required.' };
-  }
-  if (contactNumber.length < 5 || !/[0-9]{5,}/.test(contactNumber.replace(/[^0-9]/g, ''))) {
-    return { ok: false, error: 'A valid contact phone number is required.' };
-  }
-  if (company.length < 2) {
-    return { ok: false, error: 'Company or organization name is required.' };
-  }
-  if (projectDescription.length < 20) {
-    return { ok: false, error: 'Please provide project scope details of at least 20 characters.' };
-  }
-  if (!privacyConsent) {
-    return { ok: false, error: 'Authorization under DESTRIA TECH INC confidentiality terms is required.' };
-  }
-
-  const type: 'contact_form' | 'solution_builder' =
-    body.type === 'solution_builder' ? 'solution_builder' : 'contact_form';
-
-  let idempotencyKey: string | undefined;
-  if (body.idempotencyKey !== undefined) {
-    if (typeof body.idempotencyKey !== 'string' || !UUID_OR_KEY_REGEX.test(body.idempotencyKey.trim())) {
-      return { ok: false, error: 'Invalid idempotencyKey format.' };
-    }
-    idempotencyKey = body.idempotencyKey.trim();
-  }
-
-  // Strictly validate service IDs against canonical SERVICE_CATALOG (and legacy servicesData for contact form)
-  const rawIds: string[] = Array.isArray(body.selectedServiceIds)
-    ? body.selectedServiceIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0).map((s) => s.trim())
-    : typeof body.serviceId === 'string' && body.serviceId.trim().length > 0
-    ? [body.serviceId.trim()]
-    : [];
-
-  const uniqueIds = Array.from(new Set(rawIds));
-
-  if (type === 'solution_builder' && uniqueIds.length === 0) {
-    return { ok: false, error: 'At least one valid catalog solution must be selected.' };
-  }
-
-  if (uniqueIds.length > 25) {
-    return { ok: false, error: 'Too many services selected in a single request (max 25).' };
-  }
-
-  const matchedCatalogServices: CatalogService[] = [];
-  const unknownIds: string[] = [];
-
-  for (const id of uniqueIds) {
-    const catalogSvc = SERVICE_CATALOG.find((s) => s.id === id);
-    if (catalogSvc) {
-      matchedCatalogServices.push(catalogSvc);
-    } else if (type === 'contact_form' && (servicesData.some((s) => s.id === id) || id === 'general-consultation')) {
-      // Legacy discipline selector on contact form allowed
-    } else {
-      unknownIds.push(id);
-    }
-  }
-
-  if (unknownIds.length > 0) {
+  // Honeypot anti-spam field must always be empty
+  const honeypot = sanitizeText(body.websiteHoneypot, 120);
+  if (honeypot.length > 0) {
     return {
       ok: false,
-      error: `Unrecognized service identifier rejected: ${unknownIds.slice(0, 3).join(', ')}`,
+      error: 'Spam protection triggered.',
+      errors: ['Spam protection triggered.'],
     };
   }
 
-  // Server-authoritative option & pricing computation — ignore any client-supplied price totals!
+  const fullName = sanitizeText(body.fullName, 120);
+  const email = sanitizeText(body.email, 254).toLowerCase();
+  const contactNumber = sanitizeText(body.contactNumber, 40);
+  const company = sanitizeText(body.company, 160);
+  const industry = sanitizeText(body.industry, 120) || undefined;
+  const targetTimeline = sanitizeText(body.targetTimeline, 120) || undefined;
+  const projectDescription = sanitizeText(body.projectDescription, 4000);
+  const fileName = sanitizeText(body.fileName, 200) || undefined;
+  const idempotencyKey = sanitizeText(body.idempotencyKey, 120) || undefined;
+  const privacyConsent = body.privacyConsent === true;
+  const type: 'solution_builder' | 'contact_inquiry' =
+    body.type === 'contact_inquiry' ? 'contact_inquiry' : 'solution_builder';
+
+  if (fullName.length < 2) errors.push('Full name must be at least 2 characters.');
+  if (!isValidEmail(email)) errors.push('A valid email address is required.');
+  if (contactNumber.length < 7) errors.push('A valid contact phone number is required.');
+  if (company.length < 2) errors.push('Company or organization name is required.');
+  if (projectDescription.length < 10) {
+    errors.push('Project description must be at least 10 characters.');
+  }
+  if (!privacyConsent) errors.push('Privacy consent must be explicitly accepted.');
+
+  // Resolve and verify service IDs strictly against authoritative catalog
+  const requestedIds: string[] = [];
+  if (Array.isArray(body.selectedServiceIds)) {
+    for (const item of body.selectedServiceIds) {
+      const cleaned = sanitizeText(item, 80);
+      if (cleaned && !requestedIds.includes(cleaned)) requestedIds.push(cleaned);
+    }
+  }
+  const singleServiceId = sanitizeText(body.serviceId, 80);
+  if (
+    requestedIds.length === 0 &&
+    singleServiceId &&
+    singleServiceId !== 'enterprise-custom-assessment'
+  ) {
+    requestedIds.push(singleServiceId);
+  }
+
+  if (requestedIds.length > 20) {
+    errors.push('A maximum of 20 services may be included in a single solution inquiry.');
+  }
+
+  const validatedServices: CatalogService[] = [];
+  for (const sid of requestedIds) {
+    const found =
+      getCatalogServiceById(sid) ||
+      SERVICE_CATALOG.find((s) => s.legacyServiceId === sid);
+    if (!found) {
+      errors.push(`Unknown or invalid service identifier: "${sid}".`);
+    } else {
+      validatedServices.push(found);
+    }
+  }
+
+  if (type === 'solution_builder' && validatedServices.length === 0) {
+    errors.push('At least one valid catalog service must be selected.');
+  }
+
+  // Validate selected option IDs per service (customized scope modules, no public pricing)
   const rawOptionsMap =
     body.selectedOptionsMap && typeof body.selectedOptionsMap === 'object'
       ? (body.selectedOptionsMap as Record<string, unknown>)
       : {};
+  const sanitizedOptionsMap: Record<string, string[]> = {};
 
-  const safeOptionsMap: Record<string, string[]> = {};
-  let estimatedOneTimeStartingUsd = 0;
-  let estimatedMonthlyStartingUsd = 0;
-
-  for (const svc of matchedCatalogServices) {
-    const allowedOptionIds = new Set((svc.configurableOptions || []).map((o) => o.id));
+  for (const svc of validatedServices) {
     const rawOpts = rawOptionsMap[svc.id];
-    const safeOptIds = Array.isArray(rawOpts)
-      ? Array.from(new Set(rawOpts.filter((x): x is string => typeof x === 'string' && allowedOptionIds.has(x))))
-      : [];
-    if (safeOptIds.length > 0) {
-      safeOptionsMap[svc.id] = safeOptIds;
+    const validOptionIds = new Set((svc.configurableOptions || []).map((o) => o.id));
+    const chosen: string[] = [];
+    if (Array.isArray(rawOpts)) {
+      for (const optId of rawOpts) {
+        const cleanedOpt = sanitizeText(optId, 80);
+        if (cleanedOpt) {
+          if (!validOptionIds.has(cleanedOpt)) {
+            errors.push(`Invalid configuration option "${cleanedOpt}" for service "${svc.id}".`);
+          } else if (!chosen.includes(cleanedOpt)) {
+            chosen.push(cleanedOpt);
+          }
+        }
+      }
     }
-    const totals = computeConfiguredServiceTotal(svc, safeOptIds);
-    estimatedOneTimeStartingUsd += totals.oneTimeUsd;
-    estimatedMonthlyStartingUsd += totals.monthlyUsd;
+    if (chosen.length > 0) {
+      sanitizedOptionsMap[svc.id] = chosen;
+    }
   }
 
-  const legacyMatch =
-    type === 'contact_form' && uniqueIds[0]
-      ? servicesData.find((s) => s.id === uniqueIds[0])
-      : undefined;
+  if (errors.length > 0) {
+    return { ok: false, error: errors[0], errors };
+  }
 
+  const selectedServiceTitles = validatedServices.map((s) => s.title);
   const serviceTitle =
-    matchedCatalogServices.length > 0
-      ? matchedCatalogServices.map((s) => s.title).join(' + ')
-      : legacyMatch?.title || 'General Consultation';
-
-  const serviceId =
-    matchedCatalogServices.length > 0
-      ? matchedCatalogServices.map((s) => s.id).join(', ')
-      : legacyMatch?.id || 'general-consultation';
-
-  let estimatedBudget = sanitizePlainText(body.estimatedBudget, 140) || 'To be scoped via proposal';
-  if (matchedCatalogServices.length > 0) {
-    const parts: string[] = [];
-    if (estimatedOneTimeStartingUsd > 0) {
-      parts.push(`Starting est. $${estimatedOneTimeStartingUsd.toLocaleString('en-US')}`);
-    }
-    if (estimatedMonthlyStartingUsd > 0) {
-      parts.push(`$${estimatedMonthlyStartingUsd.toLocaleString('en-US')}/mo`);
-    }
-    if (parts.length > 0) {
-      estimatedBudget = parts.join(' + ');
-    }
-  }
-
-  const preferredCurrency: 'USD' | 'PHP' = body.preferredCurrency === 'PHP' ? 'PHP' : 'USD';
-  const rawPhpRate = typeof body.phpConversionRate === 'number' && Number.isFinite(body.phpConversionRate)
-    ? Math.min(120, Math.max(20, body.phpConversionRate))
-    : undefined;
+    selectedServiceTitles.length > 0
+      ? selectedServiceTitles.join(' + ')
+      : sanitizeText(body.serviceTitle, 160) || 'Customized Enterprise Solution Inquiry';
 
   return {
     ok: true,
     data: {
+      idempotencyKey,
       type,
       fullName,
       email,
@@ -237,17 +261,19 @@ export function validateInquiryPayload(raw: unknown): {
       company,
       industry,
       targetTimeline,
-      idempotencyKey,
-      matchedCatalogServices,
-      selectedServiceIds: matchedCatalogServices.map((s) => s.id),
-      selectedOptionsMap: safeOptionsMap,
-      serviceId,
+      selectedServices: selectedServiceTitles,
+      selectedServiceIds: validatedServices.map((s) => s.id),
+      matchedCatalogServices: validatedServices,
+      selectedOptionsMap: sanitizedOptionsMap,
+      serviceId: validatedServices[0]?.id || 'enterprise-custom-assessment',
       serviceTitle,
-      estimatedOneTimeStartingUsd,
-      estimatedMonthlyStartingUsd,
-      estimatedBudget,
-      preferredCurrency,
-      phpConversionRate: rawPhpRate,
+      // No public/automated service pricing or monetary totals are generated.
+      // Retained as 0 / assessment label strictly for legacy DB schema compatibility.
+      estimatedOneTimeStartingUsd: 0,
+      estimatedMonthlyStartingUsd: 0,
+      estimatedBudget: 'Subject to Formal Assessment',
+      preferredCurrency: 'USD',
+      phpConversionRate: 1,
       projectDescription,
       fileName,
       privacyConsent,
@@ -261,142 +287,85 @@ export function validateAppointmentPayload(raw: unknown): {
 } | {
   ok: false;
   error: string;
+  errors: string[];
 } {
+  const errors: string[] = [];
   if (!raw || typeof raw !== 'object') {
-    return { ok: false, error: 'Invalid appointment payload.' };
+    return {
+      ok: false,
+      error: 'Request body must be a JSON object.',
+      errors: ['Request body must be a JSON object.'],
+    };
   }
   const body = raw as Record<string, unknown>;
 
-  if (typeof body.websiteHoneypot === 'string' && body.websiteHoneypot.trim().length > 0) {
-    return { ok: false, error: 'Submission blocked by automated anti-spam verification.' };
+  const honeypot = sanitizeText(body.websiteHoneypot, 120);
+  if (honeypot.length > 0) {
+    return {
+      ok: false,
+      error: 'Spam protection triggered.',
+      errors: ['Spam protection triggered.'],
+    };
   }
 
-  const fullName = sanitizePlainText(body.fullName, 120);
-  const email = stripControlChars(typeof body.email === 'string' ? body.email : '').toLowerCase().slice(0, 180);
-  const phone = sanitizePlainText(body.phone, 40);
-  const companyName = sanitizePlainText(body.companyName, 140) || 'Enterprise Client';
-  const briefReferenceCode = sanitizePlainText(body.briefReferenceCode, 60) || undefined;
-  const consultationTypeRaw = typeof body.consultationType === 'string' ? body.consultationType.trim() : '';
-  const scheduledDate = typeof body.scheduledDate === 'string' ? body.scheduledDate.trim() : '';
-  const scheduledTimeSlot = typeof body.scheduledTimeSlot === 'string' ? body.scheduledTimeSlot.trim() : '';
-  const clientTimezone = sanitizePlainText(body.clientTimezone, 80) || 'Asia/Manila';
-  const notes = sanitizePlainText(body.notes, 1000) || undefined;
+  const fullName = sanitizeText(body.fullName, 120);
+  const email = sanitizeText(body.email, 254).toLowerCase();
+  const phone = sanitizeText(body.phone, 40);
+  const companyName = sanitizeText(body.companyName, 160) || 'Enterprise Client';
+  const briefReferenceCode = sanitizeText(body.briefReferenceCode, 60) || undefined;
+  const consultationTypeRaw = sanitizeText(body.consultationType, 30);
+  const scheduledDate = sanitizeText(body.scheduledDate, 20);
+  const scheduledTimeSlot = sanitizeText(body.scheduledTimeSlot, 40);
+  const clientTimezone = sanitizeText(body.clientTimezone, 60) || 'America/Denver';
+  const notes = sanitizeText(body.notes, 1000) || undefined;
+  const idempotencyKey = sanitizeText(body.idempotencyKey, 120) || undefined;
 
-  if (fullName.length < 2) {
-    return { ok: false, error: 'Full name is required (minimum 2 characters).' };
-  }
-  if (!EMAIL_REGEX.test(email)) {
-    return { ok: false, error: 'A valid email address is required for consultation scheduling.' };
-  }
-  if (phone.length < 5 || !/[0-9]{5,}/.test(phone.replace(/[^0-9]/g, ''))) {
-    return { ok: false, error: 'A valid contact phone number is required.' };
-  }
-  if (consultationTypeRaw !== 'video' && consultationTypeRaw !== 'phone' && consultationTypeRaw !== 'in_person') {
-    return { ok: false, error: 'Consultation channel must be video, phone, or in_person.' };
-  }
-  if (!DATE_REGEX.test(scheduledDate)) {
-    return { ok: false, error: 'Scheduled date must be in YYYY-MM-DD format.' };
+  if (fullName.length < 2) errors.push('Full name is required.');
+  if (!isValidEmail(email)) errors.push('A valid email address is required.');
+  if (phone.length < 7) errors.push('A valid phone number is required.');
+
+  if (!ALLOWED_CONSULTATION_TYPES.has(consultationTypeRaw)) {
+    errors.push('Consultation type must be one of: video, phone, in_person.');
   }
 
-  const parsedDate = new Date(`${scheduledDate}T00:00:00Z`);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return { ok: false, error: 'Invalid calendar date.' };
-  }
-  const day = parsedDate.getUTCDay();
-  if (day === 0 || day === 6) {
-    return { ok: false, error: 'Consultations are available Monday through Friday only.' };
-  }
-
-  const todayIso = new Date().toISOString().split('T')[0];
-  if (scheduledDate < todayIso) {
-    return { ok: false, error: 'Scheduled consultation date cannot be in the past.' };
-  }
-
-  if (!(ALLOWED_APPOINTMENT_SLOTS as readonly string[]).includes(scheduledTimeSlot)) {
-    return { ok: false, error: 'Selected time slot is invalid or outside operating hours.' };
-  }
-
-  let idempotencyKey: string | undefined;
-  if (body.idempotencyKey !== undefined) {
-    if (typeof body.idempotencyKey !== 'string' || !UUID_OR_KEY_REGEX.test(body.idempotencyKey.trim())) {
-      return { ok: false, error: 'Invalid idempotencyKey format.' };
+  if (!ISO_DATE_REGEX.test(scheduledDate)) {
+    errors.push('Scheduled date must use YYYY-MM-DD format.');
+  } else {
+    const parsed = new Date(`${scheduledDate}T00:00:00Z`);
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    if (Number.isNaN(parsed.getTime())) {
+      errors.push('Scheduled date is invalid.');
+    } else if (parsed.getTime() < today.getTime()) {
+      errors.push('Scheduled date cannot be in the past.');
+    } else if (parsed.getUTCDay() === 0 || parsed.getUTCDay() === 6) {
+      errors.push('Consultations are scheduled on weekdays (Monday to Friday).');
     }
-    idempotencyKey = body.idempotencyKey.trim();
+  }
+
+  if (!AVAILABLE_SLOTS.includes(scheduledTimeSlot)) {
+    errors.push('Selected time slot is not an active consultation window.');
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, error: errors[0], errors };
   }
 
   return {
     ok: true,
     data: {
+      idempotencyKey,
       fullName,
       email,
       phone,
       companyName,
       briefReferenceCode,
-      consultationType: consultationTypeRaw,
+      consultationType: consultationTypeRaw as 'video' | 'phone' | 'in_person',
       scheduledDate,
       scheduledTimeSlot,
+      durationMinutes: 30,
       clientTimezone,
-      idempotencyKey,
       notes,
     },
-  };
-}
-
-export function sanitizeChatInput(raw: unknown): {
-  ok: true;
-  userMessage: string;
-  language: 'en-US' | 'fil-PH';
-  history: Array<{ sender: 'user' | 'ai'; text: string }>;
-  stateContext: { category?: string; businessProblem?: string; currentStage?: string };
-} | {
-  ok: false;
-  error: string;
-} {
-  if (!raw || typeof raw !== 'object') {
-    return { ok: false, error: 'Invalid chat request body.' };
-  }
-  const body = raw as Record<string, unknown>;
-  if (typeof body.userMessage !== 'string' || body.userMessage.trim().length === 0) {
-    return { ok: false, error: 'userMessage is required.' };
-  }
-
-  const userMessage = stripControlChars(body.userMessage).slice(0, 2000);
-  if (userMessage.length === 0) {
-    return { ok: false, error: 'userMessage cannot be empty.' };
-  }
-
-  const langRaw = typeof body.language === 'string' ? body.language.trim() : 'en-US';
-  const language: 'en-US' | 'fil-PH' =
-    langRaw.startsWith('fil') || langRaw.startsWith('tl') ? 'fil-PH' : 'en-US';
-
-  const rawHistory = Array.isArray(body.conversationHistory) ? body.conversationHistory.slice(-8) : [];
-  const history: Array<{ sender: 'user' | 'ai'; text: string }> = [];
-  for (const turn of rawHistory) {
-    if (
-      turn &&
-      typeof turn === 'object' &&
-      ((turn as any).sender === 'user' || (turn as any).sender === 'ai') &&
-      typeof (turn as any).text === 'string'
-    ) {
-      const cleaned = stripControlChars((turn as any).text).slice(0, 1200);
-      if (cleaned) {
-        history.push({ sender: (turn as any).sender, text: cleaned });
-      }
-    }
-  }
-
-  const rawState = body.state && typeof body.state === 'object' ? (body.state as Record<string, any>) : {};
-  const stateContext = {
-    category: sanitizePlainText(rawState?.requirements?.category, 140) || undefined,
-    businessProblem: sanitizePlainText(rawState?.requirements?.businessProblem, 400) || undefined,
-    currentStage: sanitizePlainText(rawState?.currentStage, 40) || undefined,
-  };
-
-  return {
-    ok: true,
-    userMessage,
-    language,
-    history,
-    stateContext,
   };
 }
