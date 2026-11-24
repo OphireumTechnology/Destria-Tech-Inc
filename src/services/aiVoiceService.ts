@@ -42,8 +42,8 @@ class AIVoiceService {
   private isRecognitionRunning = false;
   private recognitionRestartTimeout: any = null;
 
-  private currentUtterance: SpeechSynthesisUtterance | null = null;
-  private voicePreference = 'professional-female';
+  private playback: AudioBufferSourceNode | null = null;
+  private speechRequest: AbortController | null = null;
   private isSpeakerMuted = false;
   private isMicMuted = false;
 
@@ -87,8 +87,8 @@ class AIVoiceService {
 
   public setSpeakerMuted(muted: boolean) {
     this.isSpeakerMuted = muted;
-    if (muted && typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+    if (muted) {
+      this.cancelSpeech();
       if (this.status === 'speaking') {
         this.setStatus('idle');
       }
@@ -160,7 +160,7 @@ class AIVoiceService {
         ? 'Magandang araw po. Ako ang inyong DESTRIA TECH INC AI Solutions Consultant. Paano ko po matutulungan ang inyong technology, AI, o enterprise software project ngayon?'
         : 'Welcome to DESTRIA TECH INC and the DESTRIA NETWORK. I am your AI Solutions Consultant. How can I assist with your AI, digital media, or enterprise software project today?';
 
-      this.speakText(greeting, false);
+      void this.speakText(greeting);
       return true;
     } catch (err: any) {
       this.setStatus('error');
@@ -280,92 +280,68 @@ class AIVoiceService {
     this.speakText(localReply);
   }
 
-  public speakText(text: string, restartRecognitionAfter = true) {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      this.setStatus('idle');
-      return;
-    }
-
-    if (this.isSpeakerMuted) {
-      this.setStatus('idle');
-      return;
-    }
-
+  public async speakText(text: string, restartRecognitionAfter = true) {
+    if (this.isSpeakerMuted) { this.setStatus('idle'); return; }
     this.cancelSpeech();
-    this.setStatus('speaking');
-
+    const request = new AbortController();
+    this.speechRequest = request;
+    this.setStatus('thinking');
     if (this.recognition && this.isRecognitionRunning) {
-      try {
-        this.recognition.stop();
-      } catch {}
+      try { this.recognition.abort(); } catch {}
       this.isRecognitionRunning = false;
     }
-
-    const cleanText = text
-      .replace(/[*#_`~>]/g, '')
-      .replace(/https?:\/\/\S+/g, '')
-      .replace(/OPM-[A-Z]+-\d+-[A-Z0-9]+/g, (match) => match.split('-').join(' '));
-
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    this.currentUtterance = utterance;
-
-    const voices = window.speechSynthesis.getVoices();
-    if (this.language.startsWith('fil')) {
-      const filVoice = voices.find(
-        (v) => v.lang.includes('fil') || v.lang.includes('tl') || v.name.includes('Filipino')
-      );
-      if (filVoice) utterance.voice = filVoice;
-    } else {
-      const preferred = ['aria', 'jenny', 'ava', 'samantha', 'zira', 'female', 'natural'];
-      const enVoice = [...voices]
-        .filter((v) => v.lang.toLowerCase().startsWith('en'))
-        .sort((a, b) => {
-          const score = (v: SpeechSynthesisVoice) => {
-            const name = v.name.toLowerCase();
-            const idx = preferred.findIndex((token) => name.includes(token));
-            return (v.lang.toLowerCase() === 'en-us' ? 15 : 0) + (idx >= 0 ? 60 - idx * 6 : 0) + (name.includes('neural') ? 20 : 0);
-          };
-          return score(b) - score(a);
-        })[0];
-      if (enVoice) utterance.voice = enVoice;
-    }
-
-    utterance.rate = 0.94;
-    utterance.pitch = 1.03;
-    utterance.onend = () => {
-      this.currentUtterance = null;
-      this.setStatus('idle');
-      if (
-        restartRecognitionAfter &&
-        this.recognition &&
-        !this.isMicMuted &&
-        this.status !== 'disconnected'
-      ) {
-        this.startRecognitionSafe();
+    const timeout = setTimeout(() => request.abort(), 30000);
+    try {
+      const response = await fetch(apiUrl('/api/voice/synthesize'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text.slice(0, 2000) }), signal: request.signal,
+      });
+      if (!response.ok) throw new Error('Neural speech unavailable');
+      const data = await response.json();
+      if (this.speechRequest !== request || this.isSpeakerMuted) return;
+      const context = this.audioContext;
+      if (!context) throw new Error('Audio context unavailable');
+      const bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
+      let buffer: AudioBuffer;
+      if (/audio\/(?:L16|pcm)/i.test(data.mimeType)) {
+        const rate = Number(/rate=(\d+)/i.exec(data.mimeType)?.[1] || 24000);
+        if (!Number.isFinite(rate) || rate < 8000 || rate > 48000 || bytes.length < 2) throw new Error('Invalid PCM');
+        const view = new DataView(bytes.buffer);
+        buffer = context.createBuffer(1, Math.floor(bytes.length / 2), rate);
+        const samples = buffer.getChannelData(0);
+        for (let i = 0; i < samples.length; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
+      } else {
+        buffer = await context.decodeAudioData(bytes.buffer);
       }
-    };
-
-    utterance.onerror = () => {
-      this.currentUtterance = null;
-      this.setStatus('idle');
-      if (
-        restartRecognitionAfter &&
-        this.recognition &&
-        !this.isMicMuted &&
-        this.status !== 'disconnected'
-      ) {
-        this.startRecognitionSafe();
-      }
-    };
-
-    window.speechSynthesis.speak(utterance);
+      if (this.speechRequest !== request || this.isSpeakerMuted) return;
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(context.destination);
+      this.playback = source;
+      source.onended = () => {
+        if (this.playback !== source) return;
+        this.playback = null;
+        this.speechRequest = null;
+        this.setStatus('idle');
+        if (restartRecognitionAfter) this.startRecognitionSafe();
+      };
+      this.setStatus('speaking');
+      source.start();
+    } catch {
+      if (this.speechRequest !== request) return;
+      this.speechRequest = null;
+      this.callbacks.onError?.('Premium neural voice is unavailable. Please use text chat.');
+      this.stopSession();
+      this.setStatus('error');
+    } finally { clearTimeout(timeout); }
   }
 
   public cancelSpeech() {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      this.currentUtterance = null;
-    }
+    this.speechRequest?.abort();
+    this.speechRequest = null;
+    const source = this.playback;
+    this.playback = null;
+    if (source) { source.onended = null; try { source.stop(); } catch {} source.disconnect(); }
   }
 
   private setStatus(newStatus: VoiceState) {
@@ -413,7 +389,7 @@ class AIVoiceService {
 
       this.recognition.onend = () => {
         this.isRecognitionRunning = false;
-        if (this.status !== 'disconnected' && this.status !== 'speaking' && !this.isMicMuted) {
+        if (this.status !== 'disconnected' && this.status !== 'speaking' && this.status !== 'thinking' && !this.isMicMuted) {
           this.recognitionRestartTimeout = setTimeout(() => {
             this.startRecognitionSafe();
           }, 400);
@@ -451,13 +427,7 @@ class AIVoiceService {
     const checkVolume = () => {
       if (this.status === 'disconnected') return;
 
-      if (this.status === 'speaking') {
-        const simulated = Math.min(
-          100,
-          Math.floor(40 + Math.sin(Date.now() / 80) * 35 + Math.random() * 20)
-        );
-        this.callbacks.onVolumeChange?.(simulated);
-      } else if (this.analyser && !this.isMicMuted) {
+      if (this.analyser && !this.isMicMuted) {
         this.analyser.getByteFrequencyData(dataArray);
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) {
