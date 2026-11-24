@@ -223,11 +223,12 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   <User className="w-5 h-5 text-[#00C2C7] shrink-0 mt-0.5" />
                   <div>
                     <span className="text-xs font-mono text-slate-400 block uppercase">
-                      Solutions Architecture Desk
+                      Executive Leadership
                     </span>
                     <span className="text-sm font-semibold text-white">
                       {COMPANY_CONFIG.verification.leadershipName || `${COMPANY_CONFIG.name} Engineering & Delivery Team`}
                     </span>
+                    <p className="text-sm text-slate-200 mt-2">Chief Technology Officer: {COMPANY_CONFIG.chiefTechnologyOfficer}</p>
                     {COMPANY_CONFIG.corporatePhone && COMPANY_CONFIG.corporatePhoneLink ? (
                       <div className="mt-1">
                         <a
@@ -246,18 +247,18 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   </div>
                 </div>
 
-                {COMPANY_CONFIG.registeredAddress ? (
+                {COMPANY_CONFIG.headquartersAddress ? (
                   <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 flex items-start gap-3.5">
                     <Building className="w-5 h-5 text-[#00C2C7] shrink-0 mt-0.5" />
                     <div className="space-y-0.5">
                       <span className="text-xs font-mono text-slate-400 block uppercase">
-                        Corporate Office Address
+                        Corporate Headquarters — Wyoming, USA
                       </span>
-                      <p className="text-xs text-slate-200">{COMPANY_CONFIG.registeredAddress}</p>
-                      {COMPANY_CONFIG.registeredAddressMapsUrl ? (
+                      <p className="text-xs text-slate-200">{COMPANY_CONFIG.headquartersAddress}</p>
+                      {COMPANY_CONFIG.headquartersAddress ? (
                         <div className="pt-2">
                           <a
-                            href={COMPANY_CONFIG.registeredAddressMapsUrl}
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(COMPANY_CONFIG.headquartersAddress)}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-xs text-[#00C2C7] hover:text-white transition-colors"
@@ -291,14 +292,12 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   <Mail className="w-5 h-5 text-[#0EA5E9] shrink-0 mt-0.5" />
                   <div>
                     <span className="text-xs font-mono text-slate-400 block uppercase">
-                      Corporate Dispatch Routing
+                      Official Corporate Email
                     </span>
-                    <span className="text-sm font-semibold text-white font-mono">
-                      {COMPANY_CONFIG.corporateEmail || 'Direct Project Intake & Client Portal'}
-                    </span>
+                    {COMPANY_CONFIG.corporateEmail ? <a className="text-sm font-semibold text-[#00C2C7] break-all hover:underline" href={`mailto:${COMPANY_CONFIG.corporateEmail}`}>{COMPANY_CONFIG.corporateEmail}</a> : <span className="text-sm text-white">Direct Project Intake & Client Portal</span>}
                     <p className="text-xs text-slate-400 mt-0.5">
                       {COMPANY_CONFIG.corporateEmail
-                        ? 'Verified corporate dispatch channel monitored by solutions administrators.'
+                        ? 'Official email for corporate inquiries.'
                         : 'Official corporate email channels are configurable via deployment settings; all web briefs are persisted immediately with a tracking reference.'}
                     </p>
                   </div>
