@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { ResendEmailTransport } from '../services/emailService';
 import express, { NextFunction, Request, Response, Router } from 'express';
 import {
   OrderStatus,
@@ -187,7 +188,7 @@ export function createPortalRouter(options: {
   }
   const signingSecret = configuredSigningSecret || crypto.randomBytes(32).toString('hex');
 
-  const isDevHelperEnabled = !isProd;
+  const isDevHelperEnabled = process.env.NODE_ENV === 'test' || (process.env.NODE_ENV === 'development' && process.env.PORTAL_DEV_AUTH_HELPERS === 'true');
   const authLimiter = new BoundedRateLimiter(15 * 60 * 1000, 30);
   const writeLimiter = new BoundedRateLimiter(15 * 60 * 1000, 120);
 
@@ -378,6 +379,22 @@ export function createPortalRouter(options: {
   // 1. PUBLIC CLIENT AUTHENTICATION ROUTES
   // =========================================================================
 
+  async function dispatchVerification(email: string, token: string): Promise<boolean> {
+    if (isDevHelperEnabled) return false;
+    const transport = new ResendEmailTransport();
+    const from = process.env.EMAIL_FROM?.trim();
+    if (!transport.isConfigured || !from || from.includes('.invalid')) return false;
+    const link = new URL('https://destriatech.com/portal/verify-email');
+    link.searchParams.set('token', token);
+    const result = await transport.send({
+      to: email, from, subject: 'Destria Tech Inc email verification',
+      text: 'Verify your email within 24 hours: ' + link.href,
+      html: '<p>Verify your email within 24 hours:</p><p><a href="' + link.href + '">Verify email</a></p>',
+    });
+    if (result.status !== 'sent') logStructured('warn', 'portal_verification_dispatch_failed', { status: result.status });
+    return result.status === 'sent';
+  }
+
   router.post('/auth/register', async (req: Request, res: Response) => {
     const ip = req.ip || 'unknown';
     if (!authLimiter.allow(`reg:${ip}`)) {
@@ -436,6 +453,7 @@ export function createPortalRouter(options: {
     setPortalSessionCookie(res, rawSessionToken);
     logStructured('info', 'portal_client_registered', { userId: user.id, mode: repo.mode });
 
+    const verificationAccepted = await dispatchVerification(email, verificationToken);
     res.status(201).json({
       success: true,
       token: rawSessionToken,
@@ -447,7 +465,7 @@ export function createPortalRouter(options: {
       },
       profile,
       verificationNotice:
-        'Account created. Please verify your email address using the verification link sent to your inbox.',
+        verificationAccepted ? 'Account created. Verification email accepted by provider; delivery is not confirmed.' : 'Account created. Verification email dispatch is unavailable. Please retry or contact support.',
       ...(isDevHelperEnabled ? { devVerificationToken: verificationToken } : {}),
     });
   });
@@ -527,9 +545,11 @@ export function createPortalRouter(options: {
     const token = crypto.randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     await repo.setVerificationToken(user.id, sha256Hex(token), expiresAt);
+    const accepted = await dispatchVerification(user.email, token);
+    if (!accepted && !isDevHelperEnabled) { res.status(503).json({ success: false, error: 'Verification email dispatch is unavailable. Please try again later.' }); return; }
     res.status(200).json({
       success: true,
-      message: 'A new verification link has been issued.',
+      message: 'Verification request processed. Email delivery is not confirmed.',
       ...(isDevHelperEnabled ? { devVerificationToken: token } : {}),
     });
   });
@@ -545,6 +565,12 @@ export function createPortalRouter(options: {
       res.status(400).json({ success: false, error: 'Enter a valid email address.' });
       return;
     }
+    const transport = new ResendEmailTransport();
+    const from = process.env.EMAIL_FROM?.trim();
+    if (!isDevHelperEnabled && (!transport.isConfigured || !from || from.includes('.invalid'))) {
+      res.status(503).json({ success: false, error: 'Password recovery is temporarily unavailable. Please contact support.' });
+      return;
+    }
     const user = await repo.findUserByEmail(email);
     let devResetToken: string | undefined;
     if (user) {
@@ -552,11 +578,21 @@ export function createPortalRouter(options: {
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       await repo.setResetToken(user.id, sha256Hex(token), expiresAt);
       devResetToken = token;
+      if (!isDevHelperEnabled && from) {
+        const link = new URL('https://destriatech.com/portal/forgot-password');
+        link.searchParams.set('token', token);
+        const result = await transport.send({
+          to: email, from, subject: 'Destria Tech Inc password recovery',
+          text: 'Reset your password within one hour: ' + link.href + '\nIf you did not request this, ignore this email.',
+          html: '<p>Reset your password within one hour:</p><p><a href="' + link.href + '">Reset password</a></p><p>If you did not request this, ignore this email.</p>',
+        });
+        if (result.status !== 'sent') logStructured('warn', 'portal_recovery_dispatch_failed', { status: result.status });
+      }
     }
     // Uniform response to prevent account enumeration
     res.status(200).json({
       success: true,
-      message: 'If an account matches that email, password recovery instructions have been issued.',
+      message: 'If an account matches that email, your recovery request will be processed. Delivery is not confirmed.',
       ...(isDevHelperEnabled && devResetToken ? { devResetToken } : {}),
     });
   });

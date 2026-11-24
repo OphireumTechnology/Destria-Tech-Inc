@@ -7,6 +7,7 @@ import { LocalPortalRepository } from '../src/server/portal/localPortalRepositor
 import { PaymentGatewayRegistry } from '../src/server/portal/payments/paymentAdapters';
 
 async function startPortalTestServer(envOverrides?: NodeJS.ProcessEnv) {
+  envOverrides = { NODE_ENV: 'test', ...envOverrides };
   const prevEnv: Record<string, string | undefined> = {};
   if (envOverrides) {
     for (const [k, v] of Object.entries(envOverrides)) {
@@ -893,4 +894,13 @@ test('Official Destria Tech Inc Rebrand Standardization: centralized assets, fav
 
   const emailSrc = fs.readFileSync(path.resolve(root, 'src/server/services/emailService.ts'), 'utf8');
   assert.equal(emailSrc.includes('BRAND_ASSETS.hostedPrimaryLogoUrl'), true);
+});
+
+test('Recovery fails closed without configured email outside test mode', async () => {
+  const srv = await startPortalTestServer({ NODE_ENV: 'development', PORTAL_DEV_AUTH_HELPERS: undefined, RESEND_API_KEY: undefined, EMAIL_FROM: undefined });
+  try {
+    const result = await apiJson(srv.baseUrl, '/api/portal/auth/forgot-password', { method: 'POST', body: { email: 'unknown@client.test' } });
+    assert.equal(result.status, 503);
+    assert.equal(result.data.devResetToken, undefined);
+  } finally { await srv.close(); }
 });
