@@ -20,6 +20,7 @@ export interface CompanyConfig {
   registeredAddress: string | null;
   registeredAddressMapsUrl: string | null;
   verification: CorporateVerificationConfig;
+  founderAndCeo: string;
   chiefTechnologyOfficer: string;
   headquartersAddress: string;
   logoUrl: string;
@@ -81,6 +82,7 @@ export const COMPANY_CONFIG: CompanyConfig = {
     jurisdiction: 'Wyoming, United States of America',
     leadershipName: 'Desmond Hines — Founder & CEO',
   },
+  founderAndCeo: 'Desmond Hines',
   chiefTechnologyOfficer: 'Leodenis Languisan',
   headquartersAddress: '30 N Gould St #6082, Sheridan, Sheridan County, WY 82801 USA',
   logoUrl: LOGO_URL,

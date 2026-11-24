@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { normalizeCorporateMessage } from '../src/services/legacyCorporateMessageMigration';
+import type { ChatMessage } from '../src/services/aiConsultantService';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../src/server/app';
 import { LocalPortalRepository } from '../src/server/portal/localPortalRepository';
@@ -893,4 +897,32 @@ test('Official Destria Tech Inc Rebrand Standardization: centralized assets, fav
 
   const emailSrc = fs.readFileSync(path.resolve(root, 'src/server/services/emailService.ts'), 'utf8');
   assert.equal(emailSrc.includes('BRAND_ASSETS.hostedPrimaryLogoUrl'), true);
+});
+
+
+test('Destria AI corporate identity is centralized and stale executive labels are normalized', async () => {
+  const root = process.cwd();
+  const config = fs.readFileSync(path.resolve(root, 'src/data/companyConfig.ts'), 'utf8');
+  const widget = fs.readFileSync(path.resolve(root, 'src/components/consultant/AIConsultantWidget.tsx'), 'utf8');
+  const server = fs.readFileSync(path.resolve(root, 'src/server/app.ts'), 'utf8');
+  const voice = fs.readFileSync(path.resolve(root, 'src/services/aiVoiceService.ts'), 'utf8');
+  assert.ok(config.includes("founderAndCeo: 'Desmond Hines'"));
+  assert.ok(config.includes("chiefTechnologyOfficer: 'Leodenis Languisan'"));
+  assert.ok(widget.includes('normalizeCorporateMessage'));
+  assert.ok(widget.includes('COMPANY_CONFIG.founderAndCeo'));
+  assert.ok(widget.includes('COMPANY_CONFIG.chiefTechnologyOfficer'));
+  assert.ok(server.includes('CORPORATE_AI_PROFILE'));
+  assert.ok(server.includes('executiveRequestReply(userMessage)'));
+  assert.equal(/\\bdhenze\\b/i.test(server), false);
+  assert.ok(voice.includes("preferred = ['aria', 'jenny'"));
+});
+
+test('legacy migration corrects assistant labels without rewriting client messages', () => {
+  const old = { id: 'legacy', sender: 'ai', text: 'CEO Dhenze Languisan', timestamp: '12:00', stage: 'welcome', quickReplies: ['Speak with CEO Dhenze Languisan'] } as ChatMessage;
+  const migrated = normalizeCorporateMessage(old);
+  assert.equal(migrated.text, 'CEO Desmond Hines');
+  assert.deepEqual(migrated.quickReplies, ['Speak with CEO Desmond Hines']);
+  assert.deepEqual(normalizeCorporateMessage(migrated), migrated);
+  const client = { ...old, sender: 'user' } as ChatMessage;
+  assert.deepEqual(normalizeCorporateMessage(client), client);
 });
