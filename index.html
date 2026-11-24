@@ -5,7 +5,7 @@
     <base href="/" />
     <script>
       (function () {
-        var prefix = location.hostname === 'ophireumtechnology.github.io' && location.pathname.startsWith('/Destria-Tech-Inc') ? '/Destria-Tech-Inc' : '';
+        var prefix = location.hostname.endsWith('.github.io') && location.pathname.startsWith('/Destria-Tech-Inc') ? '/Destria-Tech-Inc' : '';
         document.querySelector('base').href = prefix + '/';
         if (/^#\/portal(?:\/|\?|$)/.test(location.hash)) {
           history.replaceState(null, '', prefix + location.hash.slice(1));
