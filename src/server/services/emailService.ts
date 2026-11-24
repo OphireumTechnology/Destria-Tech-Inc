@@ -78,6 +78,7 @@ export class ResendEmailTransport implements EmailTransport {
         };
       }
 
+      if (typeof body.id !== 'string' || !body.id.trim()) return { status: 'failed', error: 'Missing provider dispatch reference' };
       return {
         status: 'sent',
         providerReference: body.id,
