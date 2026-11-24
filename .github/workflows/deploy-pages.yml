@@ -1,4 +1,4 @@
-name: Deploy OMPNETWORK to GitHub Pages
+name: Deploy Destria Tech Inc to GitHub Pages
 
 on:
   push:
@@ -25,10 +25,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
-      - name: Install dependencies cleanly
-        run: npm ci --no-audit --no-fund
+      - name: Install dependencies
+        run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
       - name: Typecheck & lint
         run: npm run lint
@@ -50,10 +49,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
-      - name: Install dependencies cleanly
-        run: npm ci --no-audit --no-fund
+      - name: Install dependencies
+        run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
       - name: Build website
         env:
@@ -68,6 +66,12 @@ jobs:
             echo "ERROR: Server secret identifier detected in built frontend bundle!"
             exit 1
           fi
+
+      - name: Verify compiled entry
+        run: |
+          test -f dist/index.html
+          test -d dist/assets
+          if grep -q '/src/main.tsx' dist/index.html; then exit 1; fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
