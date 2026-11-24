@@ -254,6 +254,14 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
     setIsTyping(true);
 
     try {
+      // Prioritize the verified company telephone over generic escalation or model-generated contact details.
+      if (/\b(?:phone(?: number)?|telephone|contact number|number to call|call (?:you|destria|the company|the office))\b/i.test(text)) {
+        setIsTyping(false);
+        const answer = `You may contact Destria Tech Inc at our official United States telephone number, ${COMPANY_CONFIG.corporatePhone}.`;
+        setMessages((prev) => [...prev, { id: `ai-phone-${Date.now()}`, sender: 'ai', text: answer, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), suggestedAction: 'talk_to_human', quickReplies: ['Direct Solutions Contact', 'Schedule Consultation'] }]);
+        if (isVoiceActive && !isSpeakerMuted) aiVoiceService.speakText(answer);
+        return;
+      }
       // Check for human escalation keywords
       if (/speak to human|talk to human|call executive|solutions architect|phone number|call now|direct contact/i.test(text)) {
         setTimeout(() => {
