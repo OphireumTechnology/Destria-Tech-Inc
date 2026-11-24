@@ -53,7 +53,6 @@ function readEnv(viteKey: string, nodeKey?: string): string | null {
 }
 
 const verifiedEmail = readEnv('VITE_CORPORATE_EMAIL', 'DESTRIA_CORPORATE_EMAIL');
-const verifiedPhone = readEnv('VITE_CORPORATE_PHONE', 'DESTRIA_CORPORATE_PHONE');
 const verifiedAddress = readEnv('VITE_CORPORATE_ADDRESS', 'DESTRIA_REGISTERED_ADDRESS');
 const verifiedRegNo = readEnv('VITE_CORPORATE_REG_NO', 'DESTRIA_REGISTRATION_NO');
 const verifiedJurisdiction = readEnv('VITE_CORPORATE_JURISDICTION', 'DESTRIA_JURISDICTION');
@@ -68,8 +67,8 @@ export const COMPANY_CONFIG: CompanyConfig = {
   initials: 'DTI',
   platformName: 'DESTRIA NETWORK',
   corporateEmail: 'info@destriatech.com',
-  corporatePhone: verifiedPhone,
-  corporatePhoneLink: verifiedPhone ? `tel:${verifiedPhone.replace(/[^+\d]/g, '')}` : null,
+  corporatePhone: '+1 (307) 419-4277',
+  corporatePhoneLink: 'tel:+13074194277',
   registeredAddress: verifiedAddress,
   registeredAddressMapsUrl: verifiedAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(verifiedAddress)}` : null,
   verification: {
