@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
-    "build": "vite build",
+    "build": "vite build && node scripts/build-pages-routes.mjs",
     "build:server": "esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=/tmp/ophireum-server-check.mjs && rm -f /tmp/ophireum-server-check.mjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
