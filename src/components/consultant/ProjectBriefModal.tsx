@@ -1,5 +1,6 @@
 import React from 'react';
 import { ProjectBrief } from '../../services/supabaseService';
+import { COMPANY_CONFIG } from '../../data/companyConfig';
 import { 
   X, FileText, CheckCircle2, Shield, Calendar, 
   Building, User, Cpu, Download, Copy, Printer 
@@ -23,7 +24,7 @@ export const ProjectBriefModal: React.FC<ProjectBriefModalProps> = ({
   if (!isOpen || !brief) return null;
 
   const handleCopy = async () => {
-    const text = `DESTRIA TECH INC ENTERPRISE PROJECT BRIEF\nReference: ${brief.referenceCode}\nClient: ${brief.client.fullName} (${brief.client.companyName})\nCategory: ${brief.requirements.category}\nObjectives: ${brief.requirements.businessProblem}\nFeatures: ${brief.requirements.keyFeatures.join(', ')}\nArchitecture: ${brief.technicalArchitecture.suggestedStack.join(', ')}`;
+    const text = `DESTRIA TECH INC ENTERPRISE PROJECT BRIEF\nCorporate Phone: ${COMPANY_CONFIG.corporatePhone}\nCorporate Email: ${COMPANY_CONFIG.corporateEmail}\nReference: ${brief.referenceCode}\nClient: ${brief.client.fullName} (${brief.client.companyName})\nCategory: ${brief.requirements.category}\nObjectives: ${brief.requirements.businessProblem}\nFeatures: ${brief.requirements.keyFeatures.join(', ')}\nArchitecture: ${brief.technicalArchitecture.suggestedStack.join(', ')}`;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
