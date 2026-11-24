@@ -72,6 +72,7 @@ export class ResendEmailTransport implements EmailTransport {
     try {
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
+        signal: AbortSignal.timeout(15000),
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
@@ -94,10 +95,10 @@ export class ResendEmailTransport implements EmailTransport {
         };
       }
 
-      return {
-        status: 'sent',
-        providerReference: typeof payload?.id === 'string' ? payload.id : undefined,
-      };
+      if (typeof payload?.id !== 'string' || !payload.id.trim()) {
+        return { status: 'failed', error: 'Email provider did not return a dispatch reference.' };
+      }
+      return { status: 'sent', providerReference: payload.id };
     } catch (err: any) {
       return {
         status: 'failed',
