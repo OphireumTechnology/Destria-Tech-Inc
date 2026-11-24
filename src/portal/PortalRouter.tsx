@@ -31,6 +31,7 @@ export function navigateToPortalPath(to: string, replace = false) {
   const cleanTarget = to.startsWith('/') ? to : `/${to}`;
   const isStaticPagesHost =
     window.location.hostname.endsWith('github.io') ||
+    ['destriatech.com', 'www.destriatech.com'].includes(window.location.hostname) ||
     (window.location.pathname.includes('/OMPNETWORK/') && !cleanTarget.startsWith('/OMPNETWORK'));
 
   if (isStaticPagesHost && cleanTarget.startsWith('/portal')) {
