@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../src/server/app';
 import { LocalPortalRepository } from '../src/server/portal/localPortalRepository';
