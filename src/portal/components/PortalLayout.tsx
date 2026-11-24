@@ -23,8 +23,10 @@ import {
   X,
   ArrowLeft,
   ChevronDown,
+  Phone,
 } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
+import { COMPANY_CONFIG } from '../../data/companyConfig';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
 
@@ -195,6 +197,13 @@ export const PortalLayout: React.FC<{
         ))}
       </nav>
 
+      {/* Official corporate telephone is distinct from the customer's editable profile number. */}
+      <div className="px-5 py-3 border-t border-white/10">
+        <a href={COMPANY_CONFIG.corporatePhoneLink || undefined} className="inline-flex items-center gap-2 text-xs text-[#00C2C7] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D4AF37]" aria-label={`Call Destria Tech Inc at ${COMPANY_CONFIG.corporatePhone}`}>
+          <Phone className="w-4 h-4" aria-hidden="true" />
+          <span>{COMPANY_CONFIG.corporatePhone}</span>
+        </a>
+      </div>
       {/* Bottom Actions */}
       <div className="p-3 border-t border-white/10 space-y-1">
         <button
