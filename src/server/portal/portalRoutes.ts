@@ -188,7 +188,7 @@ export function createPortalRouter(options: {
   }
   const signingSecret = configuredSigningSecret || crypto.randomBytes(32).toString('hex');
 
-  const isDevHelperEnabled = !isProd;
+  const isDevHelperEnabled = process.env.NODE_ENV === 'test' || (process.env.NODE_ENV === 'development' && process.env.PORTAL_DEV_AUTH_HELPERS === 'true');
   const authLimiter = new BoundedRateLimiter(15 * 60 * 1000, 30);
   const writeLimiter = new BoundedRateLimiter(15 * 60 * 1000, 120);
 
