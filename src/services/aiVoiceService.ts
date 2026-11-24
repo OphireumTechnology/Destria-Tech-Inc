@@ -7,6 +7,7 @@
 
 import { ConsultationAppointment } from './supabaseService';
 import { apiUrl } from '../lib/apiClient';
+import { COMPANY_CONFIG } from '../data/companyConfig';
 
 export type VoiceState =
   | 'disconnected'
@@ -226,6 +227,14 @@ class AIVoiceService {
     ];
     this.callbacks.onTranscript?.(cleanTranscript, true);
     this.setStatus('thinking');
+
+    if (/\b(?:phone(?: number)?|telephone|contact number|number to call|call (?:you|destria|the company|the office))\b/i.test(cleanTranscript)) {
+      const reply = `You may contact Destria Tech Inc at our official United States telephone number, ${COMPANY_CONFIG.corporatePhone}.`;
+      this.conversationHistory.push({ sender: 'ai', text: reply });
+      this.callbacks.onAiResponse?.(reply, { isHumanEscalation: true });
+      this.speakText(reply);
+      return;
+    }
 
     // Never fabricate an unverified appointment via voice; route user cleanly to verified Booking Modal
     if (/schedule|appointment|book|meeting|slot|calendar/i.test(cleanTranscript)) {
