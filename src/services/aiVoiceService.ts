@@ -43,6 +43,7 @@ class AIVoiceService {
   private recognitionRestartTimeout: any = null;
 
   private currentUtterance: SpeechSynthesisUtterance | null = null;
+  private voicePreference = 'professional-female';
   private isSpeakerMuted = false;
   private isMicMuted = false;
 
@@ -50,7 +51,7 @@ class AIVoiceService {
   private conversationHistory: Array<{ sender: 'user' | 'ai'; text: string }> = [];
 
   constructor() {
-    this.sessionId = `opm-session-${Date.now()}`;
+    this.sessionId = `dti-session-${Date.now()}`;
   }
 
   public setCallbacks(callbacks: VoiceEventCallbacks) {
@@ -315,14 +316,22 @@ class AIVoiceService {
       );
       if (filVoice) utterance.voice = filVoice;
     } else {
-      const enVoice = voices.find(
-        (v) =>
-          (v.lang.includes('en-US') || v.lang.includes('en-GB') || v.lang.includes('en')) &&
-          (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha'))
-      );
+      const preferred = ['aria', 'jenny', 'ava', 'samantha', 'zira', 'female', 'natural'];
+      const enVoice = [...voices]
+        .filter((v) => v.lang.toLowerCase().startsWith('en'))
+        .sort((a, b) => {
+          const score = (v: SpeechSynthesisVoice) => {
+            const name = v.name.toLowerCase();
+            const idx = preferred.findIndex((token) => name.includes(token));
+            return (v.lang.toLowerCase() === 'en-us' ? 15 : 0) + (idx >= 0 ? 60 - idx * 6 : 0) + (name.includes('neural') ? 20 : 0);
+          };
+          return score(b) - score(a);
+        })[0];
       if (enVoice) utterance.voice = enVoice;
     }
 
+    utterance.rate = 0.94;
+    utterance.pitch = 1.03;
     utterance.onend = () => {
       this.currentUtterance = null;
       this.setStatus('idle');
