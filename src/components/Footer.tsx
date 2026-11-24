@@ -69,6 +69,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenPortal }) => {
               <Building className="w-3.5 h-3.5 text-[#00C2C7]" />
               <span>Corporate Operations</span>
             </h4>
+            <div className="space-y-2 text-slate-300"><p>Wyoming, United States of America</p><p className="font-semibold text-white">Corporate Headquarters</p><p>{COMPANY_CONFIG.headquartersAddress}</p><p>{COMPANY_CONFIG.verification.leadershipName}</p><p>Chief Technology Officer: {COMPANY_CONFIG.chiefTechnologyOfficer}</p></div>
             {COMPANY_CONFIG.registeredAddress ? (
               <>
                 <div className="space-y-1 text-xs text-slate-300 leading-relaxed">
