@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import express, { Request, Response, NextFunction, Express } from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
+import { COMPANY_CONFIG } from '../data/companyConfig';
 import {
   CATALOG_CATEGORIES,
   SERVICE_CATALOG,
