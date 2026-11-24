@@ -259,7 +259,7 @@ export class PaymentGatewayRegistry {
         provider: 'debit_card',
         displayName: 'Debit Card (Hosted Checkout)',
         category: 'card',
-        description: '3DS-authenticated debit card checkout via PCI-compliant hosted fields (zero card storage on Ophireum servers).',
+        description: '3DS-authenticated debit card checkout via PCI-compliant hosted fields (zero card storage on Destria Tech Inc servers).',
         supportedCurrencies: ['PHP', 'USD'],
         paymentMethods: ['Visa Debit', 'Mastercard Debit'],
         keyEnvVar: 'CARD_GATEWAY_SECRET_KEY_TEST',

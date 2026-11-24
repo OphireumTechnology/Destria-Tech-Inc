@@ -63,7 +63,7 @@ async function startServer() {
       app.get('/', (_req: Request, res: Response) => {
         res.status(200).json({
           success: true,
-          service: 'OPHIREUM NETWORK API Gateway',
+          service: 'DESTRIA NETWORK API Gateway',
           healthEndpoint: '/api/health',
         });
       });

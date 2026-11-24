@@ -206,7 +206,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                 Schedule Executive Consultation
               </h3>
               <p className="text-[11px] text-slate-400">
-                Server-Verified Slot Reservation with {COMPANY_CONFIG.founderCeo}
+                Server-Verified Slot Reservation with {COMPANY_CONFIG.name} Solutions Architecture Team
               </p>
             </div>
           </div>
@@ -258,7 +258,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                     ? 'This scheduling request has been marked cancelled and the time slot has been released.'
                     : submittedResult.calendarSynced
                     ? `Your consultation with ${submittedResult.appointment.assignedConsultant} is confirmed on our synchronized Google Calendar.`
-                    : `Your scheduling request has been safely reserved in our database as a Pending Scheduling Request. An executive coordinator will send the final calendar invite and meeting link shortly (or call ${COMPANY_CONFIG.mobile} for urgent requests).`}
+                    : `Your scheduling request has been safely reserved in our database as a Pending Scheduling Request. A ${COMPANY_CONFIG.displayName} solutions coordinator will send the final calendar invite and meeting link shortly${COMPANY_CONFIG.corporatePhone ? ` (or call ${COMPANY_CONFIG.corporatePhone} for urgent requests)` : ''}.`}
                 </p>
               </div>
 
@@ -386,7 +386,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                   >
                     <Phone className="w-4 h-4 text-[#D4AF37] mb-1.5" />
                     <div className="font-bold text-white text-xs">Phone Call</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">+63 Direct executive line</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">Direct callback to your number</div>
                   </button>
 
                   <button
@@ -400,7 +400,9 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                   >
                     <Building className="w-4 h-4 text-[#C0C7D1] mb-1.5" />
                     <div className="font-bold text-white text-xs">In-Person</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">One West Aeropark, Clark</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {COMPANY_CONFIG.registeredAddress || 'Corporate Office (Confirmed Upon Scheduling)'}
+                    </div>
                   </button>
                 </div>
               </div>
@@ -519,7 +521,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                       required
                       value={clientPhone}
                       onChange={(e) => setClientPhone(e.target.value)}
-                      placeholder="+63 9XX XXX XXXX"
+                      placeholder="+1 / +63 XXX XXX XXXX"
                       className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-[#00C2C7]"
                     />
                   </div>

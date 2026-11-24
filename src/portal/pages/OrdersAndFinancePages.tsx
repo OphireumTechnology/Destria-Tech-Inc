@@ -787,14 +787,22 @@ export const PortalInvoicesPage: React.FC = () => {
   const downloadInvoiceHtml = (inv: any) => {
     const safeInvoiceNum = escapeHtml(inv.invoiceNumber);
     const safeLogoUrl = escapeHtml(resolveAbsoluteLogoUrl());
+    const issuerMeta = [
+      inv.issuingCompany?.registrationNo,
+      inv.issuingCompany?.address,
+      inv.issuingCompany?.email,
+    ]
+      .filter((v) => typeof v === 'string' && v.trim().length > 0)
+      .map((v) => escapeHtml(v))
+      .join(' &middot; ');
     const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https: http: data:;"><title>${safeInvoiceNum}</title>
-<style>body{font-family:system-ui,sans-serif;color:#0F1D36;padding:40px;max-width:800px;margin:auto}.brand-header{display:flex;align-items:center;gap:16px;margin-bottom:16px}.brand-logo{width:56px;height:56px;border-radius:9999px;object-fit:cover;border:1.5px solid #D9B664;flex-shrink:0}table{width:100%;border-collapse:collapse;margin:24px 0}th,td{padding:10px;border-bottom:1px solid #E6E2D8;text-align:left}.num{text-align:right;font-family:monospace}</style>
+<style>body{font-family:system-ui,sans-serif;color:#111827;padding:40px;max-width:800px;margin:auto}.brand-header{display:flex;align-items:center;gap:16px;margin-bottom:16px}.brand-logo{width:56px;height:56px;border-radius:9999px;object-fit:cover;border:1.5px solid #D4AF37;flex-shrink:0}table{width:100%;border-collapse:collapse;margin:24px 0}th,td{padding:10px;border-bottom:1px solid #E5E7EB;text-align:left}.num{text-align:right;font-family:monospace}</style>
 </head><body>
 <div class="brand-header">
-  <img src="${safeLogoUrl}" alt="Ophireum Multimedia Production Official Logo" class="brand-logo" />
+  <img src="${safeLogoUrl}" alt="DESTRIA TECH INC (DTI) Official Emblem" class="brand-logo" />
   <div>
-    <h1 style="margin:0;font-size:20px;">${escapeHtml(inv.issuingCompany?.name)}</h1>
-    <p style="margin:4px 0 0;font-size:12px;color:#475569;">${escapeHtml(inv.issuingCompany?.registrationNo)} &middot; ${escapeHtml(inv.issuingCompany?.address)} &middot; ${escapeHtml(inv.issuingCompany?.email)}</p>
+    <h1 style="margin:0;font-size:20px;">${escapeHtml(inv.issuingCompany?.name || 'DESTRIA TECH INC')}</h1>
+    ${issuerMeta ? `<p style="margin:4px 0 0;font-size:12px;color:#475569;">${issuerMeta}</p>` : '<p style="margin:4px 0 0;font-size:12px;color:#475569;">DESTRIA NETWORK</p>'}
   </div>
 </div>
 <hr/>
@@ -828,7 +836,7 @@ ${(inv.lineItems || [])
   return (
     <PortalLayout
       title="Invoices & Receipts"
-      subtitle="Sequential official billing documents issued by Ophireum Multimedia Production."
+      subtitle="Sequential official billing documents issued by DESTRIA TECH INC (DESTRIA NETWORK)."
     >
       <div className="bg-white border border-[#E6E2D8] rounded-xl overflow-hidden">
         {loading ? (
@@ -899,12 +907,16 @@ ${(inv.lineItems || [])
               <div className="flex items-start gap-3.5">
                 <BrandLogo variant="emblem" size="lg" ring="subtle" />
                 <div>
-                  <p className="text-xs font-mono text-[#B8923A]">{selectedInvoice.issuingCompany.name}</p>
-                  <h3 className="text-lg font-bold text-[#0F1D36] mt-0.5">
+                  <p className="text-xs font-mono text-[#D4AF37]">
+                    {selectedInvoice.issuingCompany?.name || 'DESTRIA TECH INC'}
+                  </p>
+                  <h3 className="text-lg font-bold text-[#0B1F3B] mt-0.5">
                     Invoice {selectedInvoice.invoiceNumber}
                   </h3>
                   <p className="text-xs text-[#64748B]">
-                    {selectedInvoice.issuingCompany.registrationNo} · {selectedInvoice.issuingCompany.address}
+                    {[selectedInvoice.issuingCompany?.registrationNo, selectedInvoice.issuingCompany?.address]
+                      .filter(Boolean)
+                      .join(' · ') || 'DESTRIA NETWORK'}
                   </p>
                 </div>
               </div>

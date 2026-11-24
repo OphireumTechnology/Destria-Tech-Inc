@@ -1,5 +1,5 @@
 /**
- * OPHIREUM AI Solutions Consultant - Real-Time Voice Engine
+ * DESTRIA TECH INC AI Solutions Consultant - Real-Time Voice Engine
  * Handles bidirectional voice conversation, Web Audio API analysis,
  * Speech-to-Text streaming, Speech Synthesis, interruption detection,
  * and verified handoff to AppointmentBookingModal (never fabricates bookings).
@@ -156,8 +156,8 @@ class AIVoiceService {
       this.setStatus('idle');
 
       const greeting = this.language.startsWith('fil')
-        ? 'Magandang araw po. Ako ang inyong OPHIREUM AI Solutions Consultant. Paano ko po matutulungan ang inyong multimedia o software development project ngayon?'
-        : 'Welcome to OPHIREUM MULTIMEDIA PRODUCTION. I am your AI Solutions Consultant. How can I assist with your creative media, AI, or enterprise software project today?';
+        ? 'Magandang araw po. Ako ang inyong DESTRIA TECH INC AI Solutions Consultant. Paano ko po matutulungan ang inyong technology, AI, o enterprise software project ngayon?'
+        : 'Welcome to DESTRIA TECH INC and the DESTRIA NETWORK. I am your AI Solutions Consultant. How can I assist with your AI, digital media, or enterprise software project today?';
 
       this.speakText(greeting, false);
       return true;

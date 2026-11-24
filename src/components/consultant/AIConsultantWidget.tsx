@@ -68,7 +68,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       {
         id: 'msg-welcome',
         sender: 'ai',
-        text: `Welcome to OPHIREUM MULTIMEDIA PRODUCTION. I am your AI Solutions Consultant. Whether you require cinema-grade multimedia production, enterprise software, AI automation pipelines, or full-scale web platforms, I'm here to understand your requirements, architect a tailored preliminary brief, and schedule your executive consultation. Which area best matches your project?`,
+        text: `Welcome to DESTRIA TECH INC (DESTRIA NETWORK). I am your AI Solutions Consultant. Whether you require AI automation pipelines, enterprise software, cloud platforms, or multimedia production, I'm here to understand your requirements, architect a tailored preliminary brief, and schedule your consultation. Which area best matches your project?`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         stage: 'welcome',
         quickReplies: [
@@ -255,16 +255,16 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
     try {
       // Check for human escalation keywords
-      if (/speak to human|talk to human|call ceo|dhenze|founder|phone number|call now/i.test(text)) {
+      if (/speak to human|talk to human|call executive|solutions architect|phone number|call now|direct contact/i.test(text)) {
         setTimeout(() => {
           setIsTyping(false);
           const aiEscalateMsg: ChatMessage = {
             id: `ai-esc-${Date.now()}`,
             sender: 'ai',
-            text: `You can reach our Founder & CEO, Dhenze Languisan directly at ${COMPANY_CONFIG.mobile}, or visit our executive production suite at KMC | One West Aeropark, Clark Freeport Zone. Would you like to review direct executive contact options or schedule a structured consultation meeting?`,
+            text: `Our ${COMPANY_CONFIG.name} solutions architecture team is available for structured technical consultations.${COMPANY_CONFIG.corporatePhone ? ` You can also reach us at ${COMPANY_CONFIG.corporatePhone}.` : ''} Would you like to review direct contact options or schedule a consultation meeting?`,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             suggestedAction: 'talk_to_human',
-            quickReplies: ['Direct Executive Contact', 'Schedule Consultation'],
+            quickReplies: ['Direct Solutions Contact', 'Schedule Consultation'],
           };
           setMessages((prev) => [...prev, aiEscalateMsg]);
           if (isVoiceActive && !isSpeakerMuted) {
@@ -326,9 +326,9 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
         {
           id: `err-${Date.now()}`,
           sender: 'ai',
-          text: 'I apologize for the transient disruption. Our solution architects are ready to assist. You may also schedule a direct consultation slot or speak with executive management.',
+          text: 'I apologize for the transient disruption. Our solution architects are ready to assist. You may also schedule a direct consultation slot or view direct contact options.',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          quickReplies: ['Schedule Consultation', 'Direct Executive Contact'],
+          quickReplies: ['Schedule Consultation', 'Direct Solutions Contact'],
         },
       ]);
     }
@@ -351,7 +351,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       return;
     }
 
-    if (reply === 'Direct Executive Contact' || reply === 'Speak with Dhenze Languisan (CEO)') {
+    if (reply === 'Direct Solutions Contact' || reply === 'Direct Executive Contact') {
       setIsEscalationModalOpen(true);
       return;
     }
@@ -375,7 +375,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       {
         id: `msg-welcome-reset-${Date.now()}`,
         sender: 'ai',
-        text: `Consultation session reset. Welcome to OPHIREUM MULTIMEDIA PRODUCTION. Explore any of our 10 service divisions or describe your business goal to generate a tailored Project Brief.`,
+        text: `Consultation session reset. Welcome to DESTRIA TECH INC (DESTRIA NETWORK). Explore any of our 10 service divisions or describe your business goal to generate a tailored Project Brief.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         stage: 'welcome',
         quickReplies: [
@@ -446,7 +446,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                   <span className="text-xs font-bold text-white tracking-wide uppercase">AI Voice & Chat</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-[#00C2C7]" />
                 </div>
-                <p className="text-[10px] font-mono text-[#00C2C7]">OPHIREUM SOLUTIONS</p>
+                <p className="text-[10px] font-mono text-[#00C2C7]">DESTRIA SOLUTIONS</p>
               </div>
 
               <div className="w-8 h-8 rounded-lg bg-[#00C2C7]/10 flex items-center justify-center text-[#00C2C7] border border-[#00C2C7]/20 group-hover:bg-[#00C2C7] group-hover:text-[#0B1220] transition-colors">
@@ -480,7 +480,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="text-xs font-bold text-white tracking-wide">OPHIREUM AI Solutions</h3>
+                  <h3 className="text-xs font-bold text-white tracking-wide">DESTRIA AI Solutions</h3>
                   <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
                     isVoiceActive 
                       ? 'text-[#00C2C7] bg-[#00C2C7]/15 border-[#00C2C7]/40 font-bold' 
@@ -635,7 +635,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                             }`}
                           >
                             <span>{msg.timestamp}</span>
-                            {isAi && <span>· OPHIREUM AI Core</span>}
+                            {isAi && <span>· DESTRIA AI Core</span>}
                           </div>
 
                           {/* Action Buttons for AI message if available */}
@@ -665,7 +665,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                                 className="px-3 py-1.5 rounded-lg bg-[#D4AF37] hover:bg-[#e4be46] text-[#0B1220] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
                               >
                                 <Phone className="w-3.5 h-3.5" />
-                                <span>Contact CEO Dhenze Languisan</span>
+                                <span>Direct Solutions Contact</span>
                               </button>
                               <button
                                 onClick={() => setIsBookingModalOpen(true)}
@@ -974,14 +974,14 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               stage: 'schedule',
               suggestedAction: 'talk_to_human',
-              quickReplies: ['Direct Executive Contact'],
+              quickReplies: ['Direct Solutions Contact'],
             },
           ]);
         }}
       />
 
       {/* =========================================================================
-          EXECUTIVE ESCALATION MODAL (Founder & CEO Direct Channel)
+          DIRECT SOLUTIONS ESCALATION MODAL
           ========================================================================= */}
       {isEscalationModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
@@ -990,8 +990,8 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
               <div className="flex items-center gap-3">
                 <BrandLogo variant="emblem" size="md" ring="gold" decorative />
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Executive Escalation Channel</h3>
-                  <p className="text-xs text-slate-400">Direct leadership communication</p>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Direct Solutions Desk</h3>
+                  <p className="text-xs text-slate-400">{COMPANY_CONFIG.name} · {COMPANY_CONFIG.platformName}</p>
                 </div>
               </div>
               <button
@@ -1007,66 +1007,90 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
                 <div className="flex items-start justify-between">
                   <div>
-                    <span className="text-[10px] font-mono text-[#D4AF37] uppercase tracking-wider">Founder & Chief Executive Officer</span>
-                    <h4 className="text-base font-bold text-white mt-0.5">{COMPANY_CONFIG.founderCeo}</h4>
+                    <span className="text-[10px] font-mono text-[#D4AF37] uppercase tracking-wider">
+                      Enterprise Solutions Architecture
+                    </span>
+                    <h4 className="text-base font-bold text-white mt-0.5">{COMPANY_CONFIG.name}</h4>
                     <p className="text-xs text-slate-400 mt-1">
-                      Direct executive oversight for high-value media productions, enterprise contracts, and proprietary technology architecture.
+                      Dedicated engineering review for enterprise software, AI automation, digital platforms, and strategic technology deployments.
                     </p>
                   </div>
-                  <span className="text-[10px] font-mono text-[#00C2C7] bg-[#00C2C7]/10 px-2 py-0.5 rounded border border-[#00C2C7]/30">
-                    EXECUTIVE SUITE
+                  <span className="text-[10px] font-mono text-[#00C2C7] bg-[#00C2C7]/10 px-2 py-0.5 rounded border border-[#00C2C7]/30 shrink-0">
+                    {COMPANY_CONFIG.initials} DESK
                   </span>
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 flex items-center gap-1.5">
-                      <Phone className="w-3.5 h-3.5 text-[#00C2C7]" />
-                      <span>Direct Mobile / WhatsApp:</span>
-                    </span>
-                    <a
-                      href={`tel:${COMPANY_CONFIG.mobile.replace(/\s+/g, '')}`}
-                      className="font-mono text-white font-bold hover:text-[#00C2C7] transition-colors"
-                    >
-                      {COMPANY_CONFIG.mobile}
-                    </a>
-                  </div>
+                  {COMPANY_CONFIG.corporatePhone && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-[#00C2C7]" />
+                        <span>Corporate Phone:</span>
+                      </span>
+                      <a
+                        href={COMPANY_CONFIG.corporatePhoneLink || '#'}
+                        className="font-mono text-white font-bold hover:text-[#00C2C7] transition-colors"
+                      >
+                        {COMPANY_CONFIG.corporatePhone}
+                      </a>
+                    </div>
+                  )}
 
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 flex items-center gap-1.5">
-                      <Building className="w-3.5 h-3.5 text-[#00C2C7]" />
-                      <span>Executive Suite:</span>
-                    </span>
-                    <span className="text-slate-300 font-medium">KMC | One West Aeropark</span>
-                  </div>
+                  {COMPANY_CONFIG.corporateEmail && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 flex items-center gap-1.5">
+                        <Building className="w-3.5 h-3.5 text-[#00C2C7]" />
+                        <span>Corporate Email:</span>
+                      </span>
+                      <a
+                        href={`mailto:${COMPANY_CONFIG.corporateEmail}`}
+                        className="font-mono text-white font-bold hover:text-[#00C2C7] transition-colors"
+                      >
+                        {COMPANY_CONFIG.corporateEmail}
+                      </a>
+                    </div>
+                  )}
 
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-[#00C2C7]" />
-                      <span>Freeport Location:</span>
-                    </span>
-                    <span className="text-slate-300">Clark Freeport Zone, Pampanga</span>
-                  </div>
+                  {COMPANY_CONFIG.registeredAddress && (
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-400 flex items-center gap-1.5 shrink-0">
+                        <MapPin className="w-3.5 h-3.5 text-[#00C2C7]" />
+                        <span>Corporate Office:</span>
+                      </span>
+                      <span className="text-slate-300 text-right">{COMPANY_CONFIG.registeredAddress}</span>
+                    </div>
+                  )}
+
+                  {!COMPANY_CONFIG.corporatePhone && !COMPANY_CONFIG.corporateEmail && !COMPANY_CONFIG.registeredAddress && (
+                    <div className="flex items-start gap-2 text-slate-300">
+                      <Shield className="w-4 h-4 text-[#00C2C7] shrink-0 mt-0.5" />
+                      <span>
+                        Book a verified consultation slot or submit your project inquiry through our online desk for a direct architect response.
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="flex gap-2">
-                <a
-                  href={`tel:${COMPANY_CONFIG.mobile.replace(/\s+/g, '')}`}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#00C2C7] to-[#009b9f] text-[#0B1220] font-bold text-xs text-center flex items-center justify-center gap-2 shadow-lg hover:brightness-110 transition-all cursor-pointer"
-                >
-                  <Phone className="w-4 h-4" />
-                  <span>Call {COMPANY_CONFIG.mobile}</span>
-                </a>
+                {COMPANY_CONFIG.corporatePhone && COMPANY_CONFIG.corporatePhoneLink && (
+                  <a
+                    href={COMPANY_CONFIG.corporatePhoneLink}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#00C2C7] to-[#009b9f] text-[#0B1220] font-bold text-xs text-center flex items-center justify-center gap-2 shadow-lg hover:brightness-110 transition-all cursor-pointer"
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>Call {COMPANY_CONFIG.corporatePhone}</span>
+                  </a>
+                )}
                 <button
                   onClick={() => {
                     setIsEscalationModalOpen(false);
                     setIsBookingModalOpen(true);
                   }}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs border border-slate-700 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-[#00C2C7] hover:bg-[#00d8de] text-[#0B1220] font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
-                  <Calendar className="w-4 h-4 text-[#00C2C7]" />
-                  <span>Book Formal Calendar</span>
+                  <Calendar className="w-4 h-4" />
+                  <span>Book Formal Consultation</span>
                 </button>
               </div>
             </div>

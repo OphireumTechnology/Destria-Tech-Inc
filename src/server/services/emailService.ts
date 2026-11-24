@@ -18,7 +18,8 @@ function renderOfficialEmailHeader(subtitle: string): string {
           />
         </td>
         <td valign="middle">
-          <div style="font-size:16px;font-weight:700;letter-spacing:0.04em;color:#FFFFFF;margin:0;">OPHIREUM MULTIMEDIA PRODUCTION</div>
+          <div style="font-size:16px;font-weight:700;letter-spacing:0.04em;color:#FFFFFF;margin:0;">DESTRIA TECH INC</div>
+          <div style="font-size:11px;font-weight:600;letter-spacing:0.12em;color:#D4AF37;margin-top:2px;">DESTRIA NETWORK</div>
           <div style="font-size:12px;color:#00C2C7;margin-top:2px;">${escapeHtml(subtitle)}</div>
         </td>
       </tr>
@@ -115,9 +116,9 @@ export class TransactionalEmailService {
     private readonly transport: EmailTransport = new ResendEmailTransport()
   ) {
     this.fromAddress =
-      process.env.EMAIL_FROM || 'Ophireum Multimedia Production <no-reply@ophireummultimedia.com>';
+      process.env.EMAIL_FROM || 'DESTRIA TECH INC <no-reply@destria-placeholder.invalid>';
     this.adminInbox =
-      process.env.ADMIN_NOTIFICATION_EMAIL || 'ophireum.multimedia@gmail.com';
+      process.env.ADMIN_NOTIFICATION_EMAIL || 'admin@destria-placeholder.invalid';
   }
 
   public isConfigured(): boolean {
@@ -231,7 +232,13 @@ export class TransactionalEmailService {
         : `- ${requestRecord.serviceTitle}`;
 
     // 1. Customer Confirmation Email
-    const customerSubject = `Ophireum Solution Request Received [${requestRecord.referenceCode}]`;
+    const customerSubject = `Destria Tech Inc Solution Request Received [${requestRecord.referenceCode}]`;
+    const contactFooterLines = [
+      COMPANY_CONFIG.corporateEmail ? `Corporate Email: ${COMPANY_CONFIG.corporateEmail}` : null,
+      COMPANY_CONFIG.corporatePhone ? `Corporate Phone: ${COMPANY_CONFIG.corporatePhone}` : null,
+      COMPANY_CONFIG.registeredAddress ? `Office: ${COMPANY_CONFIG.registeredAddress}` : null,
+    ].filter((line): line is string => Boolean(line));
+
     const customerText = [
       `Dear ${requestRecord.fullName},`,
       '',
@@ -247,14 +254,21 @@ export class TransactionalEmailService {
       }`,
       `Target Timeline: ${requestRecord.targetTimeline || 'To be confirmed'}`,
       '',
-      'Important Notice: All figures represent preliminary starting estimates only and do not constitute a binding quotation or contract until finalized by our engineering and executive team.',
+      'Important Notice: All figures represent preliminary starting estimates only and do not constitute a binding quotation or contract until finalized by our engineering team.',
       '',
-      `Direct Executive Contact: ${COMPANY_CONFIG.founderCeo} · ${COMPANY_CONFIG.mobile}`,
-      `Office: ${COMPANY_CONFIG.address.fullFormatted}`,
+      `${COMPANY_CONFIG.name} · ${COMPANY_CONFIG.platformName}`,
+      ...contactFooterLines,
     ].join('\n');
 
+    const htmlFooterContact = [
+      COMPANY_CONFIG.corporateEmail ? escapeHtml(COMPANY_CONFIG.corporateEmail) : null,
+      COMPANY_CONFIG.corporatePhone ? escapeHtml(COMPANY_CONFIG.corporatePhone) : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
     const customerHtml = `
-      <div style="font-family:Inter,Arial,sans-serif;background:#0B1220;color:#E2E8F0;padding:24px;border-radius:12px;">
+      <div style="font-family:Inter,Arial,sans-serif;background:#111827;color:#E2E8F0;padding:24px;border-radius:12px;">
         ${renderOfficialEmailHeader('Official Solution Request Confirmation')}
         <p>Dear ${safeName},</p>
         <p>Your preliminary project summary has been registered with reference <strong>${escapeHtml(requestRecord.referenceCode)}</strong>.</p>
@@ -268,7 +282,7 @@ export class TransactionalEmailService {
         <p><strong>Target Timeline:</strong> ${safeTimeline}</p>
         <p style="font-size:12px;color:#94A3B8;border-top:1px solid #1E293B;padding-top:12px;">
           Note: All displayed figures represent preliminary starting estimates only and require formal engineering scoping before binding quotation.<br/>
-          Questions? Contact ${escapeHtml(COMPANY_CONFIG.founderCeo)} at ${escapeHtml(COMPANY_CONFIG.mobile)}.
+          ${escapeHtml(COMPANY_CONFIG.name)} (${escapeHtml(COMPANY_CONFIG.platformName)})${htmlFooterContact ? ` · ${htmlFooterContact}` : ''}
         </p>
       </div>
     `;
@@ -367,9 +381,9 @@ export class TransactionalEmailService {
       ? 'Calendar Appointment Confirmed'
       : 'Pending Scheduling Request';
 
-    const subject = `Ophireum Consultation (${statusLabel}) [${appointment.referenceCode}]`;
+    const subject = `Destria Tech Inc Consultation (${statusLabel}) [${appointment.referenceCode}]`;
     const htmlBody = `
-      <div style="font-family:Inter,Arial,sans-serif;background:#0B1220;color:#E2E8F0;padding:24px;border-radius:12px;">
+      <div style="font-family:Inter,Arial,sans-serif;background:#111827;color:#E2E8F0;padding:24px;border-radius:12px;">
         ${renderOfficialEmailHeader(statusLabel)}
         <p>Reference Code: <strong>${escapeHtml(appointment.referenceCode)}</strong></p>
         <p>Client: ${escapeHtml(appointment.fullName)} (${escapeHtml(appointment.companyName)})<br/>

@@ -117,7 +117,7 @@ export function validateInquiryPayload(raw: unknown): {
     return { ok: false, error: 'Please provide project scope details of at least 20 characters.' };
   }
   if (!privacyConsent) {
-    return { ok: false, error: 'Authorization under OPHIREUM confidentiality terms is required.' };
+    return { ok: false, error: 'Authorization under DESTRIA TECH INC confidentiality terms is required.' };
   }
 
   const type: 'contact_form' | 'solution_builder' =

@@ -9,7 +9,7 @@ interface Hub {
 }
 
 const HUBS: Hub[] = [
-  { name: 'Clark Freeport Zone, Pampanga (HQ)', lat: 15.18, lng: 120.53, isHQ: true },
+  { name: 'DESTRIA NETWORK Core Node', lat: 15.18, lng: 120.53, isHQ: true },
   { name: 'Singapore Tech Hub', lat: 1.35, lng: 103.82 },
   { name: 'Tokyo Digital Media Center', lat: 35.68, lng: 139.77 },
   { name: 'San Francisco Cloud Node', lat: 37.77, lng: -122.42 },
@@ -20,7 +20,7 @@ const HUBS: Hub[] = [
 export const GlobalDigitalGlobe: React.FC<{ className?: string }> = ({ className = 'w-full h-80' }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [activeHub, setActiveHub] = useState<string>('Clark Freeport Zone, Pampanga (HQ)');
+  const [activeHub, setActiveHub] = useState<string>('DESTRIA NETWORK Core Node');
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -215,7 +215,7 @@ export const GlobalDigitalGlobe: React.FC<{ className?: string }> = ({ className
       <div className="absolute bottom-2 left-4 right-4 flex items-center justify-between text-[11px] font-mono text-slate-400 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800 pointer-events-none">
         <span className="flex items-center gap-1.5 text-[#00C2C7]">
           <Radio className="w-3.5 h-3.5 animate-pulse" />
-          <span>Central Hub: Clark Freeport Zone, Pampanga</span>
+          <span>Core Hub: {activeHub}</span>
         </span>
         <span className="hidden sm:inline text-slate-500">Global Synchronized Network</span>
       </div>

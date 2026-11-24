@@ -209,13 +209,13 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
               <div className="flex items-center gap-2 text-xs font-semibold text-[#00C2C7] uppercase tracking-wider mb-2">
                 <span>Start Your Project</span>
                 <span aria-hidden="true">·</span>
-                <span>Direct Executive Routing</span>
+                <span>Direct Solutions Routing</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white text-balance">
-                Engage Ophireum Network for Your Next Assignment
+                Engage {COMPANY_CONFIG.platformName} for Your Next Assignment
               </h2>
               <p className="mt-4 text-sm sm:text-base text-slate-300 leading-relaxed text-balance">
-                Submissions are received directly by the executive production and engineering leads of {COMPANY_CONFIG.name}. Every brief receives an initial technical review within 24 business hours.
+                Submissions are received directly by the solutions architecture and engineering leads of {COMPANY_CONFIG.name}. Every project brief receives an initial technical review within 24 business hours.
               </p>
 
               <div className="mt-8 space-y-4">
@@ -223,51 +223,60 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   <User className="w-5 h-5 text-[#00C2C7] shrink-0 mt-0.5" />
                   <div>
                     <span className="text-xs font-mono text-slate-400 block uppercase">
-                      Founder / Chief Executive Officer
+                      Solutions Architecture Desk
                     </span>
-                    <span className="text-sm font-semibold text-white">{COMPANY_CONFIG.founderCeo}</span>
-                    <div className="mt-1">
-                      <a
-                        href={COMPANY_CONFIG.mobileLink}
-                        className="inline-flex items-center gap-1.5 text-xs font-mono text-[#00C2C7] hover:underline"
-                      >
-                        <Phone className="w-3 h-3" />
-                        <span>{COMPANY_CONFIG.mobile}</span>
-                      </a>
-                    </div>
+                    <span className="text-sm font-semibold text-white">
+                      {COMPANY_CONFIG.verification.leadershipName || `${COMPANY_CONFIG.name} Engineering & Delivery Team`}
+                    </span>
+                    {COMPANY_CONFIG.corporatePhone && COMPANY_CONFIG.corporatePhoneLink ? (
+                      <div className="mt-1">
+                        <a
+                          href={COMPANY_CONFIG.corporatePhoneLink}
+                          className="inline-flex items-center gap-1.5 text-xs font-mono text-[#00C2C7] hover:underline"
+                        >
+                          <Phone className="w-3 h-3" />
+                          <span>{COMPANY_CONFIG.corporatePhone}</span>
+                        </a>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 mt-1">
+                        Direct consultations scheduled securely via the project brief form or AI Solutions Consultant.
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 flex items-start gap-3.5">
-                  <Building className="w-5 h-5 text-[#00C2C7] shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-mono text-slate-400 block uppercase">
-                      Official Office Address
-                    </span>
-                    <span className="text-sm font-semibold text-white">{COMPANY_CONFIG.address.line1}</span>
-                    <p className="text-xs text-slate-300">{COMPANY_CONFIG.address.line2}</p>
-                    <p className="text-xs text-slate-300">{COMPANY_CONFIG.address.zone}</p>
-                    <p className="text-xs text-slate-400 font-mono">{COMPANY_CONFIG.address.cityPostal}</p>
-                    <div className="pt-2">
-                      <a
-                        href={COMPANY_CONFIG.address.mapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-[#00C2C7] hover:text-white transition-colors"
-                      >
-                        <MapPin className="w-3 h-3" />
-                        <span>View Office on Google Maps</span>
-                        <ExternalLink className="w-3 h-3 ml-0.5" />
-                      </a>
+                {COMPANY_CONFIG.registeredAddress ? (
+                  <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 flex items-start gap-3.5">
+                    <Building className="w-5 h-5 text-[#00C2C7] shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-mono text-slate-400 block uppercase">
+                        Corporate Office Address
+                      </span>
+                      <p className="text-xs text-slate-200">{COMPANY_CONFIG.registeredAddress}</p>
+                      {COMPANY_CONFIG.registeredAddressMapsUrl ? (
+                        <div className="pt-2">
+                          <a
+                            href={COMPANY_CONFIG.registeredAddressMapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-[#00C2C7] hover:text-white transition-colors"
+                          >
+                            <MapPin className="w-3 h-3" />
+                            <span>View Office on Google Maps</span>
+                            <ExternalLink className="w-3 h-3 ml-0.5" />
+                          </a>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
-                </div>
+                ) : null}
 
                 <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 flex items-start gap-3.5">
                   <Shield className="w-5 h-5 text-[#D4AF37] shrink-0 mt-0.5" />
                   <div>
                     <span className="text-xs font-mono text-slate-400 block uppercase">
-                      Non-Disclosure & Confidentiality
+                      Non-Disclosure &amp; Confidentiality
                     </span>
                     <span className="text-sm font-semibold text-white">
                       Strict Enterprise Non-Disclosure Guarantee
@@ -279,16 +288,18 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                 </div>
 
                 <div className="p-4 rounded-xl bg-[#111827] border border-slate-800 flex items-start gap-3.5">
-                  <Mail className="w-5 h-5 text-[#C0C7D1] shrink-0 mt-0.5" />
+                  <Mail className="w-5 h-5 text-[#0EA5E9] shrink-0 mt-0.5" />
                   <div>
                     <span className="text-xs font-mono text-slate-400 block uppercase">
-                      Administrative Dispatch Routing
+                      Corporate Dispatch Routing
                     </span>
                     <span className="text-sm font-semibold text-white font-mono">
-                      {COMPANY_CONFIG.configurableEmail}
+                      {COMPANY_CONFIG.corporateEmail || 'Direct Project Intake & Client Portal'}
                     </span>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Configurable company dispatch channel monitored by executive administrators.
+                      {COMPANY_CONFIG.corporateEmail
+                        ? 'Verified corporate dispatch channel monitored by solutions administrators.'
+                        : 'Official corporate email channels are configurable via deployment settings; all web briefs are persisted immediately with a tracking reference.'}
                     </p>
                   </div>
                 </div>
@@ -296,7 +307,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
             </div>
 
             <div className="pt-4 border-t border-slate-800/80 text-xs text-slate-400">
-              <span>Direct inquiries are monitored Monday to Friday, 8:00 AM – 6:00 PM (PST / UTC+8).</span>
+              <span>Direct inquiries are reviewed Monday to Friday during standard enterprise business hours.</span>
             </div>
           </div>
 
@@ -314,8 +325,8 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                     <span className="font-mono text-[#00C2C7] font-bold">
                       {submittedRecord.referenceId}
                     </span>{' '}
-                    and assigned for review by Founder & CEO{' '}
-                    <span className="text-white font-semibold">{COMPANY_CONFIG.founderCeo}</span> and the engineering team.
+                    and assigned for review by the{' '}
+                    <span className="text-white font-semibold">{COMPANY_CONFIG.name}</span> solutions architecture and engineering team.
                   </p>
                   <p className="text-[11px] text-slate-400 max-w-md mx-auto">
                     {submittedRecord.emailDeliveryStatus === 'sent'
@@ -325,7 +336,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   <div className="pt-4 flex justify-center gap-3">
                     <button
                       onClick={resetForm}
-                      className="px-5 py-2.5 text-xs font-semibold text-[#0B1220] bg-[#00C2C7] hover:bg-[#00d6dc] rounded-lg cursor-pointer transition-all"
+                      className="px-5 py-2.5 text-xs font-semibold text-[#111827] bg-[#00C2C7] hover:bg-[#00d6dc] rounded-lg cursor-pointer transition-all"
                     >
                       Submit Another Inquiry
                     </button>
@@ -393,7 +404,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                         type="tel"
                         value={formData.contactNumber}
                         onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
-                        placeholder="+63 9XX XXX XXXX"
+                        placeholder="+1 / +63 XXX XXX XXXX"
                         className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00C2C7] focus:ring-1 focus:ring-[#00C2C7]"
                       />
                       {errors.contactNumber && (
@@ -409,7 +420,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                         type="text"
                         value={formData.company}
                         onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                        placeholder="e.g. Clark Aero Dynamics"
+                        placeholder="e.g. Apex Systems Global"
                         className="w-full px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00C2C7] focus:ring-1 focus:ring-[#00C2C7]"
                       />
                       {errors.company && <p className="text-[11px] text-rose-400 mt-1">{errors.company}</p>}

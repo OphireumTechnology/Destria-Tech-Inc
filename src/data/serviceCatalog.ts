@@ -27,9 +27,9 @@ export const CATALOG_CATEGORIES: CatalogCategoryMeta[] = [
     label: 'All Solutions',
     shortLabel: 'All Solutions',
     iconKind: 'analytics',
-    headline: 'Complete Ophireum Technology & Creative Catalog',
+    headline: 'Complete DESTRIA TECH INC Technology & Creative Catalog',
     description:
-      'Browse every OPHIREUM capability across digital experiences, AI agents, blockchain engineering, enterprise software, cloud security, and multimedia innovation.',
+      'Browse every DESTRIA TECH INC capability across digital experiences, AI agents, blockchain engineering, enterprise software, cloud security, and multimedia innovation.',
   },
   {
     id: 'website-digital',
@@ -1521,7 +1521,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     includedScope: ['Scoped production or post-production deliverables in web/broadcast formats'],
     excludedScope: [
       ...STD_EXCLUDED,
-      'External location permits, talent casting, and travel outside Clark/Pampanga',
+      'External location permits, talent casting, and on-site travel expenses',
     ],
     legacyServiceId: 'multimedia-production',
   },
@@ -1615,14 +1615,14 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     iconKind: 'ai',
     pricing: { model: 'per_session', startingUsd: 297, unitLabel: '/session' },
     capabilities: [
-      'Live remote or Clark Freeport Zone on-site workshops',
+      'Live remote or scheduled corporate on-site workshops',
       'Team AI literacy, prompt governance & safety practices',
       'CMS, digital tool & media workflow playbooks',
     ],
     includedScope: ['Structured live training session plus participant reference guide'],
     excludedScope: [
       ...STD_EXCLUDED,
-      'Travel/venue expenses for off-site sessions outside Pampanga',
+      'Travel/venue expenses for client-requested on-site sessions',
     ],
     legacyServiceId: 'technology-consulting',
   },
@@ -1633,7 +1633,7 @@ const RAW_SERVICE_CATALOG: CatalogService[] = [
     shortDescription:
       'Dependable on-call technical assistance for troubleshooting, asset updates, user permissions, and day-to-day digital continuity.',
     fullDescription:
-      'Monthly support retainer giving your organization direct access to Ophireum engineers for timely operational assistance and guidance.',
+      'Monthly support retainer giving your organization direct access to Destria Tech Inc engineers for timely operational assistance and guidance.',
     iconKind: 'cloud',
     pricing: { model: 'subscription_monthly', startingUsd: 87 },
     capabilities: [

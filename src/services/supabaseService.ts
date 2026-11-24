@@ -216,12 +216,12 @@ export const supabaseService = {
   },
 
   generateGoogleCalendarUrl(appointment: ConsultationAppointment): string {
-    const title = encodeURIComponent(`OPHIREUM Consultation Request: ${appointment.referenceCode}`);
+    const title = encodeURIComponent(`DESTRIA TECH INC Consultation Request: ${appointment.referenceCode}`);
     const details = encodeURIComponent(
-      `Consultation with OPHIREUM MULTIMEDIA PRODUCTION.\nReference Code: ${appointment.referenceCode}\nStatus: ${appointment.status}\nMode: ${appointment.consultationType.toUpperCase()}\nClient: ${appointment.client.fullName} (${appointment.client.companyName})\nLead: ${appointment.assignedConsultant}`
+      `Consultation with DESTRIA TECH INC (DESTRIA NETWORK).\nReference Code: ${appointment.referenceCode}\nStatus: ${appointment.status}\nMode: ${appointment.consultationType.toUpperCase()}\nClient: ${appointment.client.fullName} (${appointment.client.companyName})\nLead: ${appointment.assignedConsultant}`
     );
     const location = encodeURIComponent(
-      appointment.meetingLocation || appointment.meetingLink || 'Clark Freeport Zone, Pampanga / Online (Link Pending Confirmation)'
+      appointment.meetingLocation || appointment.meetingLink || 'Online / Corporate Location (Pending Confirmation)'
     );
 
     try {
@@ -251,10 +251,10 @@ export const supabaseService = {
       client: {
         fullName: client?.fullName || 'Prospective Enterprise Client',
         email: client?.email || 'client@enterprise.com',
-        phone: client?.phone || '+63 9XX XXX XXXX',
+        phone: client?.phone || '+1 / +63 XXX XXX XXXX',
         companyName: client?.companyName || 'Enterprise Partner',
         industry: client?.industry || 'Technology & Digital Media',
-        location: client?.location || 'Clark Freeport Zone / Metro Manila',
+        location: client?.location || 'Global / Remote',
       },
       requirements: {
         category: category || 'Enterprise Digital Platform',

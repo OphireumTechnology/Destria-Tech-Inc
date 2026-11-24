@@ -97,11 +97,11 @@ export default function App() {
     return (
       <Suspense
         fallback={
-          <div className="min-h-screen bg-[#FAF8F4] text-[#0F1D36] flex items-center justify-center p-6">
+          <div className="min-h-screen bg-[#F3F4F6] text-[#0B1F3B] flex items-center justify-center p-6">
             <div className="text-center space-y-3 flex flex-col items-center">
               <BrandLogo variant="emblem" size="lg" ring="gold" eager />
-              <div className="w-6 h-6 rounded-full border-2 border-[#0F4C3A] border-t-transparent animate-spin" />
-              <p className="text-xs font-medium text-[#64748B]">Loading Ophireum Client Portal...</p>
+              <div className="w-6 h-6 rounded-full border-2 border-[#00C2C7] border-t-transparent animate-spin" />
+              <p className="text-xs font-medium text-[#64748B]">Loading DESTRIA TECH INC Client Portal...</p>
             </div>
           </div>
         }
@@ -112,7 +112,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B1220] text-slate-100 flex flex-col selection:bg-[#00C2C7]/20 selection:text-[#00C2C7]">
+    <div className="min-h-screen bg-[#111827] text-slate-100 flex flex-col selection:bg-[#00C2C7]/20 selection:text-[#00C2C7]">
       {/* Sticky Top Bar Contract */}
       <Header
         onOpenPortal={() => handleOpenEnterpriseModal('portal')}

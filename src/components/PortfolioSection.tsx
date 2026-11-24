@@ -32,7 +32,7 @@ export const PortfolioSection: React.FC = () => {
               Production Frameworks & Technical Showcases
             </h2>
             <p className="mt-3 text-sm sm:text-base text-slate-300 text-balance">
-              Rigorous corporate architectures, ACES color grading setups, and multi-agent AI matrices developed under Ophireum Network governance.
+              Rigorous corporate architectures, ACES color grading setups, and multi-agent AI matrices developed under DESTRIA NETWORK governance.
             </p>
           </div>
 

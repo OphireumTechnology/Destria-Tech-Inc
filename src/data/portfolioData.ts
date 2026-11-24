@@ -2,11 +2,11 @@ import { PortfolioItem } from '../types';
 
 export const portfolioData: PortfolioItem[] = [
   {
-    id: 'ophireum-network-platform',
-    title: 'Ophireum Network Platform Architecture',
+    id: 'destria-network-platform',
+    title: 'DESTRIA NETWORK Platform Architecture',
     category: 'Enterprise Software & Cloud',
-    tagline: 'Multi-tenant enterprise foundation uniting creative assets, client portals, and automated deployment.',
-    description: 'A modular, high-security enterprise platform foundation engineered for multimedia asset distribution, fine-grained RBAC permissioning, audit-logged client interactions, and continuous cloud deployment.',
+    tagline: 'Multi-tenant enterprise foundation uniting digital services, client portals, and automated deployment.',
+    description: 'A modular, high-security enterprise platform foundation engineered for digital service delivery, fine-grained RBAC permissioning, audit-logged client interactions, and continuous cloud deployment.',
     clientType: 'Enterprise Framework Specification',
     deliverables: [
       'Role-Based Access Control (Super Admin, Client, Reviewer)',
@@ -16,7 +16,7 @@ export const portfolioData: PortfolioItem[] = [
     ],
     technologies: ['React 19', 'TypeScript', 'Tailwind CSS', 'Node.js', 'PostgreSQL', 'Docker'],
     status: 'Enterprise Blueprint',
-    imagePlaceholderGradient: 'from-[#0B1220] via-[#111827] to-[#00C2C7]/30',
+    imagePlaceholderGradient: 'from-[#0B1F3B] via-[#111827] to-[#00C2C7]/30',
     year: '2026'
   },
   {
@@ -33,8 +33,8 @@ export const portfolioData: PortfolioItem[] = [
       'LTO Archive & Secure Asset Storage Strategy'
     ],
     technologies: ['DaVinci Resolve Studio', 'Pro Tools Ultimate', 'ACES 1.3', '10GbE NAS Network'],
-    status: 'Verified Showcase',
-    imagePlaceholderGradient: 'from-[#111827] via-[#0B1220] to-[#D4AF37]/30',
+    status: 'Production Architecture',
+    imagePlaceholderGradient: 'from-[#111827] via-[#0B1F3B] to-[#D4AF37]/30',
     year: '2026'
   },
   {
@@ -43,7 +43,7 @@ export const portfolioData: PortfolioItem[] = [
     category: 'Artificial Intelligence & Automation',
     tagline: 'Twelve-agent synchronized pipeline for automated requirements, testing, and security auditing.',
     description: 'Server-side orchestration architecture coordinating specialized AI agents across software development life cycles: from natural-language specification to UI rendering, unit test generation, and pull request audits.',
-    clientType: 'Ophireum Intelligence Initiative',
+    clientType: 'DESTRIA TECH INC Intelligence Blueprint',
     deliverables: [
       '12 Role-Specific Agent Prompts & Context Constraints',
       'Safe Server-Side LLM Proxy Adapter (@google/genai)',
@@ -52,24 +52,24 @@ export const portfolioData: PortfolioItem[] = [
     ],
     technologies: ['@google/genai SDK', 'TypeScript', 'Express', 'Vector Embeddings', 'GitHub Webhooks'],
     status: 'Enterprise Blueprint',
-    imagePlaceholderGradient: 'from-[#081528] via-[#00C2C7]/20 to-[#0B1220]',
+    imagePlaceholderGradient: 'from-[#0B1F3B] via-[#00C2C7]/20 to-[#111827]',
     year: '2026'
   },
   {
-    id: 'pampanga-spatial-3d-archive',
-    title: 'Mabalacat Cultural & Spatial 3D Archive',
+    id: 'spatial-3d-webgl-archive',
+    title: 'Interactive Spatial 3D Architecture Showcase',
     category: 'Interactive Technology & 3D',
-    tagline: 'Interactive WebGL spatial preservation showcase celebrating Pampanga heritage and architecture.',
-    description: 'An interactive browser-based 3D environment featuring photogrammetric scans and architectural models of heritage locations in Mabalacat City, Pampanga, optimized for 60fps mobile and desktop playback.',
-    clientType: 'Heritage & Spatial Research Prototype',
+    tagline: 'Interactive WebGL spatial visualization blueprint optimized for desktop and mobile browsers.',
+    description: 'A conceptual browser-based 3D spatial environment featuring photogrammetric optimization and interactive architectural walkthroughs engineered for smooth 60fps cross-device playback.',
+    clientType: 'Spatial Engineering Prototype',
     deliverables: [
       'Low-Poly Photogrammetry Optimization Pipeline',
       'Three.js / WebGL Spatial Camera Navigation',
-      'Interactive Historical Architectural Hotspots',
+      'Interactive Architectural Annotation Hotspots',
       'Responsive Touch Controls for Mobile Browsers'
     ],
     technologies: ['Three.js', 'WebGL', 'GLTF/DRACO Compression', 'Tailwind CSS', 'Vite'],
-    status: 'Verified Showcase',
+    status: 'Enterprise Blueprint',
     imagePlaceholderGradient: 'from-[#111827] via-[#D4AF37]/20 to-[#00C2C7]/20',
     year: '2026'
   },

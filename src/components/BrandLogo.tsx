@@ -17,7 +17,7 @@ export interface BrandLogoProps {
   ring?: BrandLogoRing;
   /** Optional company title override for horizontal/stacked lockups */
   title?: string;
-  /** Optional secondary brand line (e.g., "OPHIREUM NETWORK" or "Client Portal") */
+  /** Optional secondary brand line (e.g., "DESTRIA NETWORK" or "Client Portal") */
   subtitle?: string;
   /** Prioritize loading for above-the-fold placements */
   eager?: boolean;
@@ -39,8 +39,8 @@ const EMBLEM_SIZE_CLASSES: Record<BrandLogoSize, string> = {
 
 const RING_CLASSES: Record<BrandLogoRing, string> = {
   brand:
-    'p-[2px] bg-gradient-to-tr from-[#D4AF37] via-[#00C2C7] to-[#C0C7D1] shadow-md shadow-[#00C2C7]/20',
-  gold: 'p-[2px] bg-gradient-to-tr from-[#B8923A] via-[#D9B664] to-[#B8923A]/70 shadow-sm',
+    'p-[2px] bg-gradient-to-tr from-[#D4AF37] via-[#00C2C7] to-[#0EA5E9] shadow-md shadow-[#00C2C7]/20',
+  gold: 'p-[2px] bg-gradient-to-tr from-[#B8923A] via-[#D4AF37] to-[#00C2C7]/70 shadow-sm',
   subtle: 'p-[1.5px] bg-[#E6E2D8] shadow-xs',
   none: 'p-0 bg-transparent',
 };
@@ -50,7 +50,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   theme = 'dark',
   size = 'md',
   ring = 'brand',
-  title = 'Ophireum Multimedia',
+  title = 'DESTRIA TECH INC',
   subtitle,
   eager = false,
   decorative = false,
@@ -81,13 +81,13 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   }
 
   const titleColor =
-    theme === 'light' ? 'text-[#0F1D36]' : 'text-white';
+    theme === 'light' ? 'text-[#0B1F3B]' : 'text-white';
 
   const subtitleColor =
     theme === 'light'
-      ? 'text-[#0F4C3A]'
+      ? 'text-[#00A3A8]'
       : theme === 'portal-dark'
-      ? 'text-[#D9B664]'
+      ? 'text-[#D4AF37]'
       : 'text-[#00C2C7]';
 
   if (variant === 'stacked') {

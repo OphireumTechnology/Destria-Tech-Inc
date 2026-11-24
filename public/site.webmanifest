@@ -1,20 +1,20 @@
 {
-  "name": "Ophireum Multimedia Production",
-  "short_name": "Ophireum",
-  "description": "Ophireum Multimedia Production & Ophireum Network — Creative Media, AI Agents, Enterprise Software & Client Portal.",
+  "name": "DESTRIA TECH INC",
+  "short_name": "DTI",
+  "description": "DESTRIA TECH INC & DESTRIA NETWORK — Artificial Intelligence, Blockchain Infrastructure, Enterprise Software, Digital Modernization & Client Portal.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#0B1220",
-  "theme_color": "#0F1D36",
+  "background_color": "#111827",
+  "theme_color": "#0B1F3B",
   "icons": [
     {
-      "src": "./branding/ophireum-logo-192.png",
+      "src": "./branding/destria-logo-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./branding/ophireum-logo-512.png",
+      "src": "./branding/destria-logo-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

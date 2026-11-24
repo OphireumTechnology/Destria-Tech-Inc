@@ -13,16 +13,16 @@ const AuthShell: React.FC<{
   const { exitToPublicSite } = usePortalRouter();
 
   return (
-    <div className="min-h-screen bg-[#FAF8F4] text-[#0F1D36] grid lg:grid-cols-[440px_1fr]">
+    <div className="min-h-screen bg-[#F3F4F6] text-[#111827] grid lg:grid-cols-[440px_1fr]">
       {/* Left Brand Panel */}
-      <aside className="hidden lg:flex flex-col justify-between bg-[#0F1D36] text-[#E8E4DA] p-10">
+      <aside className="hidden lg:flex flex-col justify-between bg-[#0B1F3B] text-[#F3F4F6] p-10">
         <div>
           <button
             onClick={exitToPublicSite}
             className="inline-flex items-center gap-2 text-xs text-slate-300 hover:text-white transition-colors cursor-pointer mb-10"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Return to Ophireum Website</span>
+            <span>Return to Destria Tech Inc Website</span>
           </button>
           <div className="mb-8">
             <BrandLogo
@@ -30,8 +30,8 @@ const AuthShell: React.FC<{
               theme="portal-dark"
               size="lg"
               ring="gold"
-              title="Ophireum Multimedia"
-              subtitle="Client Operations Portal"
+              title="DESTRIA TECH INC"
+              subtitle="DESTRIA NETWORK · Client Portal"
               eager
             />
           </div>
@@ -39,16 +39,16 @@ const AuthShell: React.FC<{
             One calm workspace for your services, projects, billing, and deliverables.
           </h2>
           <p className="mt-4 text-sm text-slate-300 leading-relaxed">
-            Order multimedia & AI creative packages, share project briefs, collaborate directly with our production desk, and download verified deliverables securely.
+            Order technology, AI, and digital creative packages, share project briefs, collaborate directly with our engineering desk, and download verified deliverables securely.
           </p>
         </div>
 
         <div className="pt-6 border-t border-white/10 space-y-2 text-xs text-slate-400">
           <div className="flex items-center gap-2 text-slate-200">
-            <ShieldCheck className="w-4 h-4 text-[#D9B664] shrink-0" />
+            <ShieldCheck className="w-4 h-4 text-[#D4AF37] shrink-0" />
             <span>Private client isolation & server-verified transactions</span>
           </div>
-          <p>Ophireum Multimedia Production · Clark Freeport Zone, Pampanga, Philippines</p>
+          <p>DESTRIA TECH INC (DTI) · DESTRIA NETWORK</p>
         </div>
       </aside>
 
@@ -61,13 +61,13 @@ const AuthShell: React.FC<{
               theme="light"
               size="md"
               ring="gold"
-              title="Ophireum Multimedia"
-              subtitle="Client Portal"
+              title="DESTRIA TECH INC"
+              subtitle="DESTRIA NETWORK"
               eager
             />
             <button
               onClick={exitToPublicSite}
-              className="text-xs font-medium text-[#0F4C3A] hover:underline cursor-pointer"
+              className="text-xs font-medium text-[#0B1F3B] hover:underline cursor-pointer"
             >
               Public Website
             </button>
@@ -170,7 +170,7 @@ export const PortalLoginPage: React.FC = () => {
       </form>
 
       <div className="mt-6 pt-5 border-t border-[#E6E2D8] text-center text-sm text-[#475569]">
-        New to Ophireum Multimedia?{' '}
+        New to Destria Tech Inc?{' '}
         <button
           onClick={() => navigate('/portal/register')}
           className="font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
@@ -277,7 +277,7 @@ export const PortalRegisterPage: React.FC = () => {
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+63 9XX XXX XXXX"
+              placeholder="+1 / +63 XXX XXX XXXX"
               className="w-full px-3 py-2.5 text-sm bg-white border border-[#D8D3C8] rounded-lg text-[#0F1D36] focus:outline-none focus:border-[#0F4C3A]"
             />
           </div>
@@ -381,7 +381,7 @@ export const PortalVerifyEmailPage: React.FC = () => {
   return (
     <AuthShell
       title="Verify your email address"
-      subtitle="Confirm ownership of your email to secure your Ophireum Multimedia account."
+      subtitle="Confirm ownership of your email to secure your Destria Tech Inc account."
     >
       {user?.emailVerified || message.includes('verified successfully') ? (
         <div className="space-y-4">

@@ -194,7 +194,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
           </h2>
 
           <p className="mt-4 text-base sm:text-lg text-slate-200 leading-relaxed text-balance">
-            From intelligent AI ecosystems and blockchain infrastructure to enterprise software, premium digital experiences, and next-generation automation, OPHIREUM delivers sophisticated technology solutions engineered to accelerate business transformation.
+            From intelligent AI ecosystems and blockchain infrastructure to enterprise software, premium digital experiences, and next-generation automation, DESTRIA TECH INC delivers sophisticated technology solutions engineered to accelerate business transformation.
           </p>
 
           <p className="mt-3 text-sm text-slate-400 leading-relaxed max-w-3xl">
@@ -240,7 +240,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
             {/* Search Input */}
             <div className="relative flex-1 max-w-xl">
               <label htmlFor="service-catalog-search" className="sr-only">
-                Search Ophireum services and capabilities
+                Search Destria Tech Inc services and capabilities
               </label>
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
@@ -431,16 +431,16 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                       type="button"
                       onClick={() =>
                         onOpenAIConsultant(
-                          'Can you walk me through OPHIREUM AI agents and help recommend the right setup for our organization?'
+                          'Can you walk me through DESTRIA TECH INC AI agents and help recommend the right setup for our organization?'
                         )
                       }
-                      className="px-4 py-2.5 rounded-lg bg-[#00C2C7] hover:bg-[#00d6dc] text-[#0B1220] text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+                      className="px-4 py-2.5 rounded-lg bg-[#00C2C7] hover:bg-[#00d6dc] text-[#111827] text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
                     >
                       <Bot className="w-4 h-4" />
                       <span>Launch Live AI Solutions Demo</span>
                     </button>
                     <span className="text-[11px] font-mono text-slate-400">
-                      Connected to live OPHIREUM AI Solutions Consultant
+                      Connected to live DESTRIA TECH INC AI Solutions Consultant
                     </span>
                   </div>
                 )}
@@ -679,9 +679,9 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
           </div>
 
           <div className="pt-4 border-t border-slate-800/80 text-xs text-slate-400">
-            <span className="font-bold text-white tracking-wide">OPHIREUM MULTIMEDIA PRODUCTION</span>
+            <span className="font-bold text-white tracking-wide">DESTRIA TECH INC</span>
             <span className="mx-2 text-slate-600" aria-hidden="true">·</span>
-            <em className="text-[#D4AF37] not-italic">Where Creative Excellence Meets Intelligent Technology.</em>
+            <em className="text-[#D4AF37] not-italic">Engineering Intelligence. Connecting the Future.</em>
           </div>
         </div>
       </div>

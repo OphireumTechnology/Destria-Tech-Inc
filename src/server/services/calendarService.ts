@@ -117,7 +117,7 @@ export class GoogleCalendarService {
       const endDate = new Date(new Date(startIso).getTime() + 30 * 60 * 1000);
 
       const eventBody: Record<string, unknown> = {
-        summary: `OPHIREUM Executive Consultation (${params.referenceCode}) - ${params.companyName}`,
+        summary: `DESTRIA TECH INC Consultation (${params.referenceCode}) - ${params.companyName}`,
         description: `Client: ${params.fullName} (${params.email})\nChannel: ${params.consultationType}\nClient Timezone: ${params.clientTimezone}\nRef: ${params.referenceCode}`,
         start: { dateTime: startIso, timeZone: 'Asia/Manila' },
         end: { dateTime: endDate.toISOString(), timeZone: 'Asia/Manila' },

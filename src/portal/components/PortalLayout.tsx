@@ -28,7 +28,7 @@ import { BrandLogo } from '../../components/BrandLogo';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
 
-export const OphireumBrandMark: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => (
+export const DestriaBrandMark: React.FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => (
   <BrandLogo variant="emblem" size={size} ring="gold" eager decorative />
 );
 
@@ -121,7 +121,7 @@ export const PortalLayout: React.FC<{
   };
 
   const renderSidebarContent = () => (
-    <div className="flex flex-col h-full bg-[#0F1D36] text-[#E8E4DA]">
+    <div className="flex flex-col h-full bg-[#0B1F3B] text-[#F3F4F6]">
       {/* Brand Lockup */}
       <div className="px-5 py-5 border-b border-white/10 flex items-center justify-between gap-3">
         <button
@@ -129,15 +129,15 @@ export const PortalLayout: React.FC<{
             navigate('/portal/dashboard');
             setMobileNavOpen(false);
           }}
-          className="flex items-center gap-3 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8923A] rounded-lg"
+          className="flex items-center gap-3 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37] rounded-lg"
         >
           <BrandLogo
             variant="horizontal"
             theme="portal-dark"
             size="md"
             ring="gold"
-            title="Ophireum Multimedia"
-            subtitle="Client Portal"
+            title="DESTRIA TECH INC"
+            subtitle="DESTRIA NETWORK · Portal"
             eager
           />
         </button>
@@ -170,20 +170,20 @@ export const PortalLayout: React.FC<{
                     }}
                     className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors cursor-pointer text-left ${
                       active
-                        ? 'bg-[#172B4D] text-white font-semibold'
+                        ? 'bg-[#112A4E] text-white font-semibold border-l-2 border-[#00C2C7]'
                         : 'text-slate-300 hover:bg-white/5 hover:text-white font-normal'
                     }`}
                   >
                     <span className="flex items-center gap-2.5 min-w-0">
                       <Icon
                         className={`w-4 h-4 shrink-0 ${
-                          active ? 'text-[#D9B664]' : 'text-slate-400'
+                          active ? 'text-[#00C2C7]' : 'text-slate-400'
                         }`}
                       />
                       <span className="truncate">{item.label}</span>
                     </span>
                     {item.badge !== undefined && (
-                      <span className="font-mono text-[11px] tabular-nums text-[#D9B664] font-semibold">
+                      <span className="font-mono text-[11px] tabular-nums text-[#D4AF37] font-semibold">
                         {item.badge}
                       </span>
                     )}
@@ -266,8 +266,8 @@ export const PortalLayout: React.FC<{
               </button>
               <button
                 onClick={() => navigate('/portal/dashboard')}
-                className="lg:hidden shrink-0 cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8923A]"
-                aria-label="Ophireum Multimedia Client Portal Dashboard"
+                className="lg:hidden shrink-0 cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]"
+                aria-label="DESTRIA TECH INC Client Portal Dashboard"
               >
                 <BrandLogo variant="emblem" size="sm" ring="gold" eager decorative />
               </button>

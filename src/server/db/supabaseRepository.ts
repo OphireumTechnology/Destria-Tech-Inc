@@ -68,7 +68,7 @@ function mapAppointmentRow(row: any): AppointmentRecord {
     clientTimezone: String(row.client_timezone || 'Asia/Manila'),
     meetingLink: row.meeting_link || undefined,
     meetingLocation: row.meeting_location || undefined,
-    assignedConsultant: String(row.assigned_consultant || 'Dhenze Languisan (Founder & CEO)'),
+    assignedConsultant: String(row.assigned_consultant || 'Destria Tech Inc Solutions Architecture Team'),
     status: row.status || 'pending_review',
     calendarSyncStatus: row.calendar_sync_status || 'unconfigured',
     calendarEventId: row.calendar_event_id || undefined,
@@ -599,7 +599,7 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
       return {
         id: 'env-bootstrap-admin',
         email: normalized,
-        fullName: 'OPHIRIUM Administrator',
+        fullName: 'DESTRIA TECH INC Administrator',
         role: 'super_admin',
         isActive: true,
       };

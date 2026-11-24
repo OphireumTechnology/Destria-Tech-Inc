@@ -170,7 +170,7 @@ export const SolutionBuilderModal: React.FC<SolutionBuilderModalProps> = ({
       }
 
       const summaryLines = [
-        `OPHIREUM MULTIMEDIA PRODUCTION — PRELIMINARY PROJECT SUMMARY`,
+        `DESTRIA TECH INC — PRELIMINARY PROJECT SUMMARY`,
         `Reference Number: ${data.referenceId}`,
         `Organization: ${company.trim()} (${fullName.trim()})`,
         `Selected Solutions (${selectedServices.length}):`,
@@ -259,28 +259,29 @@ export const SolutionBuilderModal: React.FC<SolutionBuilderModalProps> = ({
                 </div>
               </div>
 
-              {/* Exact Required Block 4 Confirmation Copy */}
               <div className="p-5 rounded-xl bg-[#111827] border border-slate-800 text-xs sm:text-sm text-slate-200 leading-relaxed space-y-3 text-left">
                 <p>
-                  Thank you for submitting your custom solution request to Ophireum Multimedia Production.
+                  Thank you for submitting your custom solution request to {COMPANY_CONFIG.name}.
                 </p>
                 <p>
                   Your inquiry has been recorded under reference number{' '}
-                  <strong className="font-mono text-[#00C2C7]">{submittedRecord.referenceId}</strong> and assigned for executive and technical review.
+                  <strong className="font-mono text-[#00C2C7]">{submittedRecord.referenceId}</strong> and assigned for solutions architecture and technical review.
                 </p>
                 <p>
                   All pricing shown on the website represents preliminary starting investments and estimated configurations only. Final project pricing, timelines, deliverables, and third-party infrastructure, licensing, or platform fees will be confirmed in your formal written proposal.
                 </p>
-                <p>
-                  For urgent project requirements, you may also reach us directly at{' '}
-                  <a
-                    href={COMPANY_CONFIG.mobileLink}
-                    className="font-mono text-[#00C2C7] hover:underline font-semibold"
-                  >
-                    +63 917 966 8814
-                  </a>
-                  .
-                </p>
+                {COMPANY_CONFIG.corporatePhone && COMPANY_CONFIG.corporatePhoneLink ? (
+                  <p>
+                    For urgent project requirements, you may also reach us directly at{' '}
+                    <a
+                      href={COMPANY_CONFIG.corporatePhoneLink}
+                      className="font-mono text-[#00C2C7] hover:underline font-semibold"
+                    >
+                      {COMPANY_CONFIG.corporatePhone}
+                    </a>
+                    .
+                  </p>
+                ) : null}
                 <p>
                   You will be contacted using the email and contact details provided in your request.
                 </p>
@@ -514,7 +515,7 @@ export const SolutionBuilderModal: React.FC<SolutionBuilderModalProps> = ({
                         type="tel"
                         value={contactNumber}
                         onChange={(e) => setContactNumber(e.target.value)}
-                        placeholder="+63 9XX XXX XXXX"
+                        placeholder="+1 / +63 XXX XXX XXXX"
                         className="w-full px-3.5 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#00C2C7]"
                       />
                       {errors.contactNumber && (

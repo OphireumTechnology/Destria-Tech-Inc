@@ -676,7 +676,7 @@ export const PortalCheckoutPage: React.FC = () => {
                 <div>
                   <h2 className="text-base font-semibold text-[#0F1D36]">Step 2: Client Billing Information</h2>
                   <p className="text-xs text-[#64748B] mt-0.5">
-                    These details will appear on your sequential Ophireum Multimedia invoice and receipt.
+                    These details will appear on your sequential Destria Tech Inc invoice and receipt.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

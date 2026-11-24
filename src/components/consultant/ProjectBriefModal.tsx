@@ -23,7 +23,7 @@ export const ProjectBriefModal: React.FC<ProjectBriefModalProps> = ({
   if (!isOpen || !brief) return null;
 
   const handleCopy = async () => {
-    const text = `OPHIREUM ENTERPRISE PROJECT BRIEF\nReference: ${brief.referenceCode}\nClient: ${brief.client.fullName} (${brief.client.companyName})\nCategory: ${brief.requirements.category}\nObjectives: ${brief.requirements.businessProblem}\nFeatures: ${brief.requirements.keyFeatures.join(', ')}\nArchitecture: ${brief.technicalArchitecture.suggestedStack.join(', ')}`;
+    const text = `DESTRIA TECH INC ENTERPRISE PROJECT BRIEF\nReference: ${brief.referenceCode}\nClient: ${brief.client.fullName} (${brief.client.companyName})\nCategory: ${brief.requirements.category}\nObjectives: ${brief.requirements.businessProblem}\nFeatures: ${brief.requirements.keyFeatures.join(', ')}\nArchitecture: ${brief.technicalArchitecture.suggestedStack.join(', ')}`;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -57,7 +57,7 @@ export const ProjectBriefModal: React.FC<ProjectBriefModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Synthesized by OPHIREUM AI Solutions Consultant · Ready for Architectural Review
+                Synthesized by DESTRIA TECH INC AI Solutions Consultant · Ready for Architectural Review
               </p>
             </div>
           </div>
@@ -112,7 +112,7 @@ export const ProjectBriefModal: React.FC<ProjectBriefModalProps> = ({
               </div>
               <div>
                 <span className="text-slate-500 block text-[10px] uppercase font-mono">Phone Number</span>
-                <span className="font-mono text-slate-300 block">{brief.client.phone || '+63 (Pending)'}</span>
+                <span className="font-mono text-slate-300 block">{brief.client.phone || 'Pending'}</span>
               </div>
             </div>
           </div>

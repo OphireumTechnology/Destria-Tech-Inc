@@ -846,7 +846,7 @@ export const PORTAL_INITIAL_PRODUCTS: ProductRecord[] = [
     categorySlug: 'business-enterprise-solutions',
     slug: 'dedicated-production-support',
     name: 'Dedicated Production Support',
-    shortDescription: 'Assigned Ophireum Multimedia production team embedded with your marketing calendar.',
+    shortDescription: 'Assigned Destria Tech Inc production team embedded with your marketing calendar.',
     fullDescription: 'Guaranteed monthly production hours with direct portal communication and rapid turnaround SLAs.',
     usd: 790,
     billingType: 'subscription_monthly',
@@ -892,7 +892,7 @@ export const PORTAL_DISCOUNT_CODES: DiscountCodeRecord[] = [
     isActive: true,
   },
   {
-    code: 'OPHIREUM25',
+    code: 'DESTRIA25',
     description: '$25 off orders of $150 USD or more (equivalent in PHP)',
     discountType: 'fixed_usd_minor',
     value: 2500,

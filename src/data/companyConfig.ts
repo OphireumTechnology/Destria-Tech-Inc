@@ -1,75 +1,100 @@
 import { BRAND_ASSETS } from './brandAssets';
 
-export interface DtiRegistration {
-  businessName: string;
-  registrationNo: string;
-  registeredOwner: string;
-  scopeLocation: string;
-  validity: string;
-  dateIssued: string;
-  certificateUrl: string;
+export interface CorporateVerificationConfig {
+  isVerified: boolean;
+  statusLabel: string;
+  registrationNo: string | null;
+  jurisdiction: string | null;
+  leadershipName: string | null;
 }
 
 export interface CompanyConfig {
   name: string;
+  displayName: string;
+  initials: string;
   platformName: string;
-  founderCeo: string;
-  mobile: string;
-  mobileLink: string;
-  configurableEmail: string;
+  /** Optional verified corporate contact details (configured via environment variables only) */
+  corporateEmail: string | null;
+  corporatePhone: string | null;
+  corporatePhoneLink: string | null;
+  registeredAddress: string | null;
+  registeredAddressMapsUrl: string | null;
+  verification: CorporateVerificationConfig;
   logoUrl: string;
   brandBoardUrl: string;
-  dtiCertificateUrl: string;
-  dti: DtiRegistration;
-  address: {
-    line1: string;
-    line2: string;
-    zone: string;
-    cityPostal: string;
-    fullFormatted: string;
-    mapsUrl: string;
-  };
   headline: string;
   subheadline: string;
   heroDescription: string;
+  palette: {
+    graphite: string;
+    cyan: string;
+    silverBg: string;
+    gold: string;
+    navy: string;
+    techBlue: string;
+    emeraldTeal: string;
+    white: string;
+  };
 }
 
-const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL)
-  ? (import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`)
-  : './';
+function readEnv(viteKey: string, nodeKey?: string): string | null {
+  const fromVite =
+    typeof import.meta !== 'undefined' && import.meta.env
+      ? (import.meta.env as Record<string, string | undefined>)[viteKey]
+      : undefined;
+  const fromNode =
+    typeof process !== 'undefined' && process.env
+      ? process.env[nodeKey || viteKey]
+      : undefined;
+  const value = (fromVite || fromNode || '').trim();
+  return value.length > 0 ? value : null;
+}
+
+const verifiedEmail = readEnv('VITE_CORPORATE_EMAIL', 'DESTRIA_CORPORATE_EMAIL');
+const verifiedPhone = readEnv('VITE_CORPORATE_PHONE', 'DESTRIA_CORPORATE_PHONE');
+const verifiedAddress = readEnv('VITE_CORPORATE_ADDRESS', 'DESTRIA_REGISTERED_ADDRESS');
+const verifiedRegNo = readEnv('VITE_CORPORATE_REG_NO', 'DESTRIA_REGISTRATION_NO');
+const verifiedJurisdiction = readEnv('VITE_CORPORATE_JURISDICTION', 'DESTRIA_JURISDICTION');
+const verifiedLeadership = readEnv('VITE_CORPORATE_LEADERSHIP', 'DESTRIA_LEADERSHIP_NAME');
 
 export const LOGO_URL = BRAND_ASSETS.primaryLogo;
-export const BRAND_BOARD_URL = `${baseUrl}assets/aistudio/Ophireum_Multimedia_Tech_Brand_Board_aa50d48b.png`;
-export const DTI_CERTIFICATE_URL = `${baseUrl}images/dti-business-registration.png`;
+export const BRAND_BOARD_URL = BRAND_ASSETS.brandBoard;
 
 export const COMPANY_CONFIG: CompanyConfig = {
-  name: 'OPHIREUM MULTIMEDIA PRODUCTION',
-  platformName: 'OPHIREUM NETWORK',
-  founderCeo: 'Dhenze Languisan',
-  mobile: '+63 917 966 8814',
-  mobileLink: 'tel:+639179668814',
-  configurableEmail: 'contact@ophireummultimedia.com',
+  name: 'DESTRIA TECH INC',
+  displayName: 'Destria Tech Inc',
+  initials: 'DTI',
+  platformName: 'DESTRIA NETWORK',
+  corporateEmail: verifiedEmail,
+  corporatePhone: verifiedPhone,
+  corporatePhoneLink: verifiedPhone ? `tel:${verifiedPhone.replace(/[^+\d]/g, '')}` : null,
+  registeredAddress: verifiedAddress,
+  registeredAddressMapsUrl: verifiedAddress
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(verifiedAddress)}`
+    : null,
+  verification: {
+    isVerified: Boolean(verifiedRegNo),
+    statusLabel: verifiedRegNo
+      ? `Corporate Registration No. ${verifiedRegNo}`
+      : 'Official Corporate Incorporation Records Maintained Upon Confirmation',
+    registrationNo: verifiedRegNo,
+    jurisdiction: verifiedJurisdiction,
+    leadershipName: verifiedLeadership,
+  },
   logoUrl: LOGO_URL,
   brandBoardUrl: BRAND_BOARD_URL,
-  dtiCertificateUrl: DTI_CERTIFICATE_URL,
-  dti: {
-    businessName: 'OPHIREUM MULTIMEDIA PRODUCTION',
-    registrationNo: '7567003',
-    registeredOwner: 'LEODENIS DEVEZA LANGUISAN',
-    scopeLocation: 'Mabalacat City, Pampanga, Region III (Central Luzon)',
-    validity: '06 November 2025 to 06 November 2030',
-    dateIssued: '06 November 2025',
-    certificateUrl: DTI_CERTIFICATE_URL
+  headline: 'DESTRIA TECH INC',
+  subheadline: 'Engineering Intelligence. Connecting the Future.',
+  heroDescription:
+    'Enterprise technology engineering specializing in artificial intelligence, blockchain infrastructure, scalable software systems, cloud cybersecurity, digital modernization, and creative multimedia platforms.',
+  palette: {
+    graphite: '#111827',
+    cyan: '#00C2C7',
+    silverBg: '#F3F4F6',
+    gold: '#D4AF37',
+    navy: '#0B1F3B',
+    techBlue: '#0EA5E9',
+    emeraldTeal: '#10B981',
+    white: '#FFFFFF',
   },
-  address: {
-    line1: 'KMC | One West Aeropark',
-    line2: '5th Floor & Penthouse, One West Aeropark',
-    zone: 'Clark Freeport Zone, Mabalacat City',
-    cityPostal: '2010 Pampanga, Philippines',
-    fullFormatted: 'KMC | One West Aeropark, 5th Floor & Penthouse, Clark Freeport Zone, Mabalacat City, 2010 Pampanga, Philippines',
-    mapsUrl: 'https://www.google.com/maps/search/?api=1&query=One+West+Aeropark+Clark+Freeport+Zone+Mabalacat+Pampanga+Philippines'
-  },
-  headline: 'OPHIREUM MULTIMEDIA PRODUCTION',
-  subheadline: 'Intelligent Technology. Creative Innovation. Connected Digital Solutions.',
-  heroDescription: 'Transforming digital experiences through multimedia production, artificial intelligence, enterprise software engineering, creative technology, and intelligent digital platforms.'
 };

@@ -94,10 +94,10 @@ const synthesizeBriefFromState = (state: ConsultationState, recommendedIds: stri
     client: {
       fullName: state.client.fullName || 'Prospective Enterprise Client',
       email: state.client.email || 'client@organization.com',
-      phone: state.client.phone || '+63 9XX XXX XXXX',
+      phone: state.client.phone || '+1 / +63 XXX XXX XXXX',
       companyName: state.client.companyName || 'Client Organization',
       industry: state.client.industry || 'Digital & Enterprise Services',
-      location: state.client.location || 'Philippines / International',
+      location: state.client.location || 'Global / International',
     },
     requirements: {
       category: state.requirements.category || 'Unified Digital & Technology Solution',
@@ -239,7 +239,7 @@ export const aiConsultantService = {
         };
       }
     } catch (err) {
-      console.warn('[OPHIREUM] Falling back to local catalog consultant engine:', err);
+      console.warn('[DESTRIA] Falling back to local catalog consultant engine:', err);
     }
 
     // Local catalog-grounded fallback if backend is unreachable
@@ -262,7 +262,7 @@ export const aiConsultantService = {
           stage: 'brief',
           recommendedServiceIds: localMatches.map((m) => m.id),
           suggestedAction: 'review_brief',
-          quickReplies: ['Review Project Brief', 'Schedule Consultation', 'Speak with CEO Dhenze Languisan'],
+          quickReplies: ['Review Project Brief', 'Schedule Consultation', 'Direct Solutions Contact'],
         },
         updatedState,
       };
@@ -270,7 +270,7 @@ export const aiConsultantService = {
 
     const matchText =
       localMatches.length > 0
-        ? `Matched OPHIREUM capabilities:\n${localMatches
+        ? `Matched DESTRIA TECH INC capabilities:\n${localMatches
             .map((m) => `• ${m.title} — ${formatCatalogPrice(m, 'USD', 58).primaryLabel}`)
             .join('\n')}\n\nTo narrow the recommendation, what target timeline and key features or integrations do you require?`
         : `Understood. To prepare your customized scope and starting investment breakdown across our 10 technology divisions, what specific goals, users, or integrations does this project require?`;
@@ -286,7 +286,7 @@ export const aiConsultantService = {
         quickReplies: [
           'Prepare Project Brief',
           'Schedule Consultation',
-          'Speak with CEO Dhenze Languisan',
+          'Direct Solutions Contact',
         ],
       },
       updatedState,

@@ -16,7 +16,7 @@ export const EnterpriseSuiteSection: React.FC<EnterpriseSuiteSectionProps> = ({ 
       title: 'Public Corporate Website',
       phase: 'Phase 1 · Operational',
       status: 'active',
-      description: 'Authoritative brand presentation, corporate governance, registered business location, and direct inquiry dispatching.',
+      description: 'Authoritative corporate brand presentation, governance standards, and direct inquiry dispatching.',
       icon: <Globe className="w-5 h-5 text-[#00C2C7]" />,
       actionLabel: 'Current View',
       action: () => window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -115,7 +115,7 @@ export const EnterpriseSuiteSection: React.FC<EnterpriseSuiteSectionProps> = ({ 
             <span>The 8 Platform Pillars</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white text-balance">
-            The Ophireum Network Ecosystem
+            The DESTRIA NETWORK Ecosystem
           </h2>
           <p className="mt-4 text-base text-slate-300 leading-relaxed text-balance">
             A real, extensible architecture designed to unite creative multimedia production with cloud engineering, client governance, and autonomous AI systems.

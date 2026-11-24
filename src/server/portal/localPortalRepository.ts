@@ -255,7 +255,7 @@ export class LocalPortalRepository implements PortalRepository {
     await this.addNotification({
       userId,
       type: 'account_verification',
-      title: 'Welcome to Ophireum Multimedia Client Portal',
+      title: 'Welcome to DESTRIA TECH INC Client Portal',
       body: 'Please verify your email address to protect your account and receive order and project updates.',
       linkPath: '/portal/verify-email',
     });
@@ -264,7 +264,7 @@ export class LocalPortalRepository implements PortalRepository {
       userId,
       eventType: 'account_created',
       title: 'Client account created',
-      detail: 'Registered for Ophireum Multimedia Client Portal.',
+      detail: 'Registered for DESTRIA TECH INC Client Portal.',
       relatedPath: '/portal/profile',
     });
 
@@ -686,10 +686,10 @@ export class LocalPortalRepository implements PortalRepository {
       totalMinor: input.totalMinor,
       paymentStatus: input.paymentStatus,
       issuingCompany: {
-        name: 'OPHIREUM MULTIMEDIA PRODUCTION',
-        registrationNo: 'DTI Philippines Reg. No. 7567003',
-        address: 'KMC | One West Aeropark, 5th Floor & Penthouse, Clark Freeport Zone, Pampanga 2010, PH',
-        email: 'contact@ophireummultimedia.com',
+        name: process.env.DESTRIA_LEGAL_NAME || 'DESTRIA TECH INC',
+        registrationNo: process.env.DESTRIA_REGISTRATION_NO || 'DESTRIA NETWORK',
+        address: process.env.DESTRIA_REGISTERED_ADDRESS || '',
+        email: process.env.DESTRIA_CORPORATE_EMAIL || '',
       },
       clientBilling: input.billingDetails,
       lineItems: order.items.map((item) => ({
@@ -1198,8 +1198,8 @@ export class LocalPortalRepository implements PortalRepository {
       ...input,
       id: projectId,
       referenceNumber,
-      assignedCoordinator: 'Ophireum Production Coordinator',
-      assignedTeam: 'Ophireum Creative Production Desk',
+      assignedCoordinator: 'Destria Tech Inc Solutions Coordinator',
+      assignedTeam: 'Destria Network Engineering & Production Desk',
       currentStage: input.description.trim() ? 'project_brief_received' : 'order_confirmed',
       progressPercent: input.description.trim() ? 20 : 10,
       revisionsUsed: 0,
@@ -1233,7 +1233,7 @@ export class LocalPortalRepository implements PortalRepository {
       projectId,
       userId: input.userId,
       senderRole: 'coordinator',
-      senderName: 'Ophireum Production Desk',
+      senderName: 'Destria Network Production Desk',
       body: `Welcome to workspace ${referenceNumber}. Use this thread to share creative references, ask questions, or provide feedback on milestones.`,
       attachmentIds: [],
       isRead: false,

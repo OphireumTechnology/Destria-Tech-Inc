@@ -775,17 +775,18 @@ test('Phase 2 Audit: Static guards verify no localStorage session tokens and esc
   assert.equal(ordersPageSrc.includes('Content-Security-Policy'), true);
 });
 
-test('Official Brand Identity Standardization: centralized assets, favicons, BrandLogo adoption, and zero OM fallback', async () => {
+test('Official Destria Tech Inc Rebrand Standardization: centralized assets, favicons, palette tokens, BrandLogo adoption, and zero legacy customer-facing branding', async () => {
   const fs = await import('node:fs');
   const path = await import('node:path');
   const root = process.cwd();
 
-  // 1. Official master-derived branding assets and browser icons must exist and be non-empty
+  // 1. Official master-derived Destria branding assets and browser icons must exist and be non-empty
   const requiredAssets = [
-    'public/branding/ophireum-logo.png',
-    'public/branding/ophireum-logo-1024.png',
-    'public/branding/ophireum-logo-512.png',
-    'public/branding/ophireum-logo-192.png',
+    'public/branding/destria-logo-master.png',
+    'public/branding/destria-logo-1024.png',
+    'public/branding/destria-logo-512.png',
+    'public/branding/destria-logo-192.png',
+    'public/branding/destria-brand-identity-board.png',
     'public/branding/apple-touch-icon.png',
     'public/branding/favicon-32x32.png',
     'public/branding/favicon-16x16.png',
@@ -794,28 +795,47 @@ test('Official Brand Identity Standardization: centralized assets, favicons, Bra
   ];
   for (const rel of requiredAssets) {
     const fullPath = path.resolve(root, rel);
-    assert.equal(fs.existsSync(fullPath), true, `Missing required brand asset: ${rel}`);
-    assert.ok(fs.statSync(fullPath).size > 0, `Empty brand asset: ${rel}`);
+    assert.equal(fs.existsSync(fullPath), true, `Missing required Destria brand asset: ${rel}`);
+    assert.ok(fs.statSync(fullPath).size > 0, `Empty Destria brand asset: ${rel}`);
   }
 
-  // 2. Web manifest must parse cleanly and reference the official branding icons
+  // 2. Web manifest must parse cleanly and reference official Destria identity and icons
   const manifest = JSON.parse(fs.readFileSync(path.resolve(root, 'public/site.webmanifest'), 'utf8'));
-  assert.equal(manifest.name, 'Ophireum Multimedia Production');
+  assert.equal(manifest.name, 'DESTRIA TECH INC');
+  assert.equal(manifest.short_name, 'DTI');
   assert.ok(
     Array.isArray(manifest.icons) &&
-      manifest.icons.some((icon: any) => String(icon.src).includes('ophireum-logo-192.png')) &&
-      manifest.icons.some((icon: any) => String(icon.src).includes('ophireum-logo-512.png'))
+      manifest.icons.some((icon: any) => String(icon.src).includes('destria-logo-192.png')) &&
+      manifest.icons.some((icon: any) => String(icon.src).includes('destria-logo-512.png'))
   );
 
-  // 3. index.html must link official favicon, apple-touch-icon, webmanifest, and OG/JSON-LD logo
+  // 3. index.html must link official favicon, apple-touch-icon, webmanifest, Destria OG/JSON-LD logo, and have zero legacy Ophireum strings
   const indexHtml = fs.readFileSync(path.resolve(root, 'index.html'), 'utf8');
+  assert.equal(indexHtml.includes('DESTRIA TECH INC'), true);
+  assert.equal(indexHtml.includes('DESTRIA NETWORK'), true);
   assert.equal(indexHtml.includes('favicon.ico'), true);
   assert.equal(indexHtml.includes('branding/favicon-32x32.png'), true);
   assert.equal(indexHtml.includes('branding/apple-touch-icon.png'), true);
   assert.equal(indexHtml.includes('site.webmanifest'), true);
-  assert.equal(indexHtml.includes('branding/ophireum-logo-1024.png'), true);
+  assert.equal(indexHtml.includes('branding/destria-logo-1024.png'), true);
+  assert.equal(/ophireum|opherium|7567003|languisan|aeropark/i.test(indexHtml), false);
 
-  // 4. Standardized BrandLogo must be used across public site, client portal, auth, loading screens, and invoices
+  // 4. Official --destria-* brand color tokens must be defined in src/index.css
+  const indexCss = fs.readFileSync(path.resolve(root, 'src/index.css'), 'utf8');
+  for (const token of [
+    '--destria-graphite',
+    '--destria-cyan',
+    '--destria-silver-bg',
+    '--destria-gold',
+    '--destria-navy',
+    '--destria-tech-blue',
+    '--destria-emerald-teal',
+    '--destria-white',
+  ]) {
+    assert.equal(indexCss.includes(token), true, `Missing required CSS variable ${token} in src/index.css`);
+  }
+
+  // 5. Standardized BrandLogo must be used across public site, client portal, auth, loading screens, and invoices
   const brandLogoConsumers = [
     'src/components/Header.tsx',
     'src/components/Hero.tsx',
@@ -832,9 +852,38 @@ test('Official Brand Identity Standardization: centralized assets, favicons, Bra
     const src = fs.readFileSync(path.resolve(root, rel), 'utf8');
     assert.equal(src.includes('BrandLogo'), true, `${rel} must use centralized BrandLogo`);
     assert.equal(src.includes('>OM<'), false, `${rel} must not contain invented OM initials fallback`);
+    assert.equal(
+      /ophireum|opherium|7567003|languisan|aeropark|dti-business-registration/i.test(src),
+      false,
+      `${rel} must not contain legacy Ophireum customer-facing branding`
+    );
   }
 
-  // 5. Invoices & emails must embed the official logo
+  // 6. Core data/email/portal modules must not leak legacy Ophireum corporate identity or unconfirmed legal records
+  const strictCleanModules = [
+    'src/data/companyConfig.ts',
+    'src/data/brandAssets.ts',
+    'src/data/portfolioData.ts',
+    'src/data/serviceCatalog.ts',
+    'src/components/AboutSection.tsx',
+    'src/components/ContactSection.tsx',
+    'src/components/EnterpriseSuiteSection.tsx',
+    'src/components/ServicesSection.tsx',
+    'src/components/PortfolioSection.tsx',
+    'src/components/consultant/AppointmentBookingModal.tsx',
+    'src/components/consultant/ProjectBriefModal.tsx',
+    'src/server/services/emailService.ts',
+  ];
+  for (const rel of strictCleanModules) {
+    const src = fs.readFileSync(path.resolve(root, rel), 'utf8');
+    assert.equal(
+      /ophireum|opherium|7567003|languisan|aeropark|917 966|dti-business-registration/i.test(src),
+      false,
+      `${rel} must not contain legacy Ophireum identity or unconfirmed registration data`
+    );
+  }
+
+  // 7. Invoices & emails must embed the official logo
   const ordersSrc = fs.readFileSync(path.resolve(root, 'src/portal/pages/OrdersAndFinancePages.tsx'), 'utf8');
   assert.equal(ordersSrc.includes('resolveAbsoluteLogoUrl'), true);
 

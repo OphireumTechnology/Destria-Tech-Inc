@@ -23,8 +23,8 @@ export const ServiceTechIcon: React.FC<ServiceTechIconProps> = ({
   const strokeSecondary = accent === 'gold' ? '#00C2C7' : '#D4AF37';
 
   const motionClass = ambient
-    ? 'ophireum-tech-ambient'
-    : 'ophireum-tech-interactive';
+    ? 'destria-tech-ambient'
+    : 'destria-tech-interactive';
 
   return (
     <div

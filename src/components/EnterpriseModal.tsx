@@ -179,7 +179,7 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
     setTimeout(() => {
       setStudioGenerating(false);
       setStudioOutput(
-        `// Ophireum AI Studio Architecture Blueprint Preview\n// Prompt: "${promptInput}"\n\nimport React from 'react';\n\nexport const EnterpriseView: React.FC = () => {\n  return (\n    <section className="bg-slate-950 p-8 rounded-2xl border border-cyan-500/30 shadow-2xl">\n      <h2 className="text-xl font-bold text-white tracking-tight">Ophireum Distributed Media Hub</h2>\n      <p className="text-sm text-slate-400 mt-2">Verified Architecture Specification Blueprint</p>\n    </section>\n  );\n};`
+        `// Destria AI Studio Architecture Blueprint Preview\n// Prompt: "${promptInput}"\n\nimport React from 'react';\n\nexport const EnterpriseView: React.FC = () => {\n  return (\n    <section className="bg-slate-950 p-8 rounded-2xl border border-cyan-500/30 shadow-2xl">\n      <h2 className="text-xl font-bold text-white tracking-tight">DESTRIA NETWORK Distributed Hub</h2>\n      <p className="text-sm text-slate-400 mt-2">Verified Architecture Specification Blueprint</p>\n    </section>\n  );\n};`
       );
     }, 800);
   };
@@ -200,7 +200,9 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
                   ENTERPRISE PLATFORM ARCHITECTURE
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">Headquarters: {COMPANY_CONFIG.address.zone}</p>
+              <p className="text-[11px] text-slate-400">
+                {COMPANY_CONFIG.name} ({COMPANY_CONFIG.initials}) · Global Digital Operations
+              </p>
             </div>
           </div>
 
@@ -328,7 +330,7 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
                         <span className="text-xs font-semibold text-white">
                           Phase 2: Production &amp; Core Engineering Build
                         </span>
-                        <p className="text-[11px] text-slate-400">KMC One West Aeropark production pipeline</p>
+                        <p className="text-[11px] text-slate-400">DESTRIA NETWORK engineering and production pipeline</p>
                       </div>
                     </div>
                     <span className="text-xs font-mono text-[#00C2C7] font-medium">In Progress</span>
@@ -338,30 +340,50 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="p-5 rounded-xl bg-[#111827] border border-slate-800 space-y-2">
-                  <h4 className="text-xs font-mono uppercase text-slate-400">Dedicated Production Lead</h4>
-                  <div className="text-sm font-bold text-white">{COMPANY_CONFIG.founderCeo}</div>
-                  <a
-                    href={COMPANY_CONFIG.mobileLink}
-                    className="text-xs font-mono text-[#00C2C7] hover:underline flex items-center gap-1.5"
-                  >
-                    <Phone className="w-3.5 h-3.5" />
-                    <span>{COMPANY_CONFIG.mobile}</span>
-                  </a>
+                  <h4 className="text-xs font-mono uppercase text-slate-400">Dedicated Solutions Desk</h4>
+                  <div className="text-sm font-bold text-white">
+                    {COMPANY_CONFIG.verification.leadershipName || `${COMPANY_CONFIG.name} Architecture Team`}
+                  </div>
+                  {COMPANY_CONFIG.corporatePhone && COMPANY_CONFIG.corporatePhoneLink ? (
+                    <a
+                      href={COMPANY_CONFIG.corporatePhoneLink}
+                      className="text-xs font-mono text-[#00C2C7] hover:underline flex items-center gap-1.5"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      <span>{COMPANY_CONFIG.corporatePhone}</span>
+                    </a>
+                  ) : (
+                    <div className="text-xs text-slate-400">
+                      Direct coordination via Client Portal workspace and project discussions
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-5 rounded-xl bg-[#111827] border border-slate-800 space-y-2">
-                  <h4 className="text-xs font-mono uppercase text-slate-400">Physical Studio Location</h4>
-                  <div className="text-sm font-bold text-white">{COMPANY_CONFIG.address.line1}</div>
-                  <div className="text-xs text-slate-300">{COMPANY_CONFIG.address.zone}</div>
-                  <a
-                    href={COMPANY_CONFIG.address.mapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-[#00C2C7] hover:underline flex items-center gap-1 pt-1"
-                  >
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>Open Maps Navigation</span>
-                  </a>
+                  <h4 className="text-xs font-mono uppercase text-slate-400">Operations &amp; Delivery Model</h4>
+                  {COMPANY_CONFIG.registeredAddress ? (
+                    <>
+                      <div className="text-sm font-bold text-white">{COMPANY_CONFIG.registeredAddress}</div>
+                      {COMPANY_CONFIG.registeredAddressMapsUrl ? (
+                        <a
+                          href={COMPANY_CONFIG.registeredAddressMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-[#00C2C7] hover:underline flex items-center gap-1 pt-1"
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                          <span>Open Maps Navigation</span>
+                        </a>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-sm font-bold text-white">Global Cloud &amp; Distributed Delivery</div>
+                      <div className="text-xs text-slate-300">
+                        Multi-region enterprise infrastructure under {COMPANY_CONFIG.platformName} governance
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -371,7 +393,7 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
             <div className="space-y-6">
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-[11px] font-mono text-[#00C2C7] uppercase">
-                  Ophireum AI Studio Specification
+                  Destria AI Studio Specification
                 </span>
                 <h3 className="text-lg font-bold text-white mt-0.5">
                   Natural-Language Website &amp; Application Builder
@@ -517,7 +539,7 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
                         required
                         value={loginEmail}
                         onChange={(e) => setLoginEmail(e.target.value)}
-                        placeholder="admin@ophireum.com"
+                        placeholder="admin@organization.com"
                         className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
                       />
                     </div>

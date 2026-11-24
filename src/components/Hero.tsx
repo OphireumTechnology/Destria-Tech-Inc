@@ -12,33 +12,40 @@ interface HeroProps {
 
 export const Hero: React.FC<HeroProps> = ({ onNavigate, onOpenPortal }) => {
   return (
-    <section id="hero" className="relative pt-10 pb-20 lg:pt-16 lg:pb-28 overflow-hidden bg-[#0B1220]">
+    <section id="hero" className="relative pt-10 pb-20 lg:pt-16 lg:pb-28 overflow-hidden bg-gradient-to-b from-[#0B1F3B] via-[#111827] to-[#111827]">
       {/* Dynamic Animated Blockchain Network Background Canvas */}
       <div className="absolute inset-0 pointer-events-auto opacity-70">
         <BlockchainNetworkCanvas nodeCount={50} interactive={true} />
       </div>
 
       {/* Atmospheric lighting halos */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-[#00C2C7]/10 blur-[140px] rounded-full pointer-events-none" />
-      <div className="absolute top-1/3 right-10 w-[380px] h-[380px] bg-[#D4AF37]/6 blur-[130px] rounded-full pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-[#00C2C7]/12 blur-[140px] rounded-full pointer-events-none" />
+      <div className="absolute top-1/3 right-10 w-[380px] h-[380px] bg-[#D4AF37]/8 blur-[130px] rounded-full pointer-events-none" />
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pointer-events-none">
         
-        {/* Trust & Location Indicator */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-400 mb-6 pointer-events-auto">
-          <a
-            href={COMPANY_CONFIG.address.mapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 hover:text-[#00C2C7] transition-colors"
-          >
-            <MapPin className="w-3.5 h-3.5 text-[#00C2C7] shrink-0" />
-            <span>{COMPANY_CONFIG.address.line1} · {COMPANY_CONFIG.address.zone}</span>
-          </a>
+        {/* Brand & Network Indicator */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-300 mb-6 pointer-events-auto">
+          <span className="flex items-center gap-1.5 text-white font-semibold font-mono">
+            <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+            <span>{COMPANY_CONFIG.initials}</span>
+          </span>
           <span aria-hidden="true" className="text-slate-600">·</span>
           <span className="text-[#00C2C7] font-semibold font-mono">{COMPANY_CONFIG.platformName}</span>
           <span aria-hidden="true" className="text-slate-600">·</span>
-          <span className="text-slate-300">Pampanga, Philippines</span>
+          {COMPANY_CONFIG.registeredAddress && COMPANY_CONFIG.registeredAddressMapsUrl ? (
+            <a
+              href={COMPANY_CONFIG.registeredAddressMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 hover:text-[#00C2C7] transition-colors"
+            >
+              <MapPin className="w-3.5 h-3.5 text-[#00C2C7] shrink-0" />
+              <span>{COMPANY_CONFIG.registeredAddress}</span>
+            </a>
+          ) : (
+            <span className="text-slate-300">Enterprise AI, Blockchain &amp; Digital Engineering</span>
+          )}
         </div>
 
         {/* 2-Column Split: Editorial Value Proposition & Corporate Technology Identity Card */}
@@ -51,7 +58,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, onOpenPortal }) => {
               {COMPANY_CONFIG.headline}
             </h1>
 
-            <p className="mt-4 text-xl sm:text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-[#00C2C7] via-[#C0C7D1] to-[#D4AF37] leading-snug text-balance">
+            <p className="mt-4 text-xl sm:text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-[#00C2C7] via-[#0EA5E9] to-[#D4AF37] leading-snug text-balance">
               {COMPANY_CONFIG.subheadline}
             </p>
 
@@ -59,11 +66,11 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, onOpenPortal }) => {
               {COMPANY_CONFIG.heroDescription}
             </p>
 
-            {/* 4 Required Hero Buttons */}
+            {/* 4 Primary Hero Actions */}
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <button
                 onClick={() => onNavigate('contact')}
-                className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-[#0B1220] bg-[#00C2C7] hover:bg-[#00d6dc] rounded-lg shadow-lg shadow-[#00C2C7]/20 hover:shadow-[#00C2C7]/30 transition-all cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-[#111827] bg-[#00C2C7] hover:bg-[#00d6dc] rounded-lg shadow-lg shadow-[#00C2C7]/20 hover:shadow-[#00C2C7]/30 transition-all cursor-pointer whitespace-nowrap"
               >
                 <span>Start Your Project</span>
                 <ArrowUpRight className="w-4 h-4" />
@@ -88,36 +95,44 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, onOpenPortal }) => {
                 className="inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#00C2C7] hover:text-white hover:bg-[#00C2C7]/10 border border-[#00C2C7]/40 rounded-lg transition-all cursor-pointer whitespace-nowrap"
               >
                 <Shield className="w-4 h-4 text-[#00C2C7]" />
-                <span>Enter OPHIREUM NETWORK</span>
+                <span>Enter {COMPANY_CONFIG.platformName}</span>
               </button>
             </div>
 
-            {/* Corporate Leadership & Registration Badge */}
+            {/* Verified Corporate Strip */}
             <div className="mt-8 pt-6 border-t border-slate-800/80 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-400">
-              <span className="text-slate-300">
-                <span className="font-semibold text-white">Founder & CEO:</span> {COMPANY_CONFIG.founderCeo}
+              <span className="text-slate-300 flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-[#00C2C7]" />
+                <span className="font-semibold text-white">{COMPANY_CONFIG.name}</span>
               </span>
+              {COMPANY_CONFIG.corporatePhone && COMPANY_CONFIG.corporatePhoneLink ? (
+                <>
+                  <span aria-hidden="true" className="text-slate-700 hidden sm:inline">·</span>
+                  <a href={COMPANY_CONFIG.corporatePhoneLink} className="inline-flex items-center gap-1 text-[#00C2C7] hover:underline font-mono">
+                    <Phone className="w-3 h-3" />
+                    <span>{COMPANY_CONFIG.corporatePhone}</span>
+                  </a>
+                </>
+              ) : null}
               <span aria-hidden="true" className="text-slate-700 hidden sm:inline">·</span>
-              <a href={COMPANY_CONFIG.mobileLink} className="text-[#00C2C7] hover:underline font-mono">
-                {COMPANY_CONFIG.mobile}
-              </a>
+              <span className="text-slate-300 font-mono">Monogram: {COMPANY_CONFIG.initials}</span>
               <span aria-hidden="true" className="text-slate-700 hidden sm:inline">·</span>
-              <span className="text-slate-400">Clark Freeport Zone</span>
+              <span className="text-slate-400">Global Digital Engineering</span>
             </div>
 
           </div>
 
-          {/* Right Column: Redesigned Corporate Technology Identity Card (180–220px Emblem) */}
+          {/* Right Column: Official Corporate Technology Identity Card (190–210px Emblem) */}
           <div className="lg:col-span-5 flex justify-center pointer-events-auto">
             <div className="relative group max-w-sm sm:max-w-md w-full">
               
               {/* Subtle ambient lighting halo */}
-              <div className="absolute -inset-1.5 bg-gradient-to-br from-[#D4AF37]/20 via-[#00C2C7]/25 to-slate-800/40 rounded-3xl blur-lg opacity-70 group-hover:opacity-95 transition duration-500" />
+              <div className="absolute -inset-1.5 bg-gradient-to-br from-[#D4AF37]/20 via-[#00C2C7]/25 to-[#0EA5E9]/25 rounded-3xl blur-lg opacity-70 group-hover:opacity-95 transition duration-500" />
               
               {/* Clean Corporate Identity Card */}
               <div className="relative rounded-2xl bg-[#111827] border border-slate-700/80 p-7 sm:p-8 shadow-2xl flex flex-col items-center text-center">
                 
-                {/* Official Circular Logo with 190-210px dimensions, centered */}
+                {/* Official Circular Emblem */}
                 <BrandLogo
                   variant="emblem"
                   size="hero"
@@ -127,7 +142,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, onOpenPortal }) => {
                   className="transition-transform duration-500 group-hover:scale-[1.02]"
                 />
 
-                {/* Corporate Branding cleanly beneath the logo */}
+                {/* Corporate Branding cleanly beneath the emblem */}
                 <div className="mt-6 space-y-1 w-full">
                   <h2 className="text-base sm:text-lg font-bold tracking-wide text-white uppercase">
                     {COMPANY_CONFIG.name}
@@ -136,23 +151,23 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, onOpenPortal }) => {
                     {COMPANY_CONFIG.platformName}
                   </p>
                   <p className="text-[11px] text-slate-400 font-mono tracking-wider pt-0.5">
-                    MEDIA · TECHNOLOGY · AI · CONTENT · PRODUCTION
+                    AI · BLOCKCHAIN · SOFTWARE · CLOUD · MEDIA
                   </p>
                 </div>
 
                 {/* Symmetrical Information Strip */}
                 <div className="mt-6 w-full pt-4 border-t border-slate-800/80 grid grid-cols-3 gap-2 text-center text-[11px]">
-                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
-                    <span className="block text-slate-400 text-[10px] uppercase font-mono">Headquarters</span>
-                    <span className="font-semibold text-slate-200 mt-0.5 block truncate">Clark Zone</span>
+                  <div className="p-2.5 rounded-lg bg-[#0B1F3B]/80 border border-slate-800">
+                    <span className="block text-slate-400 text-[10px] uppercase font-mono">Monogram</span>
+                    <span className="font-semibold text-white mt-0.5 block truncate font-mono">{COMPANY_CONFIG.initials}</span>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="p-2.5 rounded-lg bg-[#0B1F3B]/80 border border-slate-800">
                     <span className="block text-slate-400 text-[10px] uppercase font-mono">Network Tier</span>
                     <span className="font-semibold text-[#00C2C7] mt-0.5 block">Enterprise</span>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="p-2.5 rounded-lg bg-[#0B1F3B]/80 border border-slate-800">
                     <span className="block text-slate-400 text-[10px] uppercase font-mono">Standards</span>
-                    <span className="font-semibold text-[#D4AF37] mt-0.5 block">ACES & AI</span>
+                    <span className="font-semibold text-[#D4AF37] mt-0.5 block">AI &amp; Cloud</span>
                   </div>
                 </div>
 
