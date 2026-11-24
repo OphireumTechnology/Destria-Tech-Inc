@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { ResendEmailTransport } from '../services/emailService';
 import express, { NextFunction, Request, Response, Router } from 'express';
 import {
   OrderStatus,
@@ -545,6 +546,12 @@ export function createPortalRouter(options: {
       res.status(400).json({ success: false, error: 'Enter a valid email address.' });
       return;
     }
+    const transport = new ResendEmailTransport();
+    const from = process.env.EMAIL_FROM?.trim();
+    if (!isDevHelperEnabled && (!transport.isConfigured || !from || from.includes('.invalid'))) {
+      res.status(503).json({ success: false, error: 'Password recovery is temporarily unavailable. Please contact support.' });
+      return;
+    }
     const user = await repo.findUserByEmail(email);
     let devResetToken: string | undefined;
     if (user) {
@@ -552,11 +559,21 @@ export function createPortalRouter(options: {
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       await repo.setResetToken(user.id, sha256Hex(token), expiresAt);
       devResetToken = token;
+      if (!isDevHelperEnabled && from) {
+        const link = new URL('https://destriatech.com/portal/forgot-password');
+        link.searchParams.set('token', token);
+        const result = await transport.send({
+          to: email, from, subject: 'Destria Tech Inc password recovery',
+          text: 'Reset your password within one hour: ' + link.href + '\nIf you did not request this, ignore this email.',
+          html: '<p>Reset your password within one hour:</p><p><a href="' + link.href + '">Reset password</a></p><p>If you did not request this, ignore this email.</p>',
+        });
+        if (result.status !== 'sent') logStructured('warn', 'portal_recovery_dispatch_failed', { status: result.status });
+      }
     }
     // Uniform response to prevent account enumeration
     res.status(200).json({
       success: true,
-      message: 'If an account matches that email, password recovery instructions have been issued.',
+      message: 'If an account matches that email, your recovery request will be processed. Delivery is not confirmed.',
       ...(isDevHelperEnabled && devResetToken ? { devResetToken } : {}),
     });
   });
