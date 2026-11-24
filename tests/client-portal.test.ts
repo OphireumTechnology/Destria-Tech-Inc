@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { normalizeCorporateMessage } from '../src/services/legacyCorporateMessageMigration';
+import type { ChatMessage } from '../src/services/aiConsultantService';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -913,4 +915,14 @@ test('Destria AI corporate identity is centralized and stale executive labels ar
   assert.ok(server.includes('executiveRequestReply(userMessage)'));
   assert.equal(/\\bdhenze\\b/i.test(server), false);
   assert.ok(voice.includes("preferred = ['aria', 'jenny'"));
+});
+
+test('legacy migration corrects assistant labels without rewriting client messages', () => {
+  const old = { id: 'legacy', sender: 'ai', text: 'CEO Dhenze Languisan', timestamp: '12:00', stage: 'welcome', quickReplies: ['Speak with CEO Dhenze Languisan'] } as ChatMessage;
+  const migrated = normalizeCorporateMessage(old);
+  assert.equal(migrated.text, 'CEO Desmond Hines');
+  assert.deepEqual(migrated.quickReplies, ['Speak with CEO Desmond Hines']);
+  assert.deepEqual(normalizeCorporateMessage(migrated), migrated);
+  const client = { ...old, sender: 'user' } as ChatMessage;
+  assert.deepEqual(normalizeCorporateMessage(client), client);
 });
