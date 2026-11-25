@@ -1,9 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Shield, MapPin, Sparkles, Phone, CheckCircle, Mail } from 'lucide-react';
+import { ArrowUpRight, Shield, MapPin, Sparkles, Phone, CheckCircle, Mail, Download } from 'lucide-react';
 import { BlockchainNetworkCanvas } from './animations/BlockchainNetworkCanvas';
 import { FloatingTechnologyIcons } from './animations/FloatingTechnologyIcons';
 import { COMPANY_CONFIG, corporateIdentity } from '../data/companyConfig';
+import { corporateProfile } from '../config/corporateProfile';
 import { ROUTES } from '../config/routes';
 import { BrandLogo } from './BrandLogo';
 
@@ -85,6 +86,16 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, onOpenPortal }) => {
                 <Shield className="w-4 h-4 text-[#00C2C7]" />
                 <span>Access {corporateIdentity.networkName} Portal</span>
               </button>
+
+              <a
+                href={corporateProfile.documentUrl}
+                download={corporateProfile.downloadFilename}
+                aria-label="Download DESTRIA TECH INC Company Profile PDF"
+                className="inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold text-[#D4AF37] hover:text-white hover:bg-[#D4AF37]/10 border border-[#D4AF37]/50 hover:border-[#D4AF37] rounded-lg transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Download className="w-4 h-4 text-[#D4AF37] shrink-0" />
+                <span>Download Company Profile</span>
+              </a>
             </div>
 
             {/* Verified Corporate Strip */}

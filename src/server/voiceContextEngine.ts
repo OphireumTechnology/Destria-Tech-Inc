@@ -681,8 +681,8 @@ export async function processVoiceConversationTurn(params: {
     const replyText = policyDecision.approvedResponse;
     session.history = [
       ...dedupedHistory,
-      { sender: 'user', text: userMessage },
-      { sender: 'ai', text: replyText },
+      { sender: 'user' as const, text: userMessage },
+      { sender: 'ai' as const, text: replyText },
     ].slice(-24);
     session.turnCount += 1;
     session.lastActivityAt = Date.now();
@@ -795,8 +795,8 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
 
         session.history = [
           ...dedupedHistory,
-          { sender: 'user', text: userMessage },
-          { sender: 'ai', text: enforced.replyText },
+          { sender: 'user' as const, text: userMessage },
+          { sender: 'ai' as const, text: enforced.replyText },
         ].slice(-24);
         session.turnCount += 1;
         session.lastActivityAt = Date.now();
@@ -849,8 +849,8 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
   }
   session.history = [
     ...dedupedHistory,
-    { sender: 'user', text: userMessage },
-    { sender: 'ai', text: enforcedFallback.replyText },
+    { sender: 'user' as const, text: userMessage },
+    { sender: 'ai' as const, text: enforcedFallback.replyText },
   ].slice(-24);
   session.turnCount += 1;
   session.lastActivityAt = Date.now();

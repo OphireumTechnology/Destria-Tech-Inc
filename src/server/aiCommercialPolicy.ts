@@ -18,12 +18,17 @@ OFFICIAL CORPORATE INFORMATION:
 - Network Brand: DESTRIA NETWORK
 - Abbreviation: DTI
 - Founder & Chief Executive Officer: ${corporateIdentity.leadership.ceo.name}
-- Chief Technology Officer: ${corporateIdentity.leadership.cto.name}
+- Co-Founder & Chief Technology Officer: ${corporateIdentity.leadership.cto.name}
+- Entity Classification: Corporation, as represented in corporate materials
 - Jurisdiction of Registration: ${corporateIdentity.jurisdiction}
 - Official Corporate Headquarters Address: ${corporateIdentity.headquarters.fullAddress}
 - Official Corporate Telephone: ${corporateIdentity.contact.telephone.display}
 - Official Corporate Email: info@destriatech.com
 - Official Website: https://destriatech.com/
+- Official 17-Page Corporate Profile PDF: Available for viewing and download on the About & Governance section of https://destriatech.com/
+- 8-Layer Enterprise Technology Architecture: 1. Digital Experience Layer, 2. Application Layer, 3. Artificial Intelligence Layer, 4. Integration Layer, 5. Data Layer, 6. Infrastructure Layer, 7. Security Layer, 8. Governance Layer.
+- Corporate Core Values: 6.1 Integrity and Accountability, 6.2 Technological Excellence, 6.3 Innovation and Adaptability, 6.4 Security and Confidentiality, 6.5 Client-Centered Engineering, 6.6 Responsible Artificial Intelligence, 6.7 Commercial Transparency.
+- Responsible AI Governance: AI assistants are NOT authorized corporate signatories; all final commercial proposals, contractual commitments, and approvals require authorized human review.
 
 STRICT COMMERCIAL & PRICING POLICY:
 1. DESTRIA TECH INC provides customized enterprise technology solutions exclusively.
@@ -55,7 +60,10 @@ export const APPROVED_AI_RESPONSES = {
 
   ceo: `${corporateIdentity.leadership.ceo.name} is the Founder and Chief Executive Officer of ${corporateIdentity.legalName}.`,
 
-  cto: `${corporateIdentity.leadership.cto.name} is the Chief Technology Officer of ${corporateIdentity.legalName}.`,
+  cto: `${corporateIdentity.leadership.cto.name} is the Co-Founder and Chief Technology Officer of ${corporateIdentity.legalName}.`,
+
+  corporateProfile:
+    'The official 17-page DESTRIA TECH INC Corporate Profile covers our executive leadership (Founder & CEO Desmond Hines and Co-Founder & CTO Leodenis Languisan), corporate vision and mission, seven core values, 10 strategic objectives, 8-layer modular enterprise technology architecture, 15-stage engagement framework, and governance standards. You may view or download the complete Corporate Profile PDF directly from the About & Governance section on destriatech.com.',
 
   consultation:
     'We would be glad to coordinate an initial consultation with DESTRIA TECH INC. Please share your name, organization, contact details, and a brief summary of your technology objectives, or reach our corporate team directly at +1 (307) 419-4277 or info@destriatech.com.',
@@ -72,6 +80,7 @@ export type CommercialPolicyTrigger =
   | 'telephone'
   | 'ceo'
   | 'cto'
+  | 'corporate_profile'
   | 'consultation'
   | null;
 
@@ -261,6 +270,21 @@ export function classifyCommercialPolicyIntent(userMessage: string): PolicyClass
         : APPROVED_AI_RESPONSES.telephone,
       suggestedAction: 'talk_to_human',
       quickReplies: ['Request an Enterprise Consultation', 'Corporate Headquarters'],
+    };
+  }
+
+  // 9b. Official Corporate Profile Document Inquiry
+  const asksCorporateProfile =
+    /\b(corporate\s+profile|company\s+profile|brochure|download\s+.*profile|pdf\s+profile)\b/i.test(
+      normalized
+    );
+  if (asksCorporateProfile) {
+    return {
+      trigger: 'corporate_profile',
+      isPricingRestricted: false,
+      approvedResponse: APPROVED_AI_RESPONSES.corporateProfile,
+      suggestedAction: 'none',
+      quickReplies: ['Explore Technology Solutions', 'Request an Enterprise Consultation'],
     };
   }
 

@@ -8,6 +8,7 @@ export const GITHUB_PAGES_REPO_PREFIX = manifest.githubPagesRepoPrefix;
 export const ROUTES = {
   HOME: '/',
   ABOUT: '/about',
+  CORPORATE_PROFILE: '/corporate-profile',
   SOLUTIONS: '/solutions',
   PORTFOLIO: '/portfolio',
   ENTERPRISE_SUITE: '/enterprise-suite',
@@ -70,6 +71,7 @@ export const ROUTES = {
 export const PUBLIC_SECTION_ROUTE_MAP: Record<string, string> = {
   hero: ROUTES.HOME,
   about: ROUTES.ABOUT,
+  'corporate-profile': ROUTES.CORPORATE_PROFILE,
   services: ROUTES.SOLUTIONS,
   portfolio: ROUTES.PORTFOLIO,
   architecture: ROUTES.ENTERPRISE_SUITE,
@@ -479,6 +481,7 @@ export interface RouteSeoMeta {
   title: string;
   description: string;
   canonicalUrl: string;
+  ogImage?: string;
   noIndex?: boolean;
 }
 
@@ -514,6 +517,14 @@ export function getRouteSeoMeta(pathname: string): RouteSeoMeta {
   }
 
   switch (clean) {
+    case ROUTES.CORPORATE_PROFILE:
+      return {
+        title: 'Corporate Profile | DESTRIA TECH INC',
+        description:
+          'View and download the official DESTRIA TECH INC Corporate Profile. Explore our enterprise technology solutions, corporate leadership, governance and digital innovation capabilities.',
+        canonicalUrl: buildCanonicalPublicUrl(ROUTES.CORPORATE_PROFILE),
+        ogImage: `${CANONICAL_ORIGIN}/branding/corporate-profile-cover.webp`,
+      };
     case ROUTES.ABOUT:
       return {
         title: 'About & Governance | DESTRIA TECH INC',

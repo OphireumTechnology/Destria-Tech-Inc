@@ -3,6 +3,7 @@ import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { AboutSection } from './components/AboutSection';
+import { CorporateProfileSection } from './components/CorporateProfileSection';
 import { ServicesSection } from './components/ServicesSection';
 import { PortfolioSection } from './components/PortfolioSection';
 import { EnterpriseSuiteSection } from './components/EnterpriseSuiteSection';
@@ -27,6 +28,7 @@ import {
   sectionIdToPublicRoute,
 } from './config/routes';
 
+const CorporateProfilePage = lazy(() => import('./components/CorporateProfilePage'));
 const ClientPortalApp = lazy(() => import('./portal/ClientPortalApp'));
 const AdminPortalApp = lazy(() => import('./admin/AdminPortalApp'));
 
@@ -59,6 +61,25 @@ function useRouteSeoSync() {
 
     const ogUrlEl = document.querySelector('meta[property="og:url"]');
     if (ogUrlEl) ogUrlEl.setAttribute('content', meta.canonicalUrl);
+
+    const ogTitleEl = document.querySelector('meta[property="og:title"]');
+    if (ogTitleEl) ogTitleEl.setAttribute('content', meta.title);
+
+    const ogDescEl = document.querySelector('meta[property="og:description"]');
+    if (ogDescEl) ogDescEl.setAttribute('content', meta.description);
+
+    const twitterTitleEl = document.querySelector('meta[name="twitter:title"]');
+    if (twitterTitleEl) twitterTitleEl.setAttribute('content', meta.title);
+
+    const twitterDescEl = document.querySelector('meta[name="twitter:description"]');
+    if (twitterDescEl) twitterDescEl.setAttribute('content', meta.description);
+
+    const imageUrl = meta.ogImage || 'https://destriatech.com/branding/destria-logo-1024.png';
+    const ogImgEl = document.querySelector('meta[property="og:image"]');
+    if (ogImgEl) ogImgEl.setAttribute('content', imageUrl);
+
+    const twitterImgEl = document.querySelector('meta[name="twitter:image"]');
+    if (twitterImgEl) twitterImgEl.setAttribute('content', imageUrl);
   }, [location.pathname]);
 }
 
@@ -204,6 +225,9 @@ const PublicCorporateView: React.FC<{
           onOpenPortal={() => handleOpenEnterpriseModal('portal')}
         />
 
+        {/* Official Corporate Profile Showcase & Direct Download */}
+        <CorporateProfileSection />
+
         {/* Customized Enterprise Technology Solutions Directory */}
         <ServicesSection
           onSelectServiceForInquiry={handleSelectServiceForInquiry}
@@ -272,8 +296,18 @@ export default function App() {
   return (
     <ErrorBoundary>
       <Routes>
+        {/* Dedicated Corporate Profile Page (Clean Permanent Public URL) */}
+        <Route
+          path={ROUTES.CORPORATE_PROFILE}
+          element={
+            <Suspense fallback={<RouteLoaderFallback label="Loading DESTRIA TECH INC Corporate Profile..." />}>
+              <CorporateProfilePage />
+            </Suspense>
+          }
+        />
+
         {/* Public Corporate Website Canonical Clean Routes */}
-        {PUBLIC_STATIC_ROUTES.map((routePath) => (
+        {PUBLIC_STATIC_ROUTES.filter((routePath) => routePath !== ROUTES.CORPORATE_PROFILE).map((routePath) => (
           <Route key={routePath} path={routePath} element={<PublicCorporateView />} />
         ))}
 

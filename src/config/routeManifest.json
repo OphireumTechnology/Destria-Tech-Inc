@@ -6,6 +6,7 @@
   "publicRoutes": [
     "/",
     "/about",
+    "/corporate-profile",
     "/solutions",
     "/portfolio",
     "/enterprise-suite",

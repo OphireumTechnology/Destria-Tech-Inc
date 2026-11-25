@@ -41,6 +41,44 @@ function buildRouteSpecificHtml(baseHtml, routePath, manifest) {
       `<meta property="og:url" content="${canonicalUrl}" />`
     );
 
+  if (routePath === '/corporate-profile') {
+    const profileTitle = 'Corporate Profile | DESTRIA TECH INC';
+    const profileDesc =
+      'View and download the official DESTRIA TECH INC Corporate Profile. Explore our enterprise technology solutions, corporate leadership, governance and digital innovation capabilities.';
+    const coverImageUrl = `${canonicalOrigin}/branding/corporate-profile-cover.webp`;
+
+    html = html
+      .replace(/<title>[^<]*<\/title>/i, `<title>${profileTitle}</title>`)
+      .replace(
+        /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/i,
+        `<meta name="description" content="${profileDesc}" />`
+      )
+      .replace(
+        /<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/i,
+        `<meta property="og:title" content="${profileTitle}" />`
+      )
+      .replace(
+        /<meta\s+property="og:description"\s+content="[^"]*"\s*\/?>/i,
+        `<meta property="og:description" content="${profileDesc}" />`
+      )
+      .replace(
+        /<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/i,
+        `<meta property="og:image" content="${coverImageUrl}" />`
+      )
+      .replace(
+        /<meta\s+name="twitter:title"\s+content="[^"]*"\s*\/?>/i,
+        `<meta name="twitter:title" content="${profileTitle}" />`
+      )
+      .replace(
+        /<meta\s+name="twitter:description"\s+content="[^"]*"\s*\/?>/i,
+        `<meta name="twitter:description" content="${profileDesc}" />`
+      )
+      .replace(
+        /<meta\s+name="twitter:image"\s+content="[^"]*"\s*\/?>/i,
+        `<meta name="twitter:image" content="${coverImageUrl}" />`
+      );
+  }
+
   if (isPrivateRoute && !/<meta\s+name="robots"/i.test(html)) {
     html = html.replace(
       /<\/head>/i,

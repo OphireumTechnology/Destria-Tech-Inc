@@ -290,7 +290,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
   // Handle Voice Toggle
   const handleToggleVoice = async () => {
-    if (isVoiceActive || voiceStatus === 'connecting' || voiceStatus === 'reconnecting') {
+    if (isVoiceActive) {
       aiVoiceService.stopSession();
       setVoiceStatus('disconnected');
       setIsVoiceSessionActive(false);

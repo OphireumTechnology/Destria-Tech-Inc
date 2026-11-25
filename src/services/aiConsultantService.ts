@@ -3,6 +3,8 @@ import { corporateIdentity, COMMERCIAL_ENGAGEMENT_STATEMENT } from '../data/comp
 import { ProjectBrief, ClientProfile, ProjectRequirements } from './supabaseService';
 import { apiUrl } from '../lib/apiClient';
 
+import { corporateProfile } from '../config/corporateProfile';
+
 export interface ChatMessage {
   id: string;
   sender: 'ai' | 'user';
@@ -11,7 +13,7 @@ export interface ChatMessage {
   stage?: 'welcome' | 'category' | 'details' | 'recommendation' | 'brief' | 'schedule';
   quickReplies?: string[];
   recommendedServiceIds?: string[];
-  suggestedAction?: 'review_brief' | 'schedule_meeting' | 'talk_to_human';
+  suggestedAction?: 'review_brief' | 'schedule_meeting' | 'talk_to_human' | 'corporate_profile';
 }
 
 export interface ConsultationState {
@@ -106,6 +108,13 @@ function getOfflineCommercialPolicyReply(userMessage: string): string | null {
   }
   if (/\b(cto|chief\s+technology)\b/i.test(normalized)) {
     return `${corporateIdentity.leadership.cto.name} is the Chief Technology Officer of ${corporateIdentity.legalName}.`;
+  }
+  if (
+    /\b(corporate\s+profile|company\s+profile|company\s+brochure|corporate\s+brochure|company\s+background|corporate\s+documentation|company\s+overview|company\s+information)\b/i.test(
+      normalized
+    )
+  ) {
+    return `You may view or download the official DESTRIA TECH INC Corporate Profile at ${corporateProfile.canonicalPageUrl}.`;
   }
   return null;
 }
@@ -289,14 +298,17 @@ export const aiConsultantService = {
     // Offline Commercial Policy Guardrail
     const policyReply = getOfflineCommercialPolicyReply(trimmed);
     if (policyReply) {
+      const isCorporateProfileReply = policyReply.includes(corporateProfile.pagePath);
       return {
         aiMessage: {
           id: msgId,
           sender: 'ai',
           text: policyReply,
           timestamp: now,
-          suggestedAction: 'schedule_meeting',
-          quickReplies: ['Request an Enterprise Consultation', 'Direct Solutions Contact'],
+          suggestedAction: isCorporateProfileReply ? 'corporate_profile' : 'schedule_meeting',
+          quickReplies: isCorporateProfileReply
+            ? ['View Corporate Profile', 'Request an Enterprise Consultation']
+            : ['Request an Enterprise Consultation', 'Direct Solutions Contact'],
         },
         updatedState,
       };

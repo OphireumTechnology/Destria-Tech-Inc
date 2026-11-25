@@ -194,6 +194,7 @@ export class AIVoiceService {
   // Active playback & in-flight request cancellation
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private currentAudio: HTMLAudioElement | null = null;
+  private activePlaybackAbortResolver: (() => void) | null = null;
   private activeFetchController: AbortController | null = null;
   private isSpeakerMuted = false;
   private isMicMuted = false;
@@ -1181,6 +1182,11 @@ export class AIVoiceService {
       return { played: true, audioGenerationLatencyMs, firstAudioAtMs };
     }
 
+    // If cancelled by user barge-in interruption or session stop, exit cleanly without error
+    if (!this.isCurrentResponse(sessionSeq, responseSeq)) {
+      return { played: false, audioGenerationLatencyMs, firstAudioAtMs: null };
+    }
+
     // 3. All audio providers failed: report honestly (never fabricate playback!) and still recover listening
     this.setActiveVoiceEngine('none');
     this.callbacks.onError?.(
@@ -1218,20 +1224,25 @@ export class AIVoiceService {
 
       return await new Promise<boolean>((resolve) => {
         let finished = false;
-        const finishOnce = () => {
+        const finishOnce = (ok = true) => {
           if (finished) return;
           finished = true;
           this.clearPlaybackWatchdog();
+          if (this.activePlaybackAbortResolver === abortResolve) {
+            this.activePlaybackAbortResolver = null;
+          }
           if (this.currentBufferSource === source) {
             this.currentBufferSource = null;
             this.outputAnalyser = null;
           }
-          if (restartListeningAfter && this.isCurrentResponse(sessionSeq, responseSeq)) {
+          if (ok && restartListeningAfter && this.isCurrentResponse(sessionSeq, responseSeq)) {
             void this.handleAssistantPlaybackComplete(sessionSeq, responseSeq).finally(() => resolve(true));
             return;
           }
-          resolve(true);
+          resolve(ok);
         };
+        const abortResolve = () => finishOnce(false);
+        this.activePlaybackAbortResolver = abortResolve;
 
         const source = ctx.createBufferSource();
         source.buffer = decoded;
@@ -1244,11 +1255,11 @@ export class AIVoiceService {
         this.outputAnalyser = outputAnalyser;
         this.currentBufferSource = source;
 
-        source.onended = finishOnce;
+        source.onended = () => finishOnce(true);
 
         // Safety watchdog in case browser drops onended
         const estimatedMs = Math.max(1500, Math.ceil((decoded.duration || 3) * 1000)) + this.playbackWatchdogPaddingMs;
-        this.armPlaybackWatchdog(estimatedMs, finishOnce);
+        this.armPlaybackWatchdog(estimatedMs, () => finishOnce(true));
 
         source.start(0);
       });
@@ -1280,6 +1291,9 @@ export class AIVoiceService {
           if (settled) return;
           settled = true;
           this.clearPlaybackWatchdog();
+          if (this.activePlaybackAbortResolver === abortResolve) {
+            this.activePlaybackAbortResolver = null;
+          }
           if (this.currentAudio === audio) {
             this.currentAudio = null;
           }
@@ -1289,6 +1303,8 @@ export class AIVoiceService {
           }
           resolve(ok);
         };
+        const abortResolve = () => settle(false);
+        this.activePlaybackAbortResolver = abortResolve;
 
         audio.onended = () => settle(true);
         audio.onerror = () => settle(false);
@@ -1333,6 +1349,9 @@ export class AIVoiceService {
         if (settled) return;
         settled = true;
         this.clearPlaybackWatchdog();
+        if (this.activePlaybackAbortResolver === abortResolve) {
+          this.activePlaybackAbortResolver = null;
+        }
         if (this.speechKeepAliveTimer) {
           clearInterval(this.speechKeepAliveTimer);
           this.speechKeepAliveTimer = null;
@@ -1346,6 +1365,8 @@ export class AIVoiceService {
         }
         resolve(ok);
       };
+      const abortResolve = () => finishOnce(false);
+      this.activePlaybackAbortResolver = abortResolve;
 
       const utterance = new UtteranceCtor(cleanText);
       utterance.lang = this.language;
@@ -1529,6 +1550,12 @@ export class AIVoiceService {
         // Ignore
       }
       this.currentUtterance = null;
+    }
+
+    if (this.activePlaybackAbortResolver) {
+      const resolver = this.activePlaybackAbortResolver;
+      this.activePlaybackAbortResolver = null;
+      resolver();
     }
   }
 

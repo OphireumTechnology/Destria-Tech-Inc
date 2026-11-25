@@ -1963,7 +1963,13 @@ CONSULTATION BEHAVIOR:
                 .filter((id: string) => SERVICE_CATALOG.some((s) => s.id === id))
                 .slice(0, 3)
             : [];
-          const allowedActions = ['none', 'review_brief', 'schedule_meeting', 'talk_to_human'];
+          const allowedActions = [
+            'none',
+            'review_brief',
+            'schedule_meeting',
+            'talk_to_human',
+            'corporate_profile',
+          ];
           const action = enforced.enforced
             ? 'schedule_meeting'
             : allowedActions.includes(parsed.suggestedAction)

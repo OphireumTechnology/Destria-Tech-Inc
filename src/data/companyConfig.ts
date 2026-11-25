@@ -19,7 +19,7 @@ export const corporateIdentity = {
     },
     cto: {
       name: 'Leodenis Languisan',
-      title: 'Chief Technology Officer',
+      title: 'Co-Founder & Chief Technology Officer',
     },
   },
   jurisdiction: 'Wyoming, United States of America',
@@ -74,6 +74,148 @@ export const ENTERPRISE_ENGAGEMENT_WORKFLOW = [
   { step: 14, title: 'Testing, Quality Assurance & Delivery', detail: 'Verification testing, security review, deliverable handover, and client sign-off.' },
   { step: 15, title: 'Post-Deployment Support & Optimization', detail: 'Ongoing enterprise support, monitoring, and continuous capability optimization.' },
 ] as const;
+
+export const CORPORATE_PROFILE_DATA = {
+  documentTitle: 'DESTRIA TECH INC — Official Corporate Profile',
+  pdfUrl: BRAND_ASSETS.corporateProfilePdf,
+  downloadFilename: 'DESTRIA-TECH-INC-Corporate-Profile.pdf',
+  pageCount: 17,
+  entityClassification: 'Corporation, as represented in corporate materials',
+  industry: 'Information Technology and Enterprise Digital Solutions',
+  marketPositioning: 'Domestic and International Technology Engagements',
+  vision:
+    'To become an internationally recognized enterprise technology solutions provider, advancing intelligent systems, responsible artificial intelligence, secure digital infrastructure and sustainable digital transformation. DESTRIA TECH INC seeks to establish a technology ecosystem in which businesses and institutions can leverage innovation to improve operational efficiency, organizational intelligence, transparency and long-term competitiveness.',
+  mission:
+    'To design, engineer and deliver customized, reliable and responsible technology solutions that address the evolving operational and strategic requirements of businesses and institutions.',
+  missionPillars: [
+    'Responsible technological innovation',
+    'Disciplined software engineering',
+    'Security-conscious system architecture',
+    'Client-centered digital transformation',
+    'Transparent commercial engagement',
+    'Human-supervised artificial intelligence',
+    'Continuous research and development',
+    'Professional accountability and corporate governance',
+  ],
+  coreValues: [
+    {
+      code: '6.1',
+      title: 'Integrity and Accountability',
+      description:
+        'Conducting business through transparent communication, professional responsibility, documented commitments and authorized corporate decision-making.',
+    },
+    {
+      code: '6.2',
+      title: 'Technological Excellence',
+      description:
+        'Pursuing engineering quality, technical accuracy, maintainability and continuous improvement throughout the technology development lifecycle.',
+    },
+    {
+      code: '6.3',
+      title: 'Innovation and Adaptability',
+      description:
+        'Encouraging responsible research, emerging technology development and practical innovation aligned with legitimate business requirements.',
+    },
+    {
+      code: '6.4',
+      title: 'Security and Confidentiality',
+      description:
+        'Promoting information protection, controlled access, confidentiality and responsible data handling throughout client engagements.',
+    },
+    {
+      code: '6.5',
+      title: 'Client-Centered Engineering',
+      description:
+        'Developing technology solutions around the actual operational requirements, strategic objectives and authorized specifications of each client.',
+    },
+    {
+      code: '6.6',
+      title: 'Responsible Artificial Intelligence',
+      description:
+        'Advancing AI technologies with appropriate human oversight, transparency, operational safeguards and clearly defined decision-making boundaries.',
+    },
+    {
+      code: '6.7',
+      title: 'Commercial Transparency',
+      description:
+        'Establishing clear project scopes, commercial obligations, payment terms and acceptance criteria through formal written agreements.',
+    },
+  ],
+  strategicObjectives: [
+    'Establish a competitive international enterprise technology services network.',
+    'Develop advanced artificial intelligence products and specialized AI agents.',
+    'Expand customized enterprise software engineering capabilities.',
+    'Advance secure and transparent blockchain architecture.',
+    'Deliver scalable cloud and digital infrastructure solutions.',
+    'Strengthen recurring technology support and managed service opportunities.',
+    'Develop proprietary software platforms and intellectual property.',
+    'Establish strategic technology and commercial partnerships.',
+    'Promote responsible digital modernization across multiple industries.',
+    'Maintain effective corporate governance, risk management and operational accountability.',
+  ],
+  strategicObjectivesNotice:
+    'These objectives represent strategic intentions and do not constitute guarantees of commercial performance or future results.',
+  architectureLayers: [
+    {
+      layer: '01',
+      title: 'Digital Experience Layer',
+      detail: 'Websites, client portals, mobile applications and interactive interfaces.',
+    },
+    {
+      layer: '02',
+      title: 'Application Layer',
+      detail: 'Enterprise software, workflow engines and operational applications.',
+    },
+    {
+      layer: '03',
+      title: 'Artificial Intelligence Layer',
+      detail: 'Intelligent agents, AI models and knowledge retrieval systems.',
+    },
+    {
+      layer: '04',
+      title: 'Integration Layer',
+      detail: 'APIs, webhooks and authorized third-party communications.',
+    },
+    {
+      layer: '05',
+      title: 'Data Layer',
+      detail: 'Databases, storage systems and controlled information management.',
+    },
+    {
+      layer: '06',
+      title: 'Infrastructure Layer',
+      detail: 'Cloud deployment, server environments and network architecture.',
+    },
+    {
+      layer: '07',
+      title: 'Security Layer',
+      detail: 'Authentication, authorization, encryption and risk controls.',
+    },
+    {
+      layer: '08',
+      title: 'Governance Layer',
+      detail: 'Audit records, human approvals, monitoring and operational accountability.',
+    },
+  ],
+  architectureNotice:
+    'Specific technologies and system controls shall be determined through project-level assessment and documented technical specifications.',
+  targetMarkets: [
+    { industry: 'Financial and Professional Services', applications: 'Document workflows, client portals and administrative automation.' },
+    { industry: 'Healthcare', applications: 'Appointment systems, secure portals and workflow integration.' },
+    { industry: 'Transportation and Logistics', applications: 'Dispatch systems, tracking and operational dashboards.' },
+    { industry: 'Real Estate and Construction', applications: 'Project management and digital documentation.' },
+    { industry: 'Retail and E-Commerce', applications: 'Digital storefronts, inventory and customer systems.' },
+    { industry: 'Hospitality', applications: 'Booking systems and operational automation.' },
+    { industry: 'Manufacturing', applications: 'Operational intelligence and system integration.' },
+    { industry: 'Education and Training', applications: 'Learning platforms and institutional workflow systems.' },
+    { industry: 'Nonprofit Organizations', applications: 'Program, donor and organizational management platforms.' },
+    { industry: 'Agriculture', applications: 'Operational monitoring and agricultural data systems.' },
+    { industry: 'Government and Institutions', applications: 'Authorized digital modernization and administrative solutions.' },
+    { industry: 'Technology and Emerging Industries', applications: 'AI, blockchain, cloud and enterprise software engineering.' },
+  ],
+  targetMarketsNotice:
+    'These examples describe potential applications rather than representations of completed client engagements, government contracts or industry-specific certifications.',
+} as const;
 
 export interface LegalGovernanceSection {
   id: string;
@@ -221,6 +363,7 @@ export const COMPANY_CONFIG = {
   },
   chiefTechnologyOfficer: corporateIdentity.leadership.cto.name,
   brandBoardUrl: BRAND_ASSETS.brandBoard,
+  corporateProfilePdfUrl: BRAND_ASSETS.corporateProfilePdf,
   jurisdiction: corporateIdentity.jurisdiction,
   headquartersAddress: corporateIdentity.headquarters.fullAddress,
   headquartersRegion: `${corporateIdentity.headquarters.city}, ${corporateIdentity.headquarters.stateName}, USA`,

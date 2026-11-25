@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X, ArrowUpRight, Shield, Phone, MapPin, Mail } from 'lucide-react';
+import { Menu, X, ArrowUpRight, Shield, Phone, MapPin, Mail, ChevronDown, FileText } from 'lucide-react';
 import { COMPANY_CONFIG, corporateIdentity } from '../data/companyConfig';
+import { corporateProfile } from '../config/corporateProfile';
 import { ROUTES } from '../config/routes';
 import { BrandLogo } from './BrandLogo';
 
@@ -13,9 +14,29 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, activeSection }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [aboutMenuOpen, setAboutMenuOpen] = useState(false);
+  const aboutMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (aboutMenuRef.current && !aboutMenuRef.current.contains(event.target as Node)) {
+        setAboutMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setAboutMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const navItems = [
-    { id: 'about', label: 'About & Governance', to: ROUTES.ABOUT },
     { id: 'services', label: 'Solutions', to: ROUTES.SOLUTIONS },
     { id: 'portfolio', label: 'Portfolio', to: ROUTES.PORTFOLIO },
     { id: 'architecture', label: 'Enterprise Suite', to: ROUTES.ENTERPRISE_SUITE },
@@ -24,6 +45,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
 
   const handleNavClick = (id: string) => {
     setMobileMenuOpen(false);
+    setAboutMenuOpen(false);
     onNavigate(id);
   };
 
@@ -95,6 +117,82 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
 
         {/* Zone 2: Navigation Links */}
         <nav className="hidden lg:flex items-center gap-4 xl:gap-7 text-[13px] xl:text-[13.5px] font-medium text-slate-300 shrink-0" aria-label="Primary Navigation">
+          {/* About Dropdown (Houses About & Governance + Corporate Profile without crowding header) */}
+          <div
+            ref={aboutMenuRef}
+            className="relative"
+            onMouseEnter={() => setAboutMenuOpen(true)}
+            onMouseLeave={() => setAboutMenuOpen(false)}
+          >
+            <button
+              type="button"
+              onClick={() => setAboutMenuOpen((prev) => !prev)}
+              aria-expanded={aboutMenuOpen}
+              aria-haspopup="menu"
+              className={`inline-flex items-center gap-1 transition-colors whitespace-nowrap cursor-pointer py-2 relative leading-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7] rounded-sm ${
+                activeSection === 'about' || activeSection === 'corporate-profile'
+                  ? 'text-[#00C2C7] font-semibold'
+                  : 'hover:text-white text-slate-300'
+              }`}
+            >
+              <span>About</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                  aboutMenuOpen ? 'rotate-180 text-[#00C2C7]' : ''
+                }`}
+              />
+              {(activeSection === 'about' || activeSection === 'corporate-profile') && (
+                <span className="absolute bottom-0 left-0 w-full h-[2px] bg-[#00C2C7] rounded-full shadow-[0_0_8px_#00C2C7]" />
+              )}
+            </button>
+
+            <div
+              role="menu"
+              className={`absolute left-0 top-full pt-2 w-60 z-50 transition-all duration-150 ${
+                aboutMenuOpen
+                  ? 'opacity-100 pointer-events-auto translate-y-0'
+                  : 'opacity-0 pointer-events-none -translate-y-1'
+              }`}
+            >
+              <div className="rounded-xl bg-[#0B1F3B] border border-slate-700/90 shadow-2xl p-1.5 space-y-1">
+                <Link
+                  role="menuitem"
+                  to={ROUTES.ABOUT}
+                  onClick={() => handleNavClick('about')}
+                  className={`flex flex-col px-3 py-2.5 rounded-lg transition-colors ${
+                    activeSection === 'about'
+                      ? 'bg-[#00C2C7]/15 text-[#00C2C7]'
+                      : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
+                  }`}
+                >
+                  <span className="text-xs font-semibold">About &amp; Governance</span>
+                  <span className="text-[10.5px] text-slate-400">Executive identity &amp; standards</span>
+                </Link>
+                <Link
+                  role="menuitem"
+                  to={corporateProfile.pagePath}
+                  onClick={() => {
+                    setAboutMenuOpen(false);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex items-start gap-2.5 px-3 py-2.5 rounded-lg transition-colors ${
+                    activeSection === 'corporate-profile'
+                      ? 'bg-[#00C2C7]/15 text-[#00C2C7]'
+                      : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#00C2C7] mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="block text-xs font-semibold">Corporate Profile</span>
+                    <span className="block text-[10.5px] text-slate-400">
+                      View &amp; download official PDF
+                    </span>
+                  </div>
+                </Link>
+              </div>
+            </div>
+          </div>
+
           {navItems.map((item) => {
             const isActive = activeSection === item.id;
             return (
@@ -193,6 +291,25 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
           </div>
 
           <div className="flex flex-col space-y-1">
+            <Link
+              to={ROUTES.ABOUT}
+              onClick={() => handleNavClick('about')}
+              className="text-left py-2.5 px-3 text-[13.5px] font-medium text-slate-200 hover:text-[#00C2C7] hover:bg-slate-900/60 rounded-md transition-colors"
+            >
+              About &amp; Governance
+            </Link>
+            <Link
+              to={corporateProfile.pagePath}
+              onClick={() => setMobileMenuOpen(false)}
+              className={`flex items-center gap-2 text-left py-2.5 px-3 text-[13.5px] font-medium rounded-md transition-colors ${
+                activeSection === 'corporate-profile'
+                  ? 'text-[#00C2C7] bg-[#00C2C7]/10 font-semibold'
+                  : 'text-slate-200 hover:text-[#00C2C7] hover:bg-slate-900/60'
+              }`}
+            >
+              <FileText className="w-4 h-4 text-[#00C2C7] shrink-0" />
+              <span>Corporate Profile</span>
+            </Link>
             {navItems.map((item) => (
               <Link
                 key={item.id}

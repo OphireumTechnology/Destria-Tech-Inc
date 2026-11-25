@@ -170,6 +170,16 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenPortal, onOpen
                 </Link>
               </li>
               <li>
+                <a
+                  href={COMPANY_CONFIG.corporateProfilePdfUrl}
+                  download="DESTRIA-TECH-INC-Corporate-Profile.pdf"
+                  className="hover:text-[#00C2C7] transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <span>Official Corporate Profile (PDF)</span>
+                  <ArrowUpRight className="w-3 h-3 text-[#D4AF37]" />
+                </a>
+              </li>
+              <li>
                 <Link
                   to={ROUTES.GOVERNANCE.COMMERCIAL_ENGAGEMENT_POLICY}
                   onClick={() => onOpenLegal?.('commercial-engagement-policy')}

@@ -35,6 +35,8 @@ export const BRAND_ASSETS = {
   masterLogo: `${normalizedBase}branding/destria-logo-master.png`,
   /** Official Destria Tech Inc Brand Identity Board */
   brandBoard: `${normalizedBase}branding/destria-brand-identity-board.png`,
+  /** Official 17-page DESTRIA TECH INC Corporate Profile PDF */
+  corporateProfilePdf: `${normalizedBase}assets/aistudio/Corporate_Profile_5894b80c.pdf`,
   /** Official application & favicon icons */
   icon192: `${normalizedBase}branding/destria-logo-192.png`,
   icon512: `${normalizedBase}branding/destria-logo-512.png`,
@@ -49,6 +51,9 @@ export const BRAND_ASSETS = {
   hostedHighResLogoUrl: CANONICAL_BRAND_ORIGIN
     ? `${CANONICAL_BRAND_ORIGIN}/branding/destria-logo-1024.png`
     : '/branding/destria-logo-1024.png',
+  hostedCorporateProfilePdfUrl: CANONICAL_BRAND_ORIGIN
+    ? `${CANONICAL_BRAND_ORIGIN}/assets/aistudio/Corporate_Profile_5894b80c.pdf`
+    : '/assets/aistudio/Corporate_Profile_5894b80c.pdf',
   /** Standard descriptive alt text */
   altText: 'DESTRIA TECH INC (DTI) — DESTRIA NETWORK Official Emblem',
 } as const;

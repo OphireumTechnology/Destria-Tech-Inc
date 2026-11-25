@@ -17,6 +17,15 @@ import {
   detectAffirmativeBookingIntent,
   extractPresentedOptionsFromText,
 } from '../src/server/voiceContextEngine';
+import {
+  AppointmentRecord,
+  CreateAppointmentInput,
+  CreateOutboxInput,
+  CreateSolutionRequestInput,
+  DatabaseRepository,
+  EmailOutboxRecord,
+  SolutionRequestRecord,
+} from '../src/server/db/types';
 
 // ---------------------------------------------------------------------------
 // Deterministic Browser Audio / Speech Test Harness (drives real AIVoiceService)
@@ -264,9 +273,92 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
   let server: http.Server;
   let baseUrl: string;
   let closeLiveBridge: () => void;
+  const outboxRecords: EmailOutboxRecord[] = [];
 
   before(async () => {
-    const { app, ai } = createApp();
+    const inquiries: SolutionRequestRecord[] = [];
+    const appointments: AppointmentRecord[] = [];
+    const testDb: DatabaseRepository = {
+      isConfigured: true,
+      ping: async () => ({ ok: true, configured: true, latencyMs: 1 }),
+      findSolutionRequestByIdempotencyKey: async () => null,
+      createSolutionRequest: async (input: CreateSolutionRequestInput) => {
+        const now = new Date().toISOString();
+        const record: SolutionRequestRecord = {
+          id: `sr-${inquiries.length + 1}`,
+          referenceCode: input.referenceCode,
+          type: input.type,
+          fullName: input.fullName,
+          email: input.email,
+          contactNumber: input.contactNumber,
+          company: input.company,
+          selectedServices: input.selectedServices,
+          selectedServiceIds: input.selectedServiceIds,
+          selectedOptionsMap: input.selectedOptionsMap,
+          serviceId: input.serviceId,
+          serviceTitle: input.serviceTitle,
+          estimatedOneTimeStartingUsd: input.estimatedOneTimeStartingUsd,
+          estimatedMonthlyStartingUsd: input.estimatedMonthlyStartingUsd,
+          estimatedBudget: input.estimatedBudget || 'Subject to Formal Assessment',
+          preferredCurrency: input.preferredCurrency,
+          phpConversionRate: input.phpConversionRate,
+          projectDescription: input.projectDescription,
+          status: 'submitted',
+          emailDeliveryStatus: 'pending',
+          privacyConsent: input.privacyConsent,
+          sourceChannel: input.sourceChannel || 'AI Voice',
+          createdAt: now,
+          updatedAt: now,
+        };
+        inquiries.push(record);
+        return { record, created: true };
+      },
+      updateSolutionRequestEmailStatus: async () => {},
+      listSolutionRequests: async () => ({ records: inquiries, total: inquiries.length }),
+      getBookedSlotsForDate: async (date: string) =>
+        appointments.filter((a) => a.scheduledDate === date).map((a) => a.scheduledTimeSlot),
+      createAppointment: async (input: CreateAppointmentInput) => {
+        const now = new Date().toISOString();
+        const record: AppointmentRecord = {
+          id: `apt-${appointments.length + 1}`,
+          ...input,
+          createdAt: now,
+          updatedAt: now,
+        };
+        appointments.push(record);
+        return { record, created: true };
+      },
+      getAppointmentByReference: async (ref: string) =>
+        appointments.find((a) => a.referenceCode === ref) || null,
+      updateAppointment: async (ref: string, patch) => {
+        const existing = appointments.find((a) => a.referenceCode === ref)!;
+        Object.assign(existing, patch, { updatedAt: new Date().toISOString() });
+        return existing;
+      },
+      listAppointments: async () => ({ records: appointments, total: appointments.length }),
+      createOutboxRecord: async (input: CreateOutboxInput) => {
+        const now = new Date().toISOString();
+        const record: EmailOutboxRecord = {
+          id: `outbox-${outboxRecords.length + 1}`,
+          ...input,
+          status: 'queued',
+          provider: 'test',
+          deliveryAttempts: 0,
+          createdAt: now,
+          updatedAt: now,
+        };
+        outboxRecords.push(record);
+        return { record, created: true };
+      },
+      updateOutboxStatus: async () => {},
+      listRetryableOutbox: async () => [],
+      writeAuditLog: async () => {},
+      listAuditLogs: async () => ({ records: [], total: 0 }),
+      findActiveAdminByEmail: async () => null,
+      verifySupabaseUserToken: async () => null,
+    };
+
+    const { app, ai } = createApp({ db: testDb });
     server = http.createServer(app);
     const bridge = attachVoiceLiveBridge(server, ai);
     closeLiveBridge = bridge.close;
@@ -282,10 +374,13 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
 
   after(async () => {
     closeLiveBridge();
+    server.closeAllConnections?.();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  function createLocalFetch(interceptor?: (url: string, init?: RequestInit) => Promise<Response> | null): typeof fetch {
+  function createLocalFetch(
+    interceptor?: (url: string, init?: RequestInit) => Promise<Response | null> | Response | null
+  ): typeof fetch {
     return (async (input: RequestInfo | URL, init?: RequestInit) => {
       const rawUrl = typeof input === 'string' ? input : input.toString();
       const targetUrl = rawUrl.startsWith('http') ? rawUrl : `${baseUrl}${rawUrl}`;
@@ -298,7 +393,7 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
   }
 
   function createHarness(options?: {
-    fetchInterceptor?: (url: string, init?: RequestInit) => Promise<Response> | null;
+    fetchInterceptor?: (url: string, init?: RequestInit) => Promise<Response | null> | Response | null;
     synthHoldOpen?: boolean;
     synthShouldFail?: boolean;
     recognitionRestartBaseDelayMs?: number;
@@ -563,35 +658,39 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
   // Scenarios 12 & 13: User interrupts AI speech -> stops immediately & stale audio never resumes
   it('Scenarios 12-13: User interruption stops active AI speech immediately, transitions via interrupted, and fences stale audio', async () => {
     const h = createHarness({ synthHoldOpen: true });
+    try {
+      // Start session where greeting utterance holds open in ai_speaking
+      const startPromise = h.service.startSession();
+      await waitForCondition(
+        () => h.service.getStatus() === 'ai_speaking' && h.synth.spokenUtterances.length === 1
+      );
+      const rec = h.getRecognition();
+      const interruptedUtterance = h.synth.spokenUtterances[0];
+      assert.ok(interruptedUtterance, 'Greeting utterance must be actively playing before interruption');
 
-    // Start session where greeting utterance holds open in ai_speaking
-    const startPromise = h.service.startSession();
-    await waitForCondition(() => h.service.getStatus() === 'ai_speaking');
-    const rec = h.getRecognition();
+      // User interrupts while AI is actively speaking
+      h.service.interrupt(true);
 
-    // User interrupts while AI is actively speaking
-    h.service.interrupt(true);
+      assert.ok(h.statusHistory.includes('interrupted'), 'Must transition through interrupted state');
+      assert.equal(h.service.getStatus(), 'user_speaking');
+      assert.ok(h.synth.cancelCount >= 1, 'SpeechSynthesis.cancel() must be invoked immediately');
+      assert.equal(rec.isRunning, true, 'SpeechRecognition must resume immediately on interruption');
 
-    assert.ok(h.statusHistory.includes('interrupted'), 'Must transition through interrupted state');
-    assert.equal(h.service.getStatus(), 'user_speaking');
-    assert.ok(h.synth.cancelCount >= 1, 'SpeechSynthesis.cancel() must be invoked immediately');
-    assert.equal(rec.isRunning, true, 'SpeechRecognition must resume immediately on interruption');
+      // Simulate stale onend firing on the interrupted greeting utterance -> MUST be ignored!
+      interruptedUtterance.onend?.();
+      await startPromise;
 
-    // Simulate stale onend firing on the interrupted greeting utterance -> MUST be ignored!
-    const interruptedUtterance = h.synth.spokenUtterances[0];
-    interruptedUtterance.onend?.();
-    await startPromise;
+      // Now allow next turn to complete normally
+      h.synth.holdOpen = false;
+      rec.emitFinal('Actually I need AI workflow automation instead.');
+      await waitForCondition(() => h.aiResponses.length === 1 && h.service.getStatus() === 'listening');
 
-    // Now allow next turn to complete normally
-    h.synth.holdOpen = false;
-    rec.emitFinal('Actually I need AI workflow automation instead.');
-    await waitForCondition(() => h.aiResponses.length === 1 && h.service.getStatus() === 'listening');
-
-    assert.match(h.aiResponses[0].text, /AI|automation/i);
-    assert.equal(h.service.getStatus(), 'listening');
-    assert.equal(rec.isRunning, true);
-
-    h.service.stopSession();
+      assert.match(h.aiResponses[0].text, /AI|automation/i);
+      assert.equal(h.service.getStatus(), 'listening');
+      assert.equal(rec.isRunning, true);
+    } finally {
+      h.service.stopSession();
+    }
   });
 
   // Scenario 14: Temporary network / 503 failure -> reconnecting -> automatic retry with context preserved
@@ -782,41 +881,55 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        clientName: 'Elena Vance',
-        companyName: 'Vance Logistics Corp',
-        clientEmail: 'elena@vancelogistics.example',
-        selectedService: 'Enterprise Web & Portal Architecture',
-        businessProblem: 'Unify partner portal and workflow automation.',
-        keyFeatures: ['Role-Based Access', 'CRM Sync'],
-        submissionSource: 'ai_voice_assistant',
+        type: 'contact_inquiry',
+        serviceId: 'enterprise-custom-assessment',
+        fullName: 'Elena Vance',
+        company: 'Vance Logistics Corp',
+        email: 'elena@vancelogistics.example',
+        contactNumber: '+1 (307) 555-0192',
+        projectDescription: 'Unify partner portal and workflow automation across regional operations.',
+        privacyConsent: true,
+        commercialPolicyConsent: true,
+        sourceChannel: 'AI Voice',
       }),
     });
     assert.equal(inquiryRes.status, 201);
     const inquiryBody = await inquiryRes.json();
     assert.equal(inquiryBody.success, true);
-    assert.ok(inquiryBody.referenceId);
+    assert.ok(inquiryBody.inquiry?.referenceId || inquiryBody.referenceId || inquiryBody.referenceCode);
 
     // 23. Executive Consultation scheduling endpoint
-    const consultRes = await fetch(`${baseUrl}/api/consultations`, {
+    const consultRes = await fetch(`${baseUrl}/api/appointments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        clientName: 'Elena Vance',
+        fullName: 'Elena Vance',
         companyName: 'Vance Logistics Corp',
-        clientEmail: 'elena@vancelogistics.example',
-        clientPhone: '+1 (307) 555-0192',
-        executive: 'Leodenis Languisan (Chief Technology Officer)',
-        consultationType: 'CTO Technical Consultation',
-        selectedDate: '2026-12-15',
-        selectedTime: '10:00 AM',
-        projectSummary: 'Enterprise web portal and AI workflow integration.',
-        submissionSource: 'ai_voice_assistant',
+        email: 'elena@vancelogistics.example',
+        phone: '+1 (307) 555-0192',
+        executivePathway: 'cto',
+        consultationType: 'video',
+        scheduledDate: '2026-12-15',
+        scheduledTimeSlot: '10:00 AM - 10:30 AM',
+        clientTimezone: 'America/Denver',
+        notes: 'Enterprise web portal and AI workflow integration.',
+        sourceChannel: 'AI Voice',
       }),
     });
     assert.equal(consultRes.status, 201);
     const consultBody = await consultRes.json();
     assert.equal(consultBody.success, true);
-    assert.ok(consultBody.bookingReference);
+    assert.ok(
+      consultBody.appointment?.referenceCode ||
+        consultBody.appointment?.referenceId ||
+        consultBody.referenceCode ||
+        consultBody.referenceId
+    );
+
+    // Confirm both authorized executive recipients were queued in notification outbox
+    const queuedEmails = outboxRecords.map((r) => r.recipientEmail.toLowerCase());
+    assert.ok(queuedEmails.includes('artaxsvcs@gmail.com'));
+    assert.ok(queuedEmails.includes('dhenze.languisan@gmail.com'));
   });
 
   // Scenario 24: State machine transition enforcement + Gemini Live WebSocket bridge honest behavior
@@ -885,5 +998,24 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
         `${filePath} must never expose internal recipient email`
       );
     }
+
+    // Verify official 17-page Corporate Profile PDF asset is present in workspace
+    const profilePdfPath = path.resolve('public/assets/aistudio/Corporate_Profile_5894b80c.pdf');
+    assert.equal(fs.existsSync(profilePdfPath), true, 'Official Corporate Profile PDF must exist');
+  });
+
+  it('Scenario 26: AI Consultant responds accurately to Corporate Profile & Co-Founder CTO queries', async () => {
+    const profileRes = await fetch(`${baseUrl}/api/voice/process`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userMessage: 'Where can I view your corporate profile?',
+        language: 'en-US',
+        conversationHistory: [],
+      }),
+    });
+    assert.equal(profileRes.status, 200);
+    const profileBody = await profileRes.json();
+    assert.match(profileBody.replyText, /17-page|Corporate Profile|Desmond Hines|Leodenis Languisan/i);
   });
 });
