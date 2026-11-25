@@ -1082,7 +1082,7 @@ export class AIVoiceService {
       return { played: false, audioGenerationLatencyMs: 0, firstAudioAtMs: null };
     }
 
-    if (this.isSessionActiveFlag && !this.isCurrentResponse(sessionSeq, responseSeq)) {
+    if (this.sessionSeq !== sessionSeq || this.responseSeq !== responseSeq) {
       return { played: false, audioGenerationLatencyMs: 0, firstAudioAtMs: null };
     }
 
@@ -1119,7 +1119,7 @@ export class AIVoiceService {
         this.activeFetchController = null;
       }
 
-      if (this.isSessionActiveFlag && !this.isCurrentResponse(sessionSeq, responseSeq)) {
+      if (this.sessionSeq !== sessionSeq || this.responseSeq !== responseSeq) {
         return { played: false, audioGenerationLatencyMs: Date.now() - genStartedAt, firstAudioAtMs: null };
       }
 
@@ -1142,7 +1142,7 @@ export class AIVoiceService {
             return { played: true, audioGenerationLatencyMs, firstAudioAtMs };
           }
 
-          if (this.isSessionActiveFlag && !this.isCurrentResponse(sessionSeq, responseSeq)) {
+          if (this.sessionSeq !== sessionSeq || this.responseSeq !== responseSeq) {
             return { played: false, audioGenerationLatencyMs, firstAudioAtMs };
           }
 
@@ -1166,7 +1166,7 @@ export class AIVoiceService {
       audioGenerationLatencyMs = Date.now() - genStartedAt;
     }
 
-    if (this.isSessionActiveFlag && !this.isCurrentResponse(sessionSeq, responseSeq)) {
+    if (this.sessionSeq !== sessionSeq || this.responseSeq !== responseSeq) {
       return { played: false, audioGenerationLatencyMs, firstAudioAtMs: null };
     }
 
@@ -1208,7 +1208,7 @@ export class AIVoiceService {
       const bufferCopy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
       const decoded = await ctx.decodeAudioData(bufferCopy);
 
-      if (this.isSessionActiveFlag && !this.isCurrentResponse(sessionSeq, responseSeq)) {
+      if (this.sessionSeq !== sessionSeq || this.responseSeq !== responseSeq) {
         return true; // Intentionally cancelled by interruption or stop
       }
       if (this.isSpeakerMuted) {
