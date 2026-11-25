@@ -664,7 +664,11 @@ export async function processVoiceConversationTurn(params: {
     session.context.executivePreference = execPref;
   }
 
-  const dedupedHistory = buildDeduplicatedHistory(session.history, clientHistory, userMessage);
+  const dedupedHistory: Array<{ sender: 'user' | 'ai'; text: string }> = buildDeduplicatedHistory(
+    session.history,
+    clientHistory,
+    userMessage
+  );
   const lastAiMessage = [...dedupedHistory].reverse().find((m) => m.sender === 'ai')?.text || '';
   const extractedOptions = extractPresentedOptionsFromText(lastAiMessage);
   if (extractedOptions.length >= 2) {
