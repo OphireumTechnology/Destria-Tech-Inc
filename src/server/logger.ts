@@ -62,7 +62,7 @@ export function logStructured(
   const payload = {
     timestamp: new Date().toISOString(),
     level,
-    service: 'ophireum-api',
+    service: 'destria-api',
     event,
     ...(redactSensitiveData(meta) as Record<string, unknown>),
   };

@@ -39,6 +39,20 @@ export interface SelectedServiceSnapshot {
 
 export type RequestSourceChannel = 'Public Website' | 'AI Chat' | 'AI Voice';
 
+export type NotificationOutboxStatus =
+  | 'queued'
+  | 'processing'
+  | 'provider_accepted'
+  | 'sent'
+  | 'delivered'
+  | 'delivery_delayed'
+  | 'retry_scheduled'
+  | 'failed'
+  | 'bounced'
+  | 'complained'
+  | 'dead_letter'
+  | 'unconfigured';
+
 export interface SolutionRequestRecord {
   id: string;
   referenceCode: string;
@@ -122,7 +136,7 @@ export interface EmailOutboxRecord {
   subject: string;
   htmlBody: string;
   textBody: string;
-  status: 'queued' | 'sent' | 'delivered' | 'failed' | 'unconfigured';
+  status: NotificationOutboxStatus;
   provider: string;
   providerReference?: string;
   deliveryAttempts: number;
@@ -132,9 +146,70 @@ export interface EmailOutboxRecord {
   providerAcceptedAt?: string;
   deliveredAt?: string;
   sentAt?: string;
+  claimedBy?: string;
+  claimedAt?: string;
+  leaseExpiresAt?: string;
+  eventRevision?: number;
+  deadLetteredAt?: string;
+  bouncedAt?: string;
+  complainedAt?: string;
+  deliveryDelayedAt?: string;
+  lastWebhookEventId?: string;
+  lastWebhookEventAt?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateOutboxInput {
+  dedupeKey: string;
+  entityType: 'solution_request' | 'appointment';
+  entityReference: string;
+  recipientEmail: string;
+  replyTo?: string;
+  idempotencyKey?: string;
+  requestSource?: string;
+  notificationType: EmailOutboxRecord['notificationType'];
+  subject: string;
+  htmlBody: string;
+  textBody: string;
+  eventRevision?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateOutboxPatch {
+  status: NotificationOutboxStatus;
+  providerReference?: string;
+  deliveryAttempts: number;
+  lastError?: string | null;
+  nextRetryAt?: string | null;
+  lastAttemptAt?: string | null;
+  providerAcceptedAt?: string | null;
+  deliveredAt?: string | null;
+  sentAt?: string | null;
+  claimedBy?: string | null;
+  claimedAt?: string | null;
+  leaseExpiresAt?: string | null;
+  deadLetteredAt?: string | null;
+  bouncedAt?: string | null;
+  complainedAt?: string | null;
+  deliveryDelayedAt?: string | null;
+  lastWebhookEventId?: string | null;
+  lastWebhookEventAt?: string | null;
+}
+
+export interface NotificationWebhookEventRecord {
+  id: string;
+  provider: string;
+  providerEventId: string;
+  eventType: string;
+  providerMessageId?: string;
+  eventTimestampUtc: string;
+  reconciled: boolean;
+  outboxId?: string;
+  payload: Record<string, unknown>;
+  receivedAt: string;
+  reconciledAt?: string;
 }
 
 export interface AuditLogRecord {
@@ -225,6 +300,14 @@ export interface DatabaseRepository {
     record: SolutionRequestRecord;
     created: boolean;
   }>;
+  createSolutionRequestWithOutbox?(
+    input: CreateSolutionRequestInput,
+    outboxItems: CreateOutboxInput[]
+  ): Promise<{
+    record: SolutionRequestRecord;
+    created: boolean;
+    outboxRecords: EmailOutboxRecord[];
+  }>;
   updateSolutionRequestEmailStatus(
     referenceCode: string,
     emailDeliveryStatus: 'pending' | 'sent' | 'failed' | 'unconfigured'
@@ -239,6 +322,14 @@ export interface DatabaseRepository {
   createAppointment(input: CreateAppointmentInput): Promise<{
     record: AppointmentRecord;
     created: boolean;
+  }>;
+  createAppointmentWithOutbox?(
+    input: CreateAppointmentInput,
+    outboxItems: CreateOutboxInput[]
+  ): Promise<{
+    record: AppointmentRecord;
+    created: boolean;
+    outboxRecords: EmailOutboxRecord[];
   }>;
   getAppointmentByReference(referenceCode: string): Promise<AppointmentRecord | null>;
   updateAppointment(
@@ -255,36 +346,39 @@ export interface DatabaseRepository {
     total: number;
   }>;
 
-  createOutboxRecord(input: {
-    dedupeKey: string;
-    entityType: 'solution_request' | 'appointment';
-    entityReference: string;
-    recipientEmail: string;
-    replyTo?: string;
-    idempotencyKey?: string;
-    requestSource?: string;
-    notificationType: EmailOutboxRecord['notificationType'];
-    subject: string;
-    htmlBody: string;
-    textBody: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<{ record: EmailOutboxRecord; created: boolean }>;
-  updateOutboxStatus(
-    id: string,
-    patch: {
-      status: EmailOutboxRecord['status'];
-      providerReference?: string;
-      deliveryAttempts: number;
-      lastError?: string;
-      nextRetryAt?: string | null;
-      lastAttemptAt?: string | null;
-      providerAcceptedAt?: string | null;
-      deliveredAt?: string | null;
-      sentAt?: string | null;
-    }
-  ): Promise<void>;
+  createOutboxRecord(input: CreateOutboxInput): Promise<{ record: EmailOutboxRecord; created: boolean }>;
+  updateOutboxStatus(id: string, patch: UpdateOutboxPatch): Promise<void>;
   listRetryableOutbox(limit?: number): Promise<EmailOutboxRecord[]>;
+  claimRetryableOutbox?(
+    workerId: string,
+    limit?: number,
+    leaseSeconds?: number
+  ): Promise<EmailOutboxRecord[]>;
   findOutboxByProviderReference?(providerReference: string): Promise<EmailOutboxRecord | null>;
+  getOutboxById?(id: string): Promise<EmailOutboxRecord | null>;
+  listOutboxByEntity?(
+    entityType: 'solution_request' | 'appointment',
+    entityReference: string
+  ): Promise<EmailOutboxRecord[]>;
+  listOutboxRecords?(options: {
+    limit: number;
+    offset: number;
+    status?: string;
+    entityReference?: string;
+  }): Promise<{ records: EmailOutboxRecord[]; total: number }>;
+
+  recordWebhookEventOnce?(input: {
+    provider: string;
+    providerEventId: string;
+    eventType: string;
+    providerMessageId?: string;
+    eventTimestampUtc: string;
+    payload: Record<string, unknown>;
+  }): Promise<{ record: NotificationWebhookEventRecord; inserted: boolean }>;
+  listPendingWebhookEventsByMessageId?(
+    providerMessageId: string
+  ): Promise<NotificationWebhookEventRecord[]>;
+  markWebhookEventReconciled?(eventId: string, outboxId: string): Promise<void>;
 
   writeAuditLog(input: Omit<AuditLogRecord, 'id' | 'createdAt'>): Promise<void>;
   listAuditLogs(options: { limit: number; offset: number }): Promise<{

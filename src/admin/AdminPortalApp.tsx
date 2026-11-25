@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  Activity,
   AlertCircle,
   ArrowLeft,
+  Bell,
   Calendar,
   ExternalLink,
   FileCheck,
@@ -10,8 +12,7 @@ import {
   Lock,
   LogOut,
   RefreshCw,
-  Send,
-  Shield,
+  RotateCcw,
 } from 'lucide-react';
 import { BrandLogo } from '../components/BrandLogo';
 import { NotFoundPage } from '../components/NotFoundPage';
@@ -54,6 +55,11 @@ export const AdminPortalApp: React.FC = () => {
   const [solutionRequests, setSolutionRequests] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [systemHealth, setSystemHealth] = useState<any | null>(null);
+  const [dashboardSubTab, setDashboardSubTab] = useState<'requests' | 'notifications' | 'health'>('requests');
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [retryFeedback, setRetryFeedback] = useState<string | null>(null);
   const [adminDataError, setAdminDataError] = useState<string | null>(null);
   const [isLoadingAdminData, setIsLoadingAdminData] = useState(false);
 
@@ -84,15 +90,19 @@ export const AdminPortalApp: React.FC = () => {
       const sessionJson = await sessionRes.json();
       setAdminProfile(sessionJson.admin || null);
 
-      const [reqRes, aptRes, auditRes] = await Promise.all([
+      const [reqRes, aptRes, auditRes, notifRes, healthRes] = await Promise.all([
         fetch(apiUrl('/api/admin/solution-requests?limit=25&offset=0'), { headers }),
         fetch(apiUrl('/api/admin/appointments?limit=25&offset=0'), { headers }),
         fetch(apiUrl('/api/admin/audit-logs?limit=25&offset=0'), { headers }),
+        fetch(apiUrl('/api/admin/notifications?limit=50&offset=0'), { headers }),
+        fetch(apiUrl('/api/admin/system-health'), { headers }),
       ]);
 
       const reqJson = await reqRes.json().catch(() => ({}));
       const aptJson = await aptRes.json().catch(() => ({}));
       const auditJson = await auditRes.json().catch(() => ({}));
+      const notifJson = await notifRes.json().catch(() => ({}));
+      const healthJson = await healthRes.json().catch(() => ({}));
 
       if (!reqRes.ok || !aptRes.ok) {
         setAdminDataError(
@@ -102,6 +112,10 @@ export const AdminPortalApp: React.FC = () => {
         setSolutionRequests(Array.isArray(reqJson.records) ? reqJson.records : []);
         setAppointments(Array.isArray(aptJson.records) ? aptJson.records : []);
         setAuditLogs(Array.isArray(auditJson.records) ? auditJson.records : []);
+        setNotifications(Array.isArray(notifJson.records) ? notifJson.records : []);
+        if (healthRes.ok && healthJson.success) {
+          setSystemHealth(healthJson);
+        }
       }
       return true;
     } catch {
@@ -112,6 +126,32 @@ export const AdminPortalApp: React.FC = () => {
       setCheckingSession(false);
     }
   }, []);
+
+  const handleRetryNotification = async (outboxId: string) => {
+    if (!adminToken || retryingId) return;
+    setRetryingId(outboxId);
+    setRetryFeedback(null);
+    try {
+      const res = await fetch(apiUrl(`/api/admin/notifications/${encodeURIComponent(outboxId)}/retry`), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setRetryFeedback(data.error || 'Notification retry could not be completed.');
+      } else {
+        setRetryFeedback(`Notification retry executed (status: ${data.status}).`);
+        await loadAuthorizedAdminData(adminToken);
+      }
+    } catch {
+      setRetryFeedback('Network error while attempting notification retry.');
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   useEffect(() => {
     if (adminToken) {
@@ -165,6 +205,9 @@ export const AdminPortalApp: React.FC = () => {
     setSolutionRequests([]);
     setAppointments([]);
     setAuditLogs([]);
+    setNotifications([]);
+    setSystemHealth(null);
+    setRetryFeedback(null);
     setAdminDataError(null);
     try {
       sessionStorage.removeItem(ADMIN_TOKEN_KEY);
@@ -389,45 +432,182 @@ export const AdminPortalApp: React.FC = () => {
             </div>
           )}
 
-          <div className="rounded-2xl bg-[#111827] border border-slate-800 p-5 overflow-x-auto">
+          <div className="rounded-2xl bg-[#111827] border border-slate-800 p-5 overflow-x-auto space-y-4">
             {activeSection === 'inquiries' && (
-              solutionRequests.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
-                  No persisted solution requests found in PostgreSQL database.
+              <>
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setDashboardSubTab('requests')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono cursor-pointer flex items-center gap-1.5 ${
+                      dashboardSubTab === 'requests'
+                        ? 'bg-slate-800 text-[#00C2C7] border border-[#00C2C7]/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                    <span>Inquiries ({solutionRequests.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDashboardSubTab('notifications')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono cursor-pointer flex items-center gap-1.5 ${
+                      dashboardSubTab === 'notifications'
+                        ? 'bg-slate-800 text-[#00C2C7] border border-[#00C2C7]/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Bell className="w-3.5 h-3.5" />
+                    <span>Notification Ops ({notifications.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDashboardSubTab('health')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono cursor-pointer flex items-center gap-1.5 ${
+                      dashboardSubTab === 'health'
+                        ? 'bg-slate-800 text-[#00C2C7] border border-[#00C2C7]/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>System Health</span>
+                  </button>
                 </div>
-              ) : (
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 font-mono text-[11px]">
-                      <th className="pb-2">REFERENCE</th>
-                      <th className="pb-2">CLIENT &amp; ORG</th>
-                      <th className="pb-2">SOLUTIONS</th>
-                      <th className="pb-2">ASSESSMENT STATUS</th>
-                      <th className="pb-2">EMAIL STATUS</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/80">
-                    {solutionRequests.map((reqItem) => (
-                      <tr key={reqItem.referenceCode} className="text-slate-300">
-                        <td className="py-2.5 font-mono text-[#00C2C7]">{reqItem.referenceCode}</td>
-                        <td className="py-2.5">
-                          <span className="font-semibold text-white block">{reqItem.fullName}</span>
-                          <span className="text-slate-400 text-[11px]">
-                            {reqItem.company} · {reqItem.email}
-                          </span>
-                        </td>
-                        <td className="py-2.5 max-w-[240px] truncate">{reqItem.serviceTitle}</td>
-                        <td className="py-2.5 font-mono text-slate-300">
-                          {reqItem.estimatedBudget || 'Subject to Formal Assessment'}
-                        </td>
-                        <td className="py-2.5 font-mono text-[11px] uppercase">
-                          {reqItem.emailDeliveryStatus}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )
+
+                {retryFeedback && (
+                  <div className="p-3 rounded-lg bg-slate-900 border border-[#00C2C7]/30 text-xs text-slate-200 font-mono">
+                    {retryFeedback}
+                  </div>
+                )}
+
+                {dashboardSubTab === 'requests' &&
+                  (solutionRequests.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
+                      No persisted solution requests found in PostgreSQL database.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-slate-400 font-mono text-[11px]">
+                          <th className="pb-2">REFERENCE</th>
+                          <th className="pb-2">CLIENT &amp; ORG</th>
+                          <th className="pb-2">SOLUTIONS</th>
+                          <th className="pb-2">ASSESSMENT STATUS</th>
+                          <th className="pb-2">EMAIL STATUS</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80">
+                        {solutionRequests.map((reqItem) => (
+                          <tr key={reqItem.referenceCode} className="text-slate-300">
+                            <td className="py-2.5 font-mono text-[#00C2C7]">{reqItem.referenceCode}</td>
+                            <td className="py-2.5">
+                              <span className="font-semibold text-white block">{reqItem.fullName}</span>
+                              <span className="text-slate-400 text-[11px]">
+                                {reqItem.company} · {reqItem.email}
+                              </span>
+                            </td>
+                            <td className="py-2.5 max-w-[240px] truncate">{reqItem.serviceTitle}</td>
+                            <td className="py-2.5 font-mono text-slate-300">
+                              {reqItem.estimatedBudget || 'Subject to Formal Assessment'}
+                            </td>
+                            <td className="py-2.5 font-mono text-[11px] uppercase">
+                              {reqItem.emailDeliveryStatus}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ))}
+
+                {dashboardSubTab === 'notifications' &&
+                  (notifications.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
+                      No persisted email notification outbox records found.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-slate-400 font-mono text-[11px]">
+                          <th className="pb-2">REFERENCE</th>
+                          <th className="pb-2">TYPE</th>
+                          <th className="pb-2">RECIPIENT</th>
+                          <th className="pb-2">STATUS</th>
+                          <th className="pb-2">ATTEMPTS</th>
+                          <th className="pb-2 text-right">ACTION</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80">
+                        {notifications.map((notif) => {
+                          const canRetry =
+                            notif.status === 'failed' ||
+                            notif.status === 'dead_letter' ||
+                            notif.status === 'queued';
+                          return (
+                            <tr key={notif.id} className="text-slate-300">
+                              <td className="py-2.5 font-mono text-[#00C2C7]">{notif.entityReference}</td>
+                              <td className="py-2.5 font-mono text-[11px]">{notif.notificationType}</td>
+                              <td className="py-2.5 font-mono text-[11px]">{notif.recipientEmail}</td>
+                              <td className="py-2.5 font-mono text-[11px] uppercase">{notif.status}</td>
+                              <td className="py-2.5 font-mono text-[11px]">{notif.deliveryAttempts}</td>
+                              <td className="py-2.5 text-right">
+                                {canRetry ? (
+                                  <button
+                                    type="button"
+                                    disabled={retryingId === notif.id}
+                                    onClick={() => void handleRetryNotification(notif.id)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[#00C2C7] text-[11px] font-mono cursor-pointer disabled:opacity-50"
+                                  >
+                                    <RotateCcw className="w-3 h-3" />
+                                    <span>{retryingId === notif.id ? 'Retrying...' : 'Retry'}</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-500 font-mono text-[11px]">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ))}
+
+                {dashboardSubTab === 'health' &&
+                  (!systemHealth ? (
+                    <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
+                      System health diagnostics are loading or unavailable.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {Object.entries(systemHealth.subsystems || {}).map(([key, info]: [string, any]) => (
+                        <div
+                          key={key}
+                          className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-mono text-slate-300 uppercase">{key}</span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-[#00C2C7]">
+                              {info?.state || 'UNKNOWN'}
+                            </span>
+                          </div>
+                          {typeof info?.latencyMs === 'number' && (
+                            <p className="text-[11px] text-slate-400 font-mono">
+                              Latency: {info.latencyMs}ms
+                            </p>
+                          )}
+                          {info?.mode && (
+                            <p className="text-[11px] text-slate-400 font-mono">Mode: {info.mode}</p>
+                          )}
+                          {info?.queueSummary && (
+                            <p className="text-[11px] text-slate-400 font-mono">
+                              Accepted: {info.queueSummary.providerAccepted} · Delivered:{' '}
+                              {info.queueSummary.delivered} · DLQ: {info.queueSummary.deadLetter}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+              </>
             )}
 
             {activeSection === 'appointments' && (

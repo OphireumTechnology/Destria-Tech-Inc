@@ -449,7 +449,7 @@ test('4-8. Solution request lifecycle: valid submission, restart persistence, id
     assert.equal(createdJson.inquiry.estimatedOneTimeStartingUsd, 0);
     assert.equal(createdJson.inquiry.estimatedMonthlyStartingUsd, 0);
     assert.equal(createdJson.inquiry.estimatedBudget, 'Subject to Formal Assessment');
-    assert.equal(createdJson.emailDelivery.overallStatus, 'sent');
+    assert.equal(createdJson.emailDelivery.overallStatus, 'provider_accepted');
     assert.ok(store.outbox.length >= 2);
     for (const emailItem of store.outbox) {
       assert.equal(/\$\s*\d|₱\s*\d/i.test(emailItem.htmlBody), false, 'New inquiry emails must not contain service pricing');
@@ -598,9 +598,9 @@ test('10. Transactional email failure is persisted in outbox and retries succeed
     transport.shouldFail = false;
     const processed = await srv.emailService.processRetryQueue(10);
     assert.equal(processed, 3);
-    assert.equal(store.outbox[0].status, 'sent');
-    assert.equal(store.outbox[1].status, 'sent');
-    assert.equal(store.outbox[2].status, 'sent');
+    assert.equal(store.outbox[0].status, 'provider_accepted');
+    assert.equal(store.outbox[1].status, 'provider_accepted');
+    assert.equal(store.outbox[2].status, 'provider_accepted');
   } finally {
     await srv.close();
   }

@@ -23,7 +23,7 @@ import {
   classifyCommercialPolicyIntent,
   enforceCommercialPolicyOnOutput,
 } from '../aiCommercialPolicy';
-import { ROUTES, buildOrderDetailRoute } from '../../config/routes';
+import { ROUTES, buildCanonicalPublicUrl, buildOrderDetailRoute } from '../../config/routes';
 import type { TransactionalEmailService } from '../services/emailService';
 
 function sanitizeProductForPublicCatalog(product: ProductRecord) {
@@ -903,6 +903,21 @@ export function createPortalRouter(options: {
       return;
     }
 
+    const enforceStrictQuarantine = isProd || process.env.ENFORCE_MALWARE_QUARANTINE === 'true';
+    const scanStatus = found.record.scanStatus || 'quarantined_unscanned';
+    if (scanStatus === 'flagged' || (enforceStrictQuarantine && scanStatus !== 'clean')) {
+      res.status(403).json({
+        success: false,
+        code: 'FILE_QUARANTINED',
+        scanStatus,
+        error:
+          scanStatus === 'flagged'
+            ? 'This file has been flagged by security screening and cannot be downloaded.'
+            : 'This file is quarantined pending security screening clearance and cannot be downloaded yet.',
+      });
+      return;
+    }
+
     const safeFileName = found.record.fileName.replace(/["\\\r\n]/g, '_');
     res.setHeader('Content-Type', found.record.mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
@@ -1298,6 +1313,7 @@ export function createPortalRouter(options: {
     await repo.markProposalAccepted(userId, proposal.id, order.id);
 
     const adapter = paymentRegistry.getAdapter(paymentProvider)!;
+    const canonicalOrderUrl = buildCanonicalPublicUrl(buildOrderDetailRoute(order.id));
     const paymentInitiation = await adapter.initiatePayment({
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -1305,15 +1321,25 @@ export function createPortalRouter(options: {
       currency: order.currency,
       customerEmail: email,
       idempotencyKey: payment.idempotencyKey,
-      returnUrl: buildOrderDetailRoute(order.id),
+      returnUrl: canonicalOrderUrl,
+      cancelUrl: canonicalOrderUrl,
     });
+
+    const updatedPayment =
+      (await repo.updatePaymentInitiation?.(payment.id, {
+        providerTransactionId: paymentInitiation.providerTransactionId,
+        checkoutUrl: paymentInitiation.checkoutUrl,
+        environment: paymentInitiation.environment,
+        status: !paymentInitiation.initiated && paymentInitiation.environment !== 'disabled' ? 'failed' : undefined,
+        failureReason: !paymentInitiation.initiated ? paymentInitiation.message : undefined,
+      })) || payment;
 
     res.status(201).json({
       success: true,
       proposalNumber: proposal.proposalNumber,
       order,
       invoice,
-      payment,
+      payment: updatedPayment,
       paymentInitiation,
     });
   });
@@ -1714,11 +1740,17 @@ export function createPortalRouter(options: {
       res.status(404).json({ success: false, error: 'File not found or access denied.' });
       return;
     }
-    if (found.record.scanStatus === 'flagged') {
+    const enforceStrictQuarantine = isProd || process.env.ENFORCE_MALWARE_QUARANTINE === 'true';
+    const scanStatus = found.record.scanStatus || 'quarantined_unscanned';
+    if (scanStatus === 'flagged' || (enforceStrictQuarantine && scanStatus !== 'clean')) {
       res.status(403).json({
         success: false,
         code: 'FILE_QUARANTINED',
-        error: 'This file has been flagged by security screening and cannot be downloaded.',
+        scanStatus,
+        error:
+          scanStatus === 'flagged'
+            ? 'This file has been flagged by security screening and cannot be downloaded.'
+            : 'This file is quarantined pending security screening clearance and cannot be downloaded yet.',
       });
       return;
     }
@@ -1728,7 +1760,7 @@ export function createPortalRouter(options: {
       success: true,
       downloadUrl: `/api/portal/files/download/${encodeURIComponent(fileId)}?uid=${encodeURIComponent(userId)}&exp=${exp}&sig=${sig}`,
       expiresAt: new Date(exp * 1000).toISOString(),
-      scanStatus: found.record.scanStatus || 'quarantined_unscanned',
+      scanStatus,
     });
   });
 

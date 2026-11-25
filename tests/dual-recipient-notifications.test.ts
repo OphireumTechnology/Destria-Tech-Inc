@@ -460,8 +460,10 @@ test('Initiate Service Inquiry sends exact formatted email + Reply-To to BOTH au
       'Your service inquiry has been successfully registered with DESTRIA TECH INC. Our authorized team will review your submitted requirements and coordinate further communication.'
     );
     assert.equal(json.emailDelivery.notifiedRecipientsCount, 2);
-    assert.equal(json.emailDelivery.deliveredRecipientsCount, 2);
-    assert.equal(json.emailDelivery.overallStatus, 'sent');
+    assert.equal(json.emailDelivery.providerAcceptedRecipientsCount, 2);
+    assert.equal(json.emailDelivery.confirmedDeliveredRecipientsCount, 0);
+    assert.equal(json.emailDelivery.deliveredRecipientsCount, 0);
+    assert.equal(json.emailDelivery.overallStatus, 'provider_accepted');
 
     // Verify both authorized recipients received independent messages with exact subject, sections, signature, and client Reply-To
     const internalEmails = transport.sentMessages.filter(
@@ -616,7 +618,8 @@ test('Executive Consultation (Video Call, Phone Call, Executive Briefing) and AI
         json.confirmationMessage,
         'Your consultation request has been successfully registered. The requested schedule remains subject to availability and formal confirmation by our authorized team.'
       );
-      assert.equal(json.emailDelivery.deliveredRecipientsCount, 2);
+      assert.equal(json.emailDelivery.providerAcceptedRecipientsCount, 2);
+      assert.equal(json.emailDelivery.confirmedDeliveredRecipientsCount, 0);
 
       const newMessages = transport.sentMessages.slice(beforeCount);
       const dualMessages = newMessages.filter(
@@ -702,7 +705,8 @@ test('Partial failure isolation: Recipient 1 failure never blocks Recipient 2, a
     assert.equal(res.status, 201);
     const json = await res.json();
     assert.equal(json.emailDelivery.notifiedRecipientsCount, 2);
-    assert.equal(json.emailDelivery.deliveredRecipientsCount, 1);
+    assert.equal(json.emailDelivery.providerAcceptedRecipientsCount, 1);
+    assert.equal(json.emailDelivery.confirmedDeliveredRecipientsCount, 0);
     assert.equal(json.emailDelivery.failedRecipientsCount, 1);
     assert.equal(json.emailDelivery.partialFailure, true);
     assert.equal(json.emailDelivery.adminStatus, 'failed');
@@ -711,7 +715,7 @@ test('Partial failure isolation: Recipient 1 failure never blocks Recipient 2, a
     const r2Outbox = store.outbox.find((o) => o.recipientEmail === RECIPIENT_2);
     assert.equal(r1Outbox?.status, 'failed');
     assert.equal(r1Outbox?.replyTo, 'hanna.brooks@foundry.example');
-    assert.equal(r2Outbox?.status, 'sent');
+    assert.equal(r2Outbox?.status, 'provider_accepted');
     assert.ok(r2Outbox?.providerAcceptedAt);
 
     // Recover Recipient 1 & run independent retry queue (even after simulated server restart)
@@ -723,7 +727,7 @@ test('Partial failure isolation: Recipient 1 failure never blocks Recipient 2, a
     try {
       const retried = await srvRestarted.emailService.processRetryQueue(10);
       assert.equal(retried, 1);
-      assert.equal(r1Outbox?.status, 'sent');
+      assert.equal(r1Outbox?.status, 'provider_accepted');
       const recoveredMsg = transport.sentMessages.find((m) => m.to === RECIPIENT_1);
       assert.ok(recoveredMsg);
       assert.equal(recoveredMsg?.replyTo, 'hanna.brooks@foundry.example');

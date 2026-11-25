@@ -52,14 +52,16 @@ import {
 import { isValidIanaTimezone } from './utils/timezoneUtc';
 
 import path from 'path';
-import { PortalRepository } from './portal/types';
+import { FileScanStatus, PortalRepository } from './portal/types';
 import { LocalPortalRepository } from './portal/localPortalRepository';
 import { SupabasePortalRepository, UnconfiguredPortalRepository } from './portal/supabasePortalRepository';
 import { createPortalRouter } from './portal/portalRoutes';
+import { PaymentGatewayRegistry } from './portal/payments/paymentAdapters';
 
 export interface AppDependencies {
   db?: DatabaseRepository;
   portalRepo?: PortalRepository;
+  paymentRegistry?: PaymentGatewayRegistry;
   emailTransport?: EmailTransport;
   dualNotificationOverrides?: DualNotificationOverrides;
   calendarService?: GoogleCalendarService;
@@ -170,6 +172,7 @@ export function createApp(deps: AppDependencies = {}): {
   app.set('trust proxy', 1);
 
   const db = deps.db || new SupabaseDatabaseRepository();
+  const paymentRegistry = deps.paymentRegistry || new PaymentGatewayRegistry();
   const emailService = new TransactionalEmailService(
     db,
     deps.emailTransport || new ResendEmailTransport(),
@@ -680,6 +683,461 @@ export function createApp(deps: AppDependencies = {}): {
     }
   );
 
+  // Admin Notification Delivery Operations & Manual Retry (ERR-002 / ERR-017)
+  app.get(
+    '/api/admin/notifications',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const { limit, offset } = parsePagination(req);
+        const status =
+          typeof req.query.status === 'string' && req.query.status.trim()
+            ? req.query.status.trim()
+            : undefined;
+        const entityReference =
+          typeof req.query.entityReference === 'string' && req.query.entityReference.trim()
+            ? req.query.entityReference.trim()
+            : undefined;
+
+        const result = db.listOutboxRecords
+          ? await db.listOutboxRecords({ limit, offset, status, entityReference })
+          : { records: [], total: 0 };
+
+        const statusCounts: Record<string, number> = {};
+        for (const rec of result.records) {
+          statusCounts[rec.status] = (statusCounts[rec.status] || 0) + 1;
+        }
+
+        await db.writeAuditLog({
+          correlationId: req.correlationId,
+          actor: req.adminUser?.email || 'admin',
+          actorRole: req.adminUser?.role || 'admin',
+          action: 'admin_view_notifications',
+          entityType: 'notification_records',
+          details: { limit, offset, status, entityReference, count: result.records.length },
+        });
+
+        res.json({
+          success: true,
+          total: result.total,
+          limit,
+          offset,
+          statusCounts,
+          records: result.records,
+        });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
+  app.post(
+    '/api/admin/notifications/:id/retry',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const outboxId = sanitizePlainText(req.params.id, 120);
+        if (!outboxId) {
+          res.status(400).json({ success: false, error: 'Valid notification record ID is required.' });
+          return;
+        }
+
+        const outcome = await emailService.adminRetryOutboxRecord(outboxId, req.correlationId);
+        await db.writeAuditLog({
+          correlationId: req.correlationId,
+          actor: req.adminUser?.email || 'admin',
+          actorRole: req.adminUser?.role || 'admin',
+          action: 'admin_retry_notification',
+          entityType: 'notification_records',
+          entityId: outboxId,
+          details: { ok: outcome.ok, status: outcome.status, error: outcome.error },
+        });
+
+        if (!outcome.ok) {
+          const statusCode = outcome.error?.includes('not found') ? 404 : 409;
+          res.status(statusCode).json({
+            success: false,
+            error: outcome.error || 'Unable to retry notification.',
+          });
+          return;
+        }
+
+        res.json({
+          success: true,
+          outboxId,
+          status: outcome.status,
+        });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
+  // Admin System Health & Operational Readiness Diagnostics (ERR-017)
+  app.get(
+    '/api/admin/system-health',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const dbPing = await db.ping();
+        const portalReady = portalRepo.mode !== 'unconfigured';
+        const dualConfig = emailService.getDualNotificationConfig();
+        const paymentProviders = paymentRegistry.listConfigs();
+        const outboxSnapshot = db.listOutboxRecords
+          ? await db.listOutboxRecords({ limit: 100, offset: 0 }).catch(() => ({ records: [], total: 0 }))
+          : { records: [], total: 0 };
+
+        const queueSummary = {
+          totalSampled: outboxSnapshot.total,
+          queued: outboxSnapshot.records.filter((r) => r.status === 'queued' || r.status === 'processing').length,
+          providerAccepted: outboxSnapshot.records.filter(
+            (r) => r.status === 'provider_accepted' || r.status === 'sent'
+          ).length,
+          delivered: outboxSnapshot.records.filter((r) => r.status === 'delivered').length,
+          failed: outboxSnapshot.records.filter((r) => r.status === 'failed').length,
+          deadLetter: outboxSnapshot.records.filter((r) => r.status === 'dead_letter').length,
+          bouncedOrComplained: outboxSnapshot.records.filter(
+            (r) => r.status === 'bounced' || r.status === 'complained'
+          ).length,
+        };
+
+        const dbState = dbPing.ok ? 'HEALTHY' : dbPing.configured ? 'UNAVAILABLE' : 'UNCONFIGURED';
+        const portalState = portalReady
+          ? portalRepo.mode === 'supabase'
+            ? 'HEALTHY'
+            : 'DEGRADED'
+          : 'UNCONFIGURED';
+        const emailState = emailService.isConfigured()
+          ? queueSummary.deadLetter > 0
+            ? 'DEGRADED'
+            : 'HEALTHY'
+          : 'UNCONFIGURED';
+        const webhookState = dualConfig.webhookSecret ? 'HEALTHY' : 'UNCONFIGURED';
+        const calendarState = calendarService.isConfigured() ? 'HEALTHY' : 'UNCONFIGURED';
+        const geminiState = ai ? 'HEALTHY' : 'UNCONFIGURED';
+        const activeGateways = paymentProviders.filter((p) => p.isEnabled).length;
+        const paymentsState = activeGateways > 0 ? 'HEALTHY' : 'UNCONFIGURED';
+
+        const overallState =
+          dbState === 'UNAVAILABLE' || portalState === 'UNCONFIGURED'
+            ? 'UNAVAILABLE'
+            : dbState === 'UNCONFIGURED'
+            ? 'UNCONFIGURED'
+            : emailState === 'DEGRADED' || portalState === 'DEGRADED'
+            ? 'DEGRADED'
+            : 'HEALTHY';
+
+        res.json({
+          success: true,
+          status: overallState,
+          version: APP_VERSION,
+          uptimeSeconds: Math.floor((Date.now() - APP_STARTED_AT) / 1000),
+          timestamp: new Date().toISOString(),
+          subsystems: {
+            database: {
+              state: dbState,
+              configured: dbPing.configured,
+              connected: dbPing.ok,
+              latencyMs: dbPing.latencyMs ?? null,
+            },
+            portalPersistence: {
+              state: portalState,
+              mode: portalRepo.mode,
+              durable: portalRepo.mode === 'supabase',
+            },
+            emailDelivery: {
+              state: emailState,
+              configured: emailService.isConfigured(),
+              provider: 'resend',
+              serviceInquiryEnabled: dualConfig.serviceInquiry.enabled,
+              executiveConsultationEnabled: dualConfig.executiveConsultation.enabled,
+              configuredRecipientCount: Math.max(
+                dualConfig.serviceInquiry.recipients.length,
+                dualConfig.executiveConsultation.recipients.length
+              ),
+              queueSummary,
+            },
+            emailWebhooks: {
+              state: webhookState,
+              signatureVerificationConfigured: Boolean(dualConfig.webhookSecret),
+            },
+            calendar: {
+              state: calendarState,
+              configured: calendarService.isConfigured(),
+            },
+            aiConsultant: {
+              state: geminiState,
+              configured: Boolean(ai),
+            },
+            payments: {
+              state: paymentsState,
+              enabledProvidersCount: activeGateways,
+              providers: paymentProviders,
+            },
+          },
+        });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
+  // Admin Server-to-Server Payment Status Verification (ERR-008)
+  app.post(
+    '/api/admin/portal/payments/:paymentId/verify',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const paymentId = sanitizePlainText(req.params.paymentId, 120);
+        const payment = await portalRepo.getPaymentByIdInternal?.(paymentId);
+        if (!payment) {
+          res.status(404).json({ success: false, error: 'Payment record not found.' });
+          return;
+        }
+        const adapter = paymentRegistry.getAdapter(payment.provider);
+        if (!adapter) {
+          res.status(400).json({ success: false, error: `Unsupported payment provider "${payment.provider}".` });
+          return;
+        }
+
+        const providerTxnId =
+          sanitizePlainText(req.body?.providerTransactionId, 160) || payment.providerTransactionId || '';
+        const verification = await adapter.verifyPaymentStatus(providerTxnId);
+
+        await db.writeAuditLog({
+          correlationId: req.correlationId,
+          actor: req.adminUser?.email || 'admin',
+          actorRole: req.adminUser?.role || 'admin',
+          action: 'admin_verify_payment_status',
+          entityType: 'payments',
+          entityId: payment.id,
+          details: {
+            provider: payment.provider,
+            providerTransactionId: providerTxnId,
+            verified: verification.verified,
+            status: verification.status,
+            httpStatus: verification.httpStatus,
+          },
+        });
+
+        res.json({
+          success: true,
+          paymentId: payment.id,
+          orderId: payment.orderId,
+          provider: payment.provider,
+          verification,
+        });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
+  // Admin Authorized Refund Execution with Idempotency & Minor-Unit Bounds (ERR-009)
+  app.post(
+    '/api/admin/portal/payments/:paymentId/refund',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const paymentId = sanitizePlainText(req.params.paymentId, 120);
+        const payment = await portalRepo.getPaymentByIdInternal?.(paymentId);
+        if (!payment) {
+          res.status(404).json({ success: false, error: 'Payment record not found.' });
+          return;
+        }
+        if (payment.status !== 'paid' && payment.status !== 'partially_refunded') {
+          res.status(409).json({
+            success: false,
+            error: `Only paid or partially refunded payments can be refunded (current status: "${payment.status}").`,
+          });
+          return;
+        }
+
+        const amountMinor = Number(req.body?.amountMinor);
+        const reason = sanitizePlainText(req.body?.reason, 500);
+        const headerIdemp =
+          typeof req.headers['idempotency-key'] === 'string'
+            ? req.headers['idempotency-key'].trim()
+            : '';
+        const idempotencyKey =
+          sanitizePlainText(req.body?.idempotencyKey || headerIdemp, 120) ||
+          `refund:${payment.id}:${amountMinor}:${crypto.randomUUID().slice(0, 8)}`;
+
+        if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
+          res.status(400).json({
+            success: false,
+            error: 'amountMinor must be a positive integer in minor currency units.',
+          });
+          return;
+        }
+        if (!reason || reason.length < 5) {
+          res.status(400).json({
+            success: false,
+            error: 'A formal refund justification reason (at least 5 characters) is required.',
+          });
+          return;
+        }
+
+        const actorEmail = req.adminUser?.email || 'admin';
+        const actorRole = req.adminUser?.role || 'admin';
+        const approvedBy = sanitizePlainText(req.body?.approvedBy, 180) || undefined;
+        if (actorRole !== 'super_admin' && (!approvedBy || approvedBy.toLowerCase() === actorEmail.toLowerCase())) {
+          res.status(403).json({
+            success: false,
+            code: 'REFUND_APPROVAL_REQUIRED',
+            error:
+              'Non-super-admin refund execution requires separation of duties with a distinct approvedBy executive identifier.',
+          });
+          return;
+        }
+
+        const alreadyRefunded = payment.refundedMinor || 0;
+        const remainingMinor = payment.amountMinor - alreadyRefunded;
+        if (amountMinor > remainingMinor) {
+          res.status(422).json({
+            success: false,
+            code: 'REFUND_EXCEEDS_REMAINING',
+            error: `Requested refund (${amountMinor}) exceeds remaining refundable minor units (${remainingMinor}).`,
+          });
+          return;
+        }
+
+        // Check duplicate refund idempotency BEFORE calling payment gateway
+        const existingRefunds = (await portalRepo.listRefundsByPaymentId?.(payment.id)) || [];
+        const duplicateRefund = existingRefunds.find((r) => r.idempotencyKey === idempotencyKey);
+        if (duplicateRefund) {
+          res.status(200).json({
+            success: true,
+            deduplicated: true,
+            refund: duplicateRefund,
+            payment,
+          });
+          return;
+        }
+
+        const adapter = paymentRegistry.getAdapter(payment.provider);
+        if (!adapter) {
+          res.status(400).json({ success: false, error: `Unsupported payment provider "${payment.provider}".` });
+          return;
+        }
+
+        const gatewayRefund = await adapter.initiateRefund({
+          providerTransactionId: payment.providerTransactionId || '',
+          amountMinor,
+          currency: payment.currency,
+          reason,
+          idempotencyKey,
+        });
+
+        const mappedStatus: 'pending' | 'succeeded' | 'failed' =
+          gatewayRefund.status === 'succeeded'
+            ? 'succeeded'
+            : gatewayRefund.status === 'pending'
+            ? 'pending'
+            : 'failed';
+
+        const recorded = await portalRepo.recordAuthorizedRefund?.({
+          paymentId: payment.id,
+          orderId: payment.orderId,
+          provider: payment.provider,
+          providerTransactionId: payment.providerTransactionId,
+          providerRefundId: gatewayRefund.providerRefundId,
+          amountMinor,
+          currency: payment.currency,
+          reason,
+          status: mappedStatus,
+          idempotencyKey,
+          requestedBy: actorEmail,
+          approvedBy: approvedBy || (actorRole === 'super_admin' ? actorEmail : undefined),
+        });
+
+        await db.writeAuditLog({
+          correlationId: req.correlationId,
+          actor: actorEmail,
+          actorRole,
+          action: 'admin_initiate_payment_refund',
+          entityType: 'portal_payment_refunds',
+          entityId: recorded?.refund.id || payment.id,
+          details: {
+            paymentId: payment.id,
+            orderId: payment.orderId,
+            provider: payment.provider,
+            amountMinor,
+            currency: payment.currency,
+            gatewayStatus: gatewayRefund.status,
+            providerRefundId: gatewayRefund.providerRefundId,
+            approvedBy: approvedBy || actorEmail,
+          },
+        });
+
+        if (!gatewayRefund.refunded) {
+          res.status(502).json({
+            success: false,
+            error: gatewayRefund.message,
+            gatewayStatus: gatewayRefund.status,
+            refund: recorded?.refund,
+          });
+          return;
+        }
+
+        res.status(recorded?.deduplicated ? 200 : 201).json({
+          success: true,
+          deduplicated: Boolean(recorded?.deduplicated),
+          refund: recorded?.refund,
+          payment: recorded?.payment || payment,
+          order: recorded?.order,
+          gateway: gatewayRefund,
+        });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
+  // Admin Malware Scan Verdict Clearance / Quarantine Control (ERR-013)
+  app.post(
+    '/api/admin/portal/files/:fileId/scan-status',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const fileId = sanitizePlainText(req.params.fileId, 120);
+        const scanStatus = sanitizePlainText(req.body?.scanStatus, 40) as FileScanStatus;
+        const quarantineReason = sanitizePlainText(req.body?.quarantineReason, 300) || undefined;
+        if (!['clean', 'flagged', 'quarantined_unscanned'].includes(scanStatus)) {
+          res.status(400).json({
+            success: false,
+            error: 'scanStatus must be one of clean, flagged, or quarantined_unscanned.',
+          });
+          return;
+        }
+
+        const updated = await portalRepo.updateAttachmentScanStatus?.(
+          fileId,
+          scanStatus,
+          quarantineReason
+        );
+        if (!updated) {
+          res.status(404).json({ success: false, error: 'Attachment not found.' });
+          return;
+        }
+
+        await db.writeAuditLog({
+          correlationId: req.correlationId,
+          actor: req.adminUser?.email || 'admin',
+          actorRole: req.adminUser?.role || 'admin',
+          action: 'admin_update_file_scan_status',
+          entityType: 'project_attachments',
+          entityId: fileId,
+          details: { scanStatus, quarantineReason },
+        });
+
+        res.json({ success: true, file: updated });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
   // -----------------------------------------------------------------------
   // 4. DURABLE SOLUTION REQUEST / INQUIRY SUBMISSION (BLOCK 3 & BLOCK 6)
   // -----------------------------------------------------------------------
@@ -728,7 +1186,7 @@ export function createApp(deps: AppDependencies = {}): {
           selectedOptionIds: data.selectedOptionsMap[svc.id] || [],
         }));
 
-        const { record, created } = await db.createSolutionRequest({
+        const solutionInput = {
           referenceCode,
           idempotencyKey: data.idempotencyKey,
           type: data.type,
@@ -756,25 +1214,58 @@ export function createApp(deps: AppDependencies = {}): {
           commercialPolicyConsent: data.commercialPolicyConsent,
           sourceChannel: data.sourceChannel,
           clientIp,
-        });
-
-        let emailOutcome: DualRecipientDeliveryOutcome = {
-          customerStatus: record.emailDeliveryStatus === 'sent' ? 'sent' : record.emailDeliveryStatus === 'failed' ? 'failed' : 'unconfigured',
-          adminStatus: record.emailDeliveryStatus === 'sent' ? 'sent' : record.emailDeliveryStatus === 'failed' ? 'failed' : 'unconfigured',
-          overallStatus: record.emailDeliveryStatus === 'sent' ? 'sent' : record.emailDeliveryStatus === 'failed' ? 'failed' : 'unconfigured',
-          notifiedRecipientsCount: 0,
-          deliveredRecipientsCount: 0,
-          failedRecipientsCount: 0,
-          partialFailure: false,
-          notificationsEnabled: true,
         };
+
+        const previewNow = new Date().toISOString();
+        const plannedOutbox = emailService.buildSolutionRequestOutboxInputs(
+          {
+            ...solutionInput,
+            id: '',
+            status: 'submitted',
+            emailDeliveryStatus: 'pending',
+            createdAt: previewNow,
+            updatedAt: previewNow,
+          },
+          req.correlationId
+        );
+
+        let record: Awaited<ReturnType<typeof db.createSolutionRequest>>['record'];
+        let created: boolean;
+        let prePersistedOutbox:
+          | Awaited<ReturnType<NonNullable<typeof db.createSolutionRequestWithOutbox>>>['outboxRecords']
+          | undefined;
+
+        if (db.createSolutionRequestWithOutbox) {
+          const atomicResult = await db.createSolutionRequestWithOutbox(
+            solutionInput,
+            plannedOutbox.items
+          );
+          record = atomicResult.record;
+          created = atomicResult.created;
+          prePersistedOutbox = atomicResult.outboxRecords;
+        } else {
+          const legacyResult = await db.createSolutionRequest(solutionInput);
+          record = legacyResult.record;
+          created = legacyResult.created;
+        }
+
+        let emailOutcome: DualRecipientDeliveryOutcome;
 
         if (created) {
           try {
-            emailOutcome = await emailService.enqueueAndSendSolutionRequestEmails(
-              record,
-              req.correlationId
-            );
+            if (prePersistedOutbox && prePersistedOutbox.length > 0) {
+              emailOutcome = await emailService.dispatchPersistedSolutionOutbox(
+                record.referenceCode,
+                prePersistedOutbox,
+                plannedOutbox.dualConfig.serviceInquiry.enabled,
+                req.correlationId
+              );
+            } else {
+              emailOutcome = await emailService.enqueueAndSendSolutionRequestEmails(
+                record,
+                req.correlationId
+              );
+            }
           } catch (emailErr: any) {
             logStructured('error', 'solution_request_email_pipeline_error', {
               correlationId: req.correlationId,
@@ -785,7 +1276,10 @@ export function createApp(deps: AppDependencies = {}): {
               customerStatus: 'failed',
               adminStatus: 'failed',
               overallStatus: 'failed',
+              deliveryState: 'failed',
               notifiedRecipientsCount: 0,
+              providerAcceptedRecipientsCount: 0,
+              confirmedDeliveredRecipientsCount: 0,
               deliveredRecipientsCount: 0,
               failedRecipientsCount: 0,
               partialFailure: false,
@@ -805,10 +1299,17 @@ export function createApp(deps: AppDependencies = {}): {
               sourceChannel: record.sourceChannel,
               serviceCount: record.selectedServiceIds.length,
               notifiedRecipientsCount: emailOutcome.notifiedRecipientsCount,
-              deliveredRecipientsCount: emailOutcome.deliveredRecipientsCount,
+              providerAcceptedRecipientsCount: emailOutcome.providerAcceptedRecipientsCount,
+              confirmedDeliveredRecipientsCount: emailOutcome.confirmedDeliveredRecipientsCount,
               emailDeliveryStatus: emailOutcome.overallStatus,
             },
           });
+        } else {
+          // ERR-011: Return ACTUAL persisted delivery status & counts on duplicate idempotent submissions
+          emailOutcome = await emailService.getPersistedDeliveryOutcome(
+            'solution_request',
+            record.referenceCode
+          );
         }
 
         // SECURITY: Never expose internal notification recipient email addresses in public API responses
@@ -823,7 +1324,10 @@ export function createApp(deps: AppDependencies = {}): {
             customerStatus: emailOutcome.customerStatus,
             adminStatus: emailOutcome.adminStatus,
             overallStatus: emailOutcome.overallStatus,
+            deliveryState: emailOutcome.deliveryState,
             notifiedRecipientsCount: emailOutcome.notifiedRecipientsCount,
+            providerAcceptedRecipientsCount: emailOutcome.providerAcceptedRecipientsCount,
+            confirmedDeliveredRecipientsCount: emailOutcome.confirmedDeliveredRecipientsCount,
             deliveredRecipientsCount: emailOutcome.deliveredRecipientsCount,
             failedRecipientsCount: emailOutcome.failedRecipientsCount,
             partialFailure: emailOutcome.partialFailure,
@@ -930,14 +1434,16 @@ export function createApp(deps: AppDependencies = {}): {
         }
         const data = validated.data;
 
-        const existingBooked = await db.getBookedSlotsForDate(data.scheduledDate);
-        if (existingBooked.includes(data.scheduledTimeSlot)) {
-          res.status(409).json({
-            success: false,
-            code: 'SLOT_CONFLICT',
-            error: `The slot ${data.scheduledTimeSlot} on ${data.scheduledDate} is already reserved. Please select another available slot.`,
-          });
-          return;
+        if (!data.idempotencyKey) {
+          const existingBooked = await db.getBookedSlotsForDate(data.scheduledDate);
+          if (existingBooked.includes(data.scheduledTimeSlot)) {
+            res.status(409).json({
+              success: false,
+              code: 'SLOT_CONFLICT',
+              error: `The slot ${data.scheduledTimeSlot} on ${data.scheduledDate} is already reserved. Please select another available slot.`,
+            });
+            return;
+          }
         }
 
         const referenceCode = `OPM-APT-${new Date().getFullYear()}-${crypto
@@ -978,7 +1484,7 @@ export function createApp(deps: AppDependencies = {}): {
             ? `${corporateIdentity.leadership.cto.name} — ${corporateIdentity.leadership.cto.title}`
             : 'DESTRIA TECH INC Solutions Architecture Team';
 
-        const { record, created } = await db.createAppointment({
+        const appointmentInput = {
           referenceCode,
           idempotencyKey: data.idempotencyKey,
           fullName: data.fullName,
@@ -1005,25 +1511,57 @@ export function createApp(deps: AppDependencies = {}): {
           sourceChannel: data.sourceChannel,
           availabilityVerified: data.availabilityVerified,
           notes: data.notes,
-        });
-
-        let emailOutcome: DualRecipientDeliveryOutcome = {
-          customerStatus: 'unconfigured',
-          adminStatus: 'unconfigured',
-          overallStatus: 'unconfigured',
-          notifiedRecipientsCount: 0,
-          deliveredRecipientsCount: 0,
-          failedRecipientsCount: 0,
-          partialFailure: false,
-          notificationsEnabled: true,
         };
+
+        const previewNow = new Date().toISOString();
+        const plannedOutbox = emailService.buildAppointmentOutboxInputs(
+          {
+            ...appointmentInput,
+            id: '',
+            createdAt: previewNow,
+            updatedAt: previewNow,
+          },
+          req.correlationId,
+          'requested'
+        );
+
+        let record: Awaited<ReturnType<typeof db.createAppointment>>['record'];
+        let created: boolean;
+        let prePersistedOutbox:
+          | Awaited<ReturnType<NonNullable<typeof db.createAppointmentWithOutbox>>>['outboxRecords']
+          | undefined;
+
+        if (db.createAppointmentWithOutbox) {
+          const atomicResult = await db.createAppointmentWithOutbox(
+            appointmentInput,
+            plannedOutbox.items
+          );
+          record = atomicResult.record;
+          created = atomicResult.created;
+          prePersistedOutbox = atomicResult.outboxRecords;
+        } else {
+          const legacyResult = await db.createAppointment(appointmentInput);
+          record = legacyResult.record;
+          created = legacyResult.created;
+        }
+
+        let emailOutcome: DualRecipientDeliveryOutcome;
 
         if (created) {
           try {
-            emailOutcome = await emailService.enqueueAndSendAppointmentEmails(
-              record,
-              req.correlationId
-            );
+            if (prePersistedOutbox && prePersistedOutbox.length > 0) {
+              emailOutcome = await emailService.dispatchPersistedAppointmentOutbox(
+                record.referenceCode,
+                prePersistedOutbox,
+                plannedOutbox.dualConfig.executiveConsultation.enabled,
+                req.correlationId
+              );
+            } else {
+              emailOutcome = await emailService.enqueueAndSendAppointmentEmails(
+                record,
+                req.correlationId
+              );
+            }
           } catch (emailErr: any) {
             logStructured('error', 'appointment_email_failed', {
               correlationId: req.correlationId,
@@ -1034,7 +1572,10 @@ export function createApp(deps: AppDependencies = {}): {
               customerStatus: 'failed',
               adminStatus: 'failed',
               overallStatus: 'failed',
+              deliveryState: 'failed',
               notifiedRecipientsCount: 0,
+              providerAcceptedRecipientsCount: 0,
+              confirmedDeliveredRecipientsCount: 0,
               deliveredRecipientsCount: 0,
               failedRecipientsCount: 0,
               partialFailure: false,
@@ -1057,9 +1598,16 @@ export function createApp(deps: AppDependencies = {}): {
               status: record.status,
               calendarSyncStatus: record.calendarSyncStatus,
               notifiedRecipientsCount: emailOutcome.notifiedRecipientsCount,
-              deliveredRecipientsCount: emailOutcome.deliveredRecipientsCount,
+              providerAcceptedRecipientsCount: emailOutcome.providerAcceptedRecipientsCount,
+              confirmedDeliveredRecipientsCount: emailOutcome.confirmedDeliveredRecipientsCount,
             },
           });
+        } else {
+          // ERR-011: Return ACTUAL persisted delivery status & counts on duplicate idempotent submissions
+          emailOutcome = await emailService.getPersistedDeliveryOutcome(
+            'appointment',
+            record.referenceCode
+          );
         }
 
         const { managementTokenHash: _hidden, ...safeAppointment } = record;
@@ -1078,7 +1626,10 @@ export function createApp(deps: AppDependencies = {}): {
             customerStatus: emailOutcome.customerStatus,
             adminStatus: emailOutcome.adminStatus,
             overallStatus: emailOutcome.overallStatus,
+            deliveryState: emailOutcome.deliveryState,
             notifiedRecipientsCount: emailOutcome.notifiedRecipientsCount,
+            providerAcceptedRecipientsCount: emailOutcome.providerAcceptedRecipientsCount,
+            confirmedDeliveredRecipientsCount: emailOutcome.confirmedDeliveredRecipientsCount,
             deliveredRecipientsCount: emailOutcome.deliveredRecipientsCount,
             failedRecipientsCount: emailOutcome.failedRecipientsCount,
             partialFailure: emailOutcome.partialFailure,
@@ -1141,7 +1692,8 @@ export function createApp(deps: AppDependencies = {}): {
 
         const outcome = await emailService.handleResendWebhookEvent(
           req.body || {},
-          req.correlationId
+          req.correlationId,
+          { svixId, svixTimestamp }
         );
 
         await db.writeAuditLog({
@@ -1153,15 +1705,22 @@ export function createApp(deps: AppDependencies = {}): {
           entityId: outcome.outboxId || req.body?.data?.email_id,
           details: {
             eventType: req.body?.type,
+            svixId,
             matched: outcome.matched,
+            deduplicated: Boolean(outcome.deduplicated),
+            pendingReconciliation: Boolean(outcome.pendingReconciliation),
             status: outcome.status,
+            eventTimestampUtc: outcome.eventTimestampUtc,
           },
         });
 
         res.status(200).json({
           success: true,
           matched: outcome.matched,
+          deduplicated: Boolean(outcome.deduplicated),
+          pendingReconciliation: Boolean(outcome.pendingReconciliation),
           status: outcome.status || 'ignored',
+          eventTimestampUtc: outcome.eventTimestampUtc,
         });
       } catch (err) {
         next(err);
@@ -1816,6 +2375,7 @@ TONE & SPOKEN VOICE RULES:
     '/api/portal',
     createPortalRouter({
       repo: portalRepo,
+      paymentRegistry,
       signingSecret: deps.sessionSecret,
       emailService,
     })

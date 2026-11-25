@@ -5,12 +5,15 @@ import {
   AuditLogRecord,
   ConflictError,
   CreateAppointmentInput,
+  CreateOutboxInput,
   CreateSolutionRequestInput,
   DatabaseRepository,
   DatabaseUnavailableError,
   EmailOutboxRecord,
   NotFoundError,
+  NotificationWebhookEventRecord,
   SolutionRequestRecord,
+  UpdateOutboxPatch,
 } from './types';
 
 function mapSolutionRequestRow(row: any): SolutionRequestRecord {
@@ -126,9 +129,124 @@ function mapOutboxRow(row: any): EmailOutboxRecord {
     deliveredAt:
       row.delivered_at || (typeof meta.deliveredAt === 'string' ? meta.deliveredAt : undefined),
     sentAt: row.sent_at || undefined,
+    claimedBy: row.claimed_by || undefined,
+    claimedAt: row.claimed_at || undefined,
+    leaseExpiresAt: row.lease_expires_at || undefined,
+    eventRevision: row.event_revision !== undefined ? Number(row.event_revision) : 1,
+    deadLetteredAt: row.dead_lettered_at || undefined,
+    bouncedAt: row.bounced_at || undefined,
+    complainedAt: row.complained_at || undefined,
+    deliveryDelayedAt: row.delivery_delayed_at || undefined,
+    lastWebhookEventId: row.last_webhook_event_id || undefined,
+    lastWebhookEventAt: row.last_webhook_event_at || undefined,
     metadata: meta,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at || row.created_at),
+  };
+}
+
+function mapWebhookEventRow(row: any): NotificationWebhookEventRecord {
+  return {
+    id: String(row.id),
+    provider: String(row.provider || 'resend'),
+    providerEventId: String(row.provider_event_id),
+    eventType: String(row.event_type),
+    providerMessageId: row.provider_message_id || undefined,
+    eventTimestampUtc: String(row.event_timestamp_utc),
+    reconciled: Boolean(row.reconciled),
+    outboxId: row.outbox_id ? String(row.outbox_id) : undefined,
+    payload: row.payload && typeof row.payload === 'object' ? row.payload : {},
+    receivedAt: String(row.received_at),
+    reconciledAt: row.reconciled_at || undefined,
+  };
+}
+
+function buildSolutionRequestDbPayload(input: CreateSolutionRequestInput): Record<string, unknown> {
+  return {
+    reference_code: input.referenceCode,
+    idempotency_key: input.idempotencyKey || null,
+    request_type: input.type,
+    full_name: input.fullName,
+    email: input.email,
+    phone: input.contactNumber,
+    organization: input.company,
+    industry: input.industry || null,
+    target_timeline: input.targetTimeline || null,
+    selected_services_json: input.selectedServices,
+    selected_options_json: input.selectedOptionsMap,
+    estimated_one_time_usd: input.estimatedOneTimeStartingUsd,
+    estimated_monthly_usd: input.estimatedMonthlyStartingUsd,
+    preferred_currency: input.preferredCurrency,
+    php_conversion_rate: input.phpConversionRate || null,
+    estimated_budget_label: input.estimatedBudget,
+    engagement_scope: input.engagementScope || null,
+    submission_timezone: input.submissionTimezone || null,
+    requirements_notes: input.projectDescription,
+    attachment_filename: input.fileName || null,
+    confidentiality_authorized: input.privacyConsent,
+    commercial_policy_consent: Boolean(input.commercialPolicyConsent ?? input.privacyConsent),
+    status: 'submitted',
+    email_delivery_status: 'pending',
+    source_channel: input.sourceChannel || 'Public Website',
+    client_ip: input.clientIp || null,
+  };
+}
+
+function buildAppointmentDbPayload(input: CreateAppointmentInput): Record<string, unknown> {
+  return {
+    reference_code: input.referenceCode,
+    idempotency_key: input.idempotencyKey || null,
+    client_name: input.fullName,
+    client_email: input.email,
+    client_phone: input.phone,
+    client_company: input.companyName,
+    brief_reference_code: input.briefReferenceCode || null,
+    executive_pathway: input.executivePathway || 'advisory',
+    consultation_type: input.consultationType,
+    consultation_purpose: input.consultationPurpose || null,
+    selected_solution: input.selectedSolution || null,
+    scheduled_date: input.scheduledDate,
+    scheduled_time_slot: input.scheduledTimeSlot,
+    utc_scheduled_at: input.utcScheduledAt || null,
+    duration_minutes: input.durationMinutes,
+    client_timezone: input.clientTimezone,
+    meeting_link: input.meetingLink || null,
+    meeting_location: input.meetingLocation || null,
+    assigned_consultant: input.assignedConsultant,
+    status: input.status,
+    calendar_sync_status: input.calendarSyncStatus,
+    calendar_event_id: input.calendarEventId || null,
+    management_token_hash: input.managementTokenHash,
+    source_channel: input.sourceChannel || 'Public Website',
+    availability_verified: input.availabilityVerified ?? true,
+    notes: input.notes || null,
+  };
+}
+
+function buildOutboxDbPayload(input: CreateOutboxInput): Record<string, unknown> {
+  const enrichedMeta: Record<string, unknown> = {
+    ...(input.metadata || {}),
+    ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+    ...(input.requestSource ? { requestSource: input.requestSource } : {}),
+  };
+  return {
+    dedupe_key: input.dedupeKey,
+    entity_type: input.entityType,
+    entity_reference: input.entityReference,
+    recipient_email: input.recipientEmail,
+    reply_to: input.replyTo || null,
+    idempotency_key: input.idempotencyKey || null,
+    request_source: input.requestSource || null,
+    notification_type: input.notificationType,
+    subject: input.subject,
+    html_body: input.htmlBody,
+    text_body: input.textBody,
+    status: 'queued',
+    provider: 'resend',
+    delivery_attempts: 0,
+    event_revision: input.eventRevision ?? 1,
+    metadata: enrichedMeta,
   };
 }
 
@@ -218,34 +336,7 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
 
     const { data, error } = await db
       .from('solution_requests')
-      .insert({
-        reference_code: input.referenceCode,
-        idempotency_key: input.idempotencyKey || null,
-        request_type: input.type,
-        full_name: input.fullName,
-        email: input.email,
-        phone: input.contactNumber,
-        organization: input.company,
-        industry: input.industry || null,
-        target_timeline: input.targetTimeline || null,
-        selected_services_json: input.selectedServices,
-        selected_options_json: input.selectedOptionsMap,
-        estimated_one_time_usd: input.estimatedOneTimeStartingUsd,
-        estimated_monthly_usd: input.estimatedMonthlyStartingUsd,
-        preferred_currency: input.preferredCurrency,
-        php_conversion_rate: input.phpConversionRate || null,
-        estimated_budget_label: input.estimatedBudget,
-        engagement_scope: input.engagementScope || null,
-        submission_timezone: input.submissionTimezone || null,
-        requirements_notes: input.projectDescription,
-        attachment_filename: input.fileName || null,
-        confidentiality_authorized: input.privacyConsent,
-        commercial_policy_consent: Boolean(input.commercialPolicyConsent ?? input.privacyConsent),
-        status: 'submitted',
-        email_delivery_status: 'pending',
-        source_channel: input.sourceChannel || 'Public Website',
-        client_ip: input.clientIp || null,
-      })
+      .insert(buildSolutionRequestDbPayload(input))
       .select('*')
       .single();
 
@@ -258,6 +349,59 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
     }
 
     return { record: mapSolutionRequestRow(data), created: true };
+  }
+
+  /**
+   * ERR-010: Atomic transactional persistence of solution request + outbox notifications via PostgreSQL RPC.
+   * Falls back cleanly to createSolutionRequest + atomic createOutboxRecord when migration 005 RPC is not yet deployed.
+   */
+  async createSolutionRequestWithOutbox(
+    input: CreateSolutionRequestInput,
+    outboxItems: CreateOutboxInput[]
+  ): Promise<{
+    record: SolutionRequestRecord;
+    created: boolean;
+    outboxRecords: EmailOutboxRecord[];
+  }> {
+    const db = this.getClient();
+    const { data: rpcData, error: rpcError } = await db.rpc('register_solution_request_with_outbox', {
+      p_request: buildSolutionRequestDbPayload(input),
+      p_outbox_items: outboxItems.map(buildOutboxDbPayload),
+    });
+
+    if (!rpcError && rpcData && rpcData.record) {
+      const record = mapSolutionRequestRow(rpcData.record);
+      const created = Boolean(rpcData.created);
+      const outboxRecords = await this.listOutboxByEntity('solution_request', record.referenceCode);
+      return { record, created, outboxRecords };
+    }
+
+    // Fallback if migration 005 RPC has not been applied yet on target environment
+    const isMissingRpc =
+      rpcError &&
+      (rpcError.code === 'PGRST202' ||
+        rpcError.code === '42883' ||
+        /function.*register_solution_request_with_outbox/i.test(rpcError.message || ''));
+
+    if (rpcError && !isMissingRpc) {
+      throw new DatabaseUnavailableError(`Transactional solution request persistence failed: ${rpcError.message}`);
+    }
+
+    const { record, created } = await this.createSolutionRequest(input);
+    const outboxRecords: EmailOutboxRecord[] = [];
+    if (created) {
+      for (const item of outboxItems) {
+        const res = await this.createOutboxRecord(item);
+        outboxRecords.push(res.record);
+      }
+    } else {
+      return {
+        record,
+        created: false,
+        outboxRecords: await this.listOutboxByEntity('solution_request', record.referenceCode),
+      };
+    }
+    return { record, created, outboxRecords };
   }
 
   async updateSolutionRequestEmailStatus(
@@ -337,39 +481,23 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
 
     const { data, error } = await db
       .from('consultation_appointments')
-      .insert({
-        reference_code: input.referenceCode,
-        idempotency_key: input.idempotencyKey || null,
-        client_name: input.fullName,
-        client_email: input.email,
-        client_phone: input.phone,
-        client_company: input.companyName,
-        brief_reference_code: input.briefReferenceCode || null,
-        executive_pathway: input.executivePathway || 'advisory',
-        consultation_type: input.consultationType,
-        consultation_purpose: input.consultationPurpose || null,
-        selected_solution: input.selectedSolution || null,
-        scheduled_date: input.scheduledDate,
-        scheduled_time_slot: input.scheduledTimeSlot,
-        utc_scheduled_at: input.utcScheduledAt || null,
-        duration_minutes: input.durationMinutes,
-        client_timezone: input.clientTimezone,
-        meeting_link: input.meetingLink || null,
-        meeting_location: input.meetingLocation || null,
-        assigned_consultant: input.assignedConsultant,
-        status: input.status,
-        calendar_sync_status: input.calendarSyncStatus,
-        calendar_event_id: input.calendarEventId || null,
-        management_token_hash: input.managementTokenHash,
-        source_channel: input.sourceChannel || 'Public Website',
-        availability_verified: input.availabilityVerified ?? true,
-        notes: input.notes || null,
-      })
+      .insert(buildAppointmentDbPayload(input))
       .select('*')
       .single();
 
     if (error) {
       if (error.code === '23505') {
+        // ERR-012: Distinguish concurrent idempotency_key collision from genuine slot conflict
+        if (input.idempotencyKey) {
+          const { data: raced } = await db
+            .from('consultation_appointments')
+            .select('*')
+            .eq('idempotency_key', input.idempotencyKey)
+            .maybeSingle();
+          if (raced) {
+            return { record: mapAppointmentRow(raced), created: false };
+          }
+        }
         throw new ConflictError(
           `The slot ${input.scheduledTimeSlot} on ${input.scheduledDate} has just been reserved. Please select another slot.`
         );
@@ -378,6 +506,63 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
     }
 
     return { record: mapAppointmentRow(data), created: true };
+  }
+
+  /**
+   * ERR-010: Atomic transactional persistence of appointment + outbox notifications via PostgreSQL RPC.
+   */
+  async createAppointmentWithOutbox(
+    input: CreateAppointmentInput,
+    outboxItems: CreateOutboxInput[]
+  ): Promise<{
+    record: AppointmentRecord;
+    created: boolean;
+    outboxRecords: EmailOutboxRecord[];
+  }> {
+    const db = this.getClient();
+    const { data: rpcData, error: rpcError } = await db.rpc('register_appointment_with_outbox', {
+      p_appointment: buildAppointmentDbPayload(input),
+      p_outbox_items: outboxItems.map(buildOutboxDbPayload),
+    });
+
+    if (!rpcError && rpcData && rpcData.record) {
+      const record = mapAppointmentRow(rpcData.record);
+      const created = Boolean(rpcData.created);
+      const outboxRecords = await this.listOutboxByEntity('appointment', record.referenceCode);
+      return { record, created, outboxRecords };
+    }
+
+    if (rpcError?.code === '23505') {
+      throw new ConflictError(
+        `The slot ${input.scheduledTimeSlot} on ${input.scheduledDate} has just been reserved. Please select another slot.`
+      );
+    }
+
+    const isMissingRpc =
+      rpcError &&
+      (rpcError.code === 'PGRST202' ||
+        rpcError.code === '42883' ||
+        /function.*register_appointment_with_outbox/i.test(rpcError.message || ''));
+
+    if (rpcError && !isMissingRpc) {
+      throw new DatabaseUnavailableError(`Transactional appointment persistence failed: ${rpcError.message}`);
+    }
+
+    const { record, created } = await this.createAppointment(input);
+    const outboxRecords: EmailOutboxRecord[] = [];
+    if (created) {
+      for (const item of outboxItems) {
+        const res = await this.createOutboxRecord(item);
+        outboxRecords.push(res.record);
+      }
+    } else {
+      return {
+        record,
+        created: false,
+        outboxRecords: await this.listOutboxByEntity('appointment', record.referenceCode),
+      };
+    }
+    return { record, created, outboxRecords };
   }
 
   async getAppointmentByReference(referenceCode: string): Promise<AppointmentRecord | null> {
@@ -454,88 +639,47 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
     };
   }
 
-  async createOutboxRecord(input: {
-    dedupeKey: string;
-    entityType: 'solution_request' | 'appointment';
-    entityReference: string;
-    recipientEmail: string;
-    replyTo?: string;
-    idempotencyKey?: string;
-    requestSource?: string;
-    notificationType: EmailOutboxRecord['notificationType'];
-    subject: string;
-    htmlBody: string;
-    textBody: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<{ record: EmailOutboxRecord; created: boolean }> {
+  /**
+   * ERR-012: Eliminates read-before-insert concurrency races via atomic INSERT + 23505 conflict recovery.
+   */
+  async createOutboxRecord(input: CreateOutboxInput): Promise<{ record: EmailOutboxRecord; created: boolean }> {
     const db = this.getClient();
-
-    const { data: existing } = await db
-      .from('notification_records')
-      .select('*')
-      .eq('dedupe_key', input.dedupeKey)
-      .maybeSingle();
-    if (existing) {
-      return { record: mapOutboxRow(existing), created: false };
-    }
-
-    const enrichedMeta: Record<string, unknown> = {
-      ...(input.metadata || {}),
-      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
-      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
-      ...(input.requestSource ? { requestSource: input.requestSource } : {}),
-    };
 
     const { data, error } = await db
       .from('notification_records')
-      .insert({
-        dedupe_key: input.dedupeKey,
-        entity_type: input.entityType,
-        entity_reference: input.entityReference,
-        recipient_email: input.recipientEmail,
-        reply_to: input.replyTo || null,
-        idempotency_key: input.idempotencyKey || null,
-        request_source: input.requestSource || null,
-        notification_type: input.notificationType,
-        subject: input.subject,
-        html_body: input.htmlBody,
-        text_body: input.textBody,
-        status: 'queued',
-        provider: 'resend',
-        delivery_attempts: 0,
-        metadata: enrichedMeta,
-      })
+      .insert(buildOutboxDbPayload(input))
       .select('*')
       .single();
 
     if (error) {
+      if (error.code === '23505') {
+        const { data: raced, error: selectErr } = await db
+          .from('notification_records')
+          .select('*')
+          .eq('dedupe_key', input.dedupeKey)
+          .maybeSingle();
+        if (!selectErr && raced) {
+          return { record: mapOutboxRow(raced), created: false };
+        }
+      }
       throw new DatabaseUnavailableError(`Failed to enqueue notification outbox: ${error.message}`);
     }
     return { record: mapOutboxRow(data), created: true };
   }
 
-  async updateOutboxStatus(
-    id: string,
-    patch: {
-      status: EmailOutboxRecord['status'];
-      providerReference?: string;
-      deliveryAttempts: number;
-      lastError?: string;
-      nextRetryAt?: string | null;
-      lastAttemptAt?: string | null;
-      providerAcceptedAt?: string | null;
-      deliveredAt?: string | null;
-      sentAt?: string | null;
-    }
-  ): Promise<void> {
+  async updateOutboxStatus(id: string, patch: UpdateOutboxPatch): Promise<void> {
     const db = this.getClient();
     const updatePayload: Record<string, unknown> = {
       status: patch.status,
       delivery_attempts: patch.deliveryAttempts,
-      last_error: patch.lastError || null,
-      next_retry_at: patch.nextRetryAt || null,
       updated_at: new Date().toISOString(),
     };
+    if (patch.lastError !== undefined) {
+      updatePayload.last_error = patch.lastError || null;
+    }
+    if (patch.nextRetryAt !== undefined) {
+      updatePayload.next_retry_at = patch.nextRetryAt || null;
+    }
     if (patch.providerReference !== undefined) {
       updatePayload.provider_reference = patch.providerReference || null;
     }
@@ -550,6 +694,33 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
     }
     if (patch.deliveredAt !== undefined) {
       updatePayload.delivered_at = patch.deliveredAt || null;
+    }
+    if (patch.claimedBy !== undefined) {
+      updatePayload.claimed_by = patch.claimedBy;
+    }
+    if (patch.claimedAt !== undefined) {
+      updatePayload.claimed_at = patch.claimedAt;
+    }
+    if (patch.leaseExpiresAt !== undefined) {
+      updatePayload.lease_expires_at = patch.leaseExpiresAt;
+    }
+    if (patch.deadLetteredAt !== undefined) {
+      updatePayload.dead_lettered_at = patch.deadLetteredAt;
+    }
+    if (patch.bouncedAt !== undefined) {
+      updatePayload.bounced_at = patch.bouncedAt;
+    }
+    if (patch.complainedAt !== undefined) {
+      updatePayload.complained_at = patch.complainedAt;
+    }
+    if (patch.deliveryDelayedAt !== undefined) {
+      updatePayload.delivery_delayed_at = patch.deliveryDelayedAt;
+    }
+    if (patch.lastWebhookEventId !== undefined) {
+      updatePayload.last_webhook_event_id = patch.lastWebhookEventId;
+    }
+    if (patch.lastWebhookEventAt !== undefined) {
+      updatePayload.last_webhook_event_at = patch.lastWebhookEventAt;
     }
 
     const { error } = await db
@@ -568,7 +739,7 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
     const { data, error } = await db
       .from('notification_records')
       .select('*')
-      .in('status', ['queued', 'failed'])
+      .in('status', ['queued', 'failed', 'retry_scheduled'])
       .lt('delivery_attempts', 5)
       .or(`next_retry_at.is.null,next_retry_at.lte.${nowIso}`)
       .order('created_at', { ascending: true })
@@ -578,6 +749,65 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
       throw new DatabaseUnavailableError(`Failed to list retryable outbox records: ${error.message}`);
     }
     return (data || []).map(mapOutboxRow);
+  }
+
+  /**
+   * ERR-002: Atomic multi-worker notification queue claiming via FOR UPDATE SKIP LOCKED RPC,
+   * with lease expiration & stale claim recovery.
+   */
+  async claimRetryableOutbox(
+    workerId: string,
+    limit = 20,
+    leaseSeconds = 120
+  ): Promise<EmailOutboxRecord[]> {
+    const db = this.getClient();
+    const { data, error } = await db.rpc('claim_retryable_notifications', {
+      p_worker_id: workerId,
+      p_limit: limit,
+      p_lease_seconds: leaseSeconds,
+    });
+
+    if (!error && Array.isArray(data)) {
+      return data.map(mapOutboxRow);
+    }
+
+    const isMissingRpc =
+      error &&
+      (error.code === 'PGRST202' ||
+        error.code === '42883' ||
+        /function.*claim_retryable_notifications/i.test(error.message || ''));
+
+    if (error && !isMissingRpc) {
+      throw new DatabaseUnavailableError(`Failed to atomically claim notification outbox: ${error.message}`);
+    }
+
+    // Optimistic compare-and-swap fallback if migration 005 RPC is not yet deployed
+    const candidates = await this.listRetryableOutbox(limit);
+    const claimed: EmailOutboxRecord[] = [];
+    const nowIso = new Date().toISOString();
+    const leaseExpiresAt = new Date(Date.now() + leaseSeconds * 1000).toISOString();
+
+    for (const candidate of candidates) {
+      const { data: locked } = await db
+        .from('notification_records')
+        .update({
+          status: 'processing',
+          claimed_by: workerId,
+          claimed_at: nowIso,
+          lease_expires_at: leaseExpiresAt,
+          updated_at: nowIso,
+        })
+        .eq('id', candidate.id)
+        .in('status', ['queued', 'failed', 'retry_scheduled'])
+        .select('*')
+        .maybeSingle();
+
+      if (locked) {
+        claimed.push(mapOutboxRow(locked));
+      }
+    }
+
+    return claimed;
   }
 
   async findOutboxByProviderReference(providerReference: string): Promise<EmailOutboxRecord | null> {
@@ -592,6 +822,141 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
       throw new DatabaseUnavailableError(`Failed to query outbox by provider reference: ${error.message}`);
     }
     return data ? mapOutboxRow(data) : null;
+  }
+
+  async getOutboxById(id: string): Promise<EmailOutboxRecord | null> {
+    const db = this.getClient();
+    const { data, error } = await db
+      .from('notification_records')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseUnavailableError(`Failed to query outbox by ID: ${error.message}`);
+    }
+    return data ? mapOutboxRow(data) : null;
+  }
+
+  async listOutboxByEntity(
+    entityType: 'solution_request' | 'appointment',
+    entityReference: string
+  ): Promise<EmailOutboxRecord[]> {
+    const db = this.getClient();
+    const { data, error } = await db
+      .from('notification_records')
+      .select('*')
+      .eq('entity_type', entityType)
+      .eq('entity_reference', entityReference)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new DatabaseUnavailableError(`Failed to list entity outbox records: ${error.message}`);
+    }
+    return (data || []).map(mapOutboxRow);
+  }
+
+  async listOutboxRecords(options: {
+    limit: number;
+    offset: number;
+    status?: string;
+    entityReference?: string;
+  }): Promise<{ records: EmailOutboxRecord[]; total: number }> {
+    const db = this.getClient();
+    let query = db
+      .from('notification_records')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(options.offset, options.offset + options.limit - 1);
+
+    if (options.status) {
+      query = query.eq('status', options.status);
+    }
+    if (options.entityReference) {
+      query = query.eq('entity_reference', options.entityReference);
+    }
+
+    const { data, count, error } = await query;
+    if (error) {
+      throw new DatabaseUnavailableError(`Failed to list notification outbox records: ${error.message}`);
+    }
+    return {
+      records: (data || []).map(mapOutboxRow),
+      total: Number(count ?? (data || []).length),
+    };
+  }
+
+  async recordWebhookEventOnce(input: {
+    provider: string;
+    providerEventId: string;
+    eventType: string;
+    providerMessageId?: string;
+    eventTimestampUtc: string;
+    payload: Record<string, unknown>;
+  }): Promise<{ record: NotificationWebhookEventRecord; inserted: boolean }> {
+    const db = this.getClient();
+    const { data, error } = await db
+      .from('notification_webhook_events')
+      .insert({
+        provider: input.provider,
+        provider_event_id: input.providerEventId,
+        event_type: input.eventType,
+        provider_message_id: input.providerMessageId || null,
+        event_timestamp_utc: input.eventTimestampUtc,
+        reconciled: false,
+        payload: input.payload,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        const { data: existing } = await db
+          .from('notification_webhook_events')
+          .select('*')
+          .eq('provider', input.provider)
+          .eq('provider_event_id', input.providerEventId)
+          .maybeSingle();
+        if (existing) {
+          return { record: mapWebhookEventRow(existing), inserted: false };
+        }
+      }
+      throw new DatabaseUnavailableError(`Failed to persist notification webhook event: ${error.message}`);
+    }
+    return { record: mapWebhookEventRow(data), inserted: true };
+  }
+
+  async listPendingWebhookEventsByMessageId(
+    providerMessageId: string
+  ): Promise<NotificationWebhookEventRecord[]> {
+    const db = this.getClient();
+    const { data, error } = await db
+      .from('notification_webhook_events')
+      .select('*')
+      .eq('provider_message_id', providerMessageId)
+      .eq('reconciled', false)
+      .order('event_timestamp_utc', { ascending: true });
+
+    if (error) {
+      throw new DatabaseUnavailableError(`Failed to query pending webhook events: ${error.message}`);
+    }
+    return (data || []).map(mapWebhookEventRow);
+  }
+
+  async markWebhookEventReconciled(eventId: string, outboxId: string): Promise<void> {
+    const db = this.getClient();
+    const { error } = await db
+      .from('notification_webhook_events')
+      .update({
+        reconciled: true,
+        outbox_id: outboxId,
+        reconciled_at: new Date().toISOString(),
+      })
+      .eq('id', eventId);
+
+    if (error) {
+      throw new DatabaseUnavailableError(`Failed to mark webhook event reconciled: ${error.message}`);
+    }
   }
 
   async writeAuditLog(input: Omit<AuditLogRecord, 'id' | 'createdAt'>): Promise<void> {

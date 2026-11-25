@@ -17,11 +17,14 @@ import {
   USD_TO_PHP_REFERENCE_RATE,
   CustomPackageInquiryRecord,
   DiscountCodeRecord,
+  FileScanStatus,
   InvoiceRecord,
   NotificationRecord,
   OrderRecord,
   PaymentProviderId,
   PaymentRecord,
+  PaymentRefundRecord,
+  PaymentStatus,
   PaymentWebhookEventRecord,
   PortalCurrency,
   PortalProfileRecord,
@@ -62,6 +65,7 @@ interface PortalStoreState {
   carts: ShoppingCartRecord[];
   orders: OrderRecord[];
   payments: PaymentRecord[];
+  refunds: PaymentRefundRecord[];
   webhookEvents: PaymentWebhookEventRecord[];
   invoices: InvoiceRecord[];
   wallets: CreditWalletRecord[];
@@ -114,6 +118,7 @@ function createEmptyState(): PortalStoreState {
     carts: [],
     orders: [],
     payments: [],
+    refunds: [],
     webhookEvents: [],
     invoices: [],
     wallets: [],
@@ -952,6 +957,136 @@ export class LocalPortalRepository implements PortalRepository {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  async getPaymentByIdInternal(paymentId: string): Promise<PaymentRecord | null> {
+    return this.state.payments.find((p) => p.id === paymentId) || null;
+  }
+
+  async updatePaymentInitiation(
+    paymentId: string,
+    patch: {
+      providerTransactionId?: string;
+      checkoutUrl?: string;
+      environment: 'disabled' | 'sandbox' | 'live';
+      status?: PaymentStatus;
+      failureReason?: string;
+    }
+  ): Promise<PaymentRecord | null> {
+    const payment = this.state.payments.find((p) => p.id === paymentId);
+    if (!payment) return null;
+    if (patch.providerTransactionId) payment.providerTransactionId = patch.providerTransactionId;
+    if (patch.checkoutUrl !== undefined) payment.checkoutUrl = patch.checkoutUrl;
+    payment.environment = patch.environment;
+    if (patch.status) payment.status = patch.status;
+    if (patch.failureReason !== undefined) payment.failureReason = patch.failureReason;
+    payment.updatedAt = this.now();
+    this.persist();
+    return payment;
+  }
+
+  async recordAuthorizedRefund(input: {
+    paymentId: string;
+    orderId: string;
+    provider: PaymentProviderId;
+    providerTransactionId?: string;
+    providerRefundId?: string;
+    amountMinor: number;
+    currency: PortalCurrency;
+    reason: string;
+    status: 'pending' | 'succeeded' | 'failed';
+    idempotencyKey: string;
+    requestedBy: string;
+    approvedBy?: string;
+  }): Promise<{
+    refund: PaymentRefundRecord;
+    payment?: PaymentRecord;
+    order?: OrderRecord;
+    deduplicated: boolean;
+  }> {
+    if (!Number.isInteger(input.amountMinor) || input.amountMinor <= 0) {
+      throw new Error('Refund amountMinor must be a positive integer in minor currency units.');
+    }
+
+    const existing = this.state.refunds.find((r) => r.idempotencyKey === input.idempotencyKey);
+    if (existing) {
+      const existingPayment = this.state.payments.find((p) => p.id === existing.paymentId);
+      const existingOrder = this.state.orders.find((o) => o.id === existing.orderId);
+      return {
+        refund: existing,
+        payment: existingPayment,
+        order: existingOrder,
+        deduplicated: true,
+      };
+    }
+
+    const payment = this.state.payments.find((p) => p.id === input.paymentId);
+    if (!payment) {
+      throw new Error('Payment record not found.');
+    }
+    const order = this.state.orders.find((o) => o.id === input.orderId);
+    const alreadyRefunded = payment.refundedMinor || 0;
+    const remaining = payment.amountMinor - alreadyRefunded;
+    if (input.status !== 'failed' && input.amountMinor > remaining) {
+      throw new Error(
+        `Requested refund (${input.amountMinor}) exceeds remaining refundable minor units (${remaining}).`
+      );
+    }
+
+    const ts = this.now();
+    const refund: PaymentRefundRecord = {
+      id: crypto.randomUUID(),
+      paymentId: input.paymentId,
+      orderId: input.orderId,
+      provider: input.provider,
+      providerTransactionId: input.providerTransactionId,
+      providerRefundId: input.providerRefundId,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      reason: input.reason.trim(),
+      status: input.status,
+      idempotencyKey: input.idempotencyKey,
+      requestedBy: input.requestedBy,
+      approvedBy: input.approvedBy,
+      createdAt: ts,
+      updatedAt: ts,
+    };
+    this.state.refunds.push(refund);
+
+    if (input.status === 'succeeded') {
+      const nextRefundedMinor = Math.min(payment.amountMinor, alreadyRefunded + input.amountMinor);
+      payment.refundedMinor = nextRefundedMinor;
+      payment.status = nextRefundedMinor >= payment.amountMinor ? 'refunded' : 'partially_refunded';
+      payment.updatedAt = ts;
+
+      if (order) {
+        order.paymentStatus = payment.status;
+        if (payment.status === 'refunded') {
+          order.fulfillmentStatus = 'cancelled';
+        }
+        order.timeline.push({
+          status: order.fulfillmentStatus,
+          label: payment.status === 'refunded' ? 'Order Fully Refunded' : 'Partial Refund Recorded',
+          note: `Authorized refund of ${input.amountMinor} minor ${input.currency} units (${input.providerRefundId || refund.id}) by ${input.requestedBy}.`,
+          timestamp: ts,
+        });
+        order.updatedAt = ts;
+      }
+
+      const invoice = this.state.invoices.find((i) => i.orderId === input.orderId);
+      if (invoice) {
+        invoice.paymentStatus = payment.status;
+      }
+    }
+
+    this.persist();
+    return { refund, payment, order, deduplicated: false };
+  }
+
+  async listRefundsByPaymentId(paymentId: string): Promise<PaymentRefundRecord[]> {
+    return this.state.refunds
+      .filter((r) => r.paymentId === paymentId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
   async listInvoices(userId: string): Promise<InvoiceRecord[]> {
     return this.state.invoices
       .filter((i) => i.userId === userId)
@@ -1609,6 +1744,25 @@ export class LocalPortalRepository implements PortalRepository {
     const buf = this.memoryFileBlobs.get(safeStoredName);
     if (!buf) return null;
     return { record, buffer: buf };
+  }
+
+  async updateAttachmentScanStatus(
+    fileId: string,
+    scanStatus: FileScanStatus,
+    quarantineReason?: string
+  ): Promise<ProjectAttachmentRecord | null> {
+    const record = this.state.attachments.find((a) => a.id === fileId);
+    if (!record) return null;
+    record.scanStatus = scanStatus;
+    record.quarantineReason =
+      scanStatus === 'clean'
+        ? undefined
+        : quarantineReason ||
+          (scanStatus === 'flagged'
+            ? 'Flagged by security screening.'
+            : 'Pending security screening.');
+    this.persist();
+    return record;
   }
 
   // ---- Support ----

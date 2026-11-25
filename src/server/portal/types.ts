@@ -308,6 +308,24 @@ export interface PaymentRecord {
   updatedAt: string;
 }
 
+export interface PaymentRefundRecord {
+  id: string;
+  paymentId: string;
+  orderId: string;
+  provider: PaymentProviderId;
+  providerTransactionId?: string;
+  providerRefundId?: string;
+  amountMinor: number;
+  currency: PortalCurrency;
+  reason: string;
+  status: 'pending' | 'succeeded' | 'failed';
+  idempotencyKey: string;
+  requestedBy: string;
+  approvedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PaymentWebhookEventRecord {
   id: string;
   provider: PaymentProviderId;
@@ -685,6 +703,37 @@ export interface PortalRepository {
   getOrderByIdInternal(orderId: string): Promise<OrderRecord | null>;
   requestOrderCancellation(userId: string, orderId: string, reason: string): Promise<OrderRecord | null>;
   listPayments(userId: string): Promise<PaymentRecord[]>;
+  getPaymentByIdInternal?(paymentId: string): Promise<PaymentRecord | null>;
+  updatePaymentInitiation?(
+    paymentId: string,
+    patch: {
+      providerTransactionId?: string;
+      checkoutUrl?: string;
+      environment: 'disabled' | 'sandbox' | 'live';
+      status?: PaymentStatus;
+      failureReason?: string;
+    }
+  ): Promise<PaymentRecord | null>;
+  recordAuthorizedRefund?(input: {
+    paymentId: string;
+    orderId: string;
+    provider: PaymentProviderId;
+    providerTransactionId?: string;
+    providerRefundId?: string;
+    amountMinor: number;
+    currency: PortalCurrency;
+    reason: string;
+    status: 'pending' | 'succeeded' | 'failed';
+    idempotencyKey: string;
+    requestedBy: string;
+    approvedBy?: string;
+  }): Promise<{
+    refund: PaymentRefundRecord;
+    payment?: PaymentRecord;
+    order?: OrderRecord;
+    deduplicated: boolean;
+  }>;
+  listRefundsByPaymentId?(paymentId: string): Promise<PaymentRefundRecord[]>;
   listInvoices(userId: string): Promise<InvoiceRecord[]>;
   getInvoiceById(userId: string, invoiceId: string): Promise<InvoiceRecord | null>;
   recordWebhookAndConfirmPayment(input: {
@@ -736,6 +785,11 @@ export interface PortalRepository {
   saveAttachment(record: Omit<ProjectAttachmentRecord, 'id' | 'uploadedAt'>, buffer: Buffer): Promise<ProjectAttachmentRecord>;
   listAttachments(userId: string, projectId?: string): Promise<ProjectAttachmentRecord[]>;
   getAttachmentById(userId: string, fileId: string): Promise<{ record: ProjectAttachmentRecord; buffer: Buffer } | null>;
+  updateAttachmentScanStatus?(
+    fileId: string,
+    scanStatus: FileScanStatus,
+    quarantineReason?: string
+  ): Promise<ProjectAttachmentRecord | null>;
 
   // Support
   createSupportTicket(input: {

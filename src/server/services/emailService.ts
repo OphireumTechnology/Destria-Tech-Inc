@@ -3,7 +3,7 @@ import { COMPANY_CONFIG, COMMERCIAL_ENGAGEMENT_STATEMENT, corporateIdentity } fr
 import { BRAND_ASSETS } from '../../data/brandAssets';
 import { getCatalogServiceById } from '../../data/serviceCatalog';
 import { ROUTES, buildCanonicalPublicUrl } from '../../config/routes';
-import { AppointmentRecord, DatabaseRepository, EmailOutboxRecord, SolutionRequestRecord } from '../db/types';
+import { AppointmentRecord, CreateOutboxInput, DatabaseRepository, EmailOutboxRecord, SolutionRequestRecord } from '../db/types';
 import { logStructured } from '../logger';
 import {
   DEFAULT_NOTIFICATION_FROM,
@@ -25,9 +25,11 @@ export interface EmailMessage {
 }
 
 export interface EmailSendResult {
-  status: 'sent' | 'failed' | 'unconfigured';
+  status: 'provider_accepted' | 'sent' | 'failed' | 'unconfigured';
   providerReference?: string;
   providerAcceptedAt?: string;
+  retryAfterSeconds?: number;
+  httpStatus?: number;
   error?: string;
 }
 
@@ -36,11 +38,31 @@ export interface EmailTransport {
   send(message: EmailMessage): Promise<EmailSendResult>;
 }
 
+export type DeliveryStatusSummary =
+  | 'queued'
+  | 'provider_accepted'
+  | 'delivered'
+  | 'failed'
+  | 'dead_letter'
+  | 'bounced'
+  | 'complained'
+  | 'unconfigured';
+
 export interface DualRecipientDeliveryOutcome {
-  customerStatus: 'sent' | 'failed' | 'unconfigured';
-  adminStatus: 'sent' | 'failed' | 'unconfigured';
-  overallStatus: 'sent' | 'failed' | 'unconfigured';
+  customerStatus: DeliveryStatusSummary;
+  adminStatus: DeliveryStatusSummary;
+  overallStatus: DeliveryStatusSummary;
+  deliveryState:
+    | 'confirmed_delivered'
+    | 'provider_accepted_awaiting_webhook'
+    | 'partial_failure'
+    | 'retry_scheduled'
+    | 'failed'
+    | 'unconfigured';
   notifiedRecipientsCount: number;
+  providerAcceptedRecipientsCount: number;
+  confirmedDeliveredRecipientsCount: number;
+  /** Strictly equals webhook-confirmed delivered count (NEVER inflated by provider acceptance). */
   deliveredRecipientsCount: number;
   failedRecipientsCount: number;
   partialFailure: boolean;
@@ -58,10 +80,100 @@ export interface ResendWebhookEventPayload {
   };
 }
 
+export const MAX_OUTBOX_DELIVERY_ATTEMPTS = 5;
+
+/**
+ * ERR-003: Deterministic recipient-identity idempotency key.
+ * Derived strictly from entity identity, notification purpose, event revision, and normalized lowercase
+ * recipient email hash — NEVER from recipient array position.
+ */
+export function buildNotificationIdempotencyKey(params: {
+  entityType: 'solution_request' | 'appointment';
+  entityReference: string;
+  notificationType: EmailOutboxRecord['notificationType'];
+  recipientEmail: string;
+  eventRevision?: number | string;
+}): string {
+  const prefix = params.entityType === 'solution_request' ? 'sol' : 'apt';
+  const normalizedRecipient = params.recipientEmail.trim().toLowerCase();
+  const recipientHash = crypto
+    .createHash('sha256')
+    .update(normalizedRecipient, 'utf8')
+    .digest('hex')
+    .slice(0, 20);
+  const revisionTag = String(params.eventRevision ?? 1)
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, 24);
+  const safeRef = params.entityReference.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
+  return `${prefix}-${safeRef}-${params.notificationType}-r${revisionTag}-${recipientHash}`;
+}
+
+/**
+ * ERR-006: Validate and normalize external webhook timestamps into bounded UTC ISO-8601 strings
+ * before persisting to PostgreSQL timestamptz columns.
+ */
+export function normalizeWebhookTimestamp(
+  rawTimestamp?: unknown,
+  svixTimestampHeader?: string
+): { iso: string; validSource: boolean; source: 'payload' | 'svix_header' | 'server_fallback' } {
+  const nowMs = Date.now();
+  const minAllowedMs = Date.UTC(2020, 0, 1);
+  const maxAllowedMs = nowMs + 15 * 60 * 1000; // allow at most 15 min clock skew into future
+
+  const tryParseMs = (candidate: unknown): number | null => {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      const ms = candidate < 1e12 ? candidate * 1000 : candidate;
+      return ms >= minAllowedMs && ms <= maxAllowedMs ? ms : null;
+    }
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (!trimmed || trimmed.length > 64) return null;
+      if (/^\d{9,13}$/.test(trimmed)) {
+        const num = Number(trimmed);
+        const ms = trimmed.length <= 10 ? num * 1000 : num;
+        return ms >= minAllowedMs && ms <= maxAllowedMs ? ms : null;
+      }
+      const parsed = Date.parse(trimmed);
+      if (Number.isFinite(parsed) && parsed >= minAllowedMs && parsed <= maxAllowedMs) {
+        return parsed;
+      }
+    }
+    return null;
+  };
+
+  const fromPayload = tryParseMs(rawTimestamp);
+  if (fromPayload !== null) {
+    return { iso: new Date(fromPayload).toISOString(), validSource: true, source: 'payload' };
+  }
+
+  const fromSvix = tryParseMs(svixTimestampHeader);
+  if (fromSvix !== null) {
+    return { iso: new Date(fromSvix).toISOString(), validSource: true, source: 'svix_header' };
+  }
+
+  return { iso: new Date(nowMs).toISOString(), validSource: false, source: 'server_fallback' };
+}
+
+function parseRetryAfterSeconds(headerVal: string | null): number | undefined {
+  if (!headerVal) return undefined;
+  const trimmed = headerVal.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const secs = Number.parseInt(trimmed, 10);
+    return Math.min(900, Math.max(5, secs));
+  }
+  const dateMs = Date.parse(trimmed);
+  if (Number.isFinite(dateMs)) {
+    const diffSec = Math.ceil((dateMs - Date.now()) / 1000);
+    if (diffSec > 0) return Math.min(900, Math.max(5, diffSec));
+  }
+  return undefined;
+}
+
 /**
  * Production Resend transactional email transport.
  * - Honestly reports 'unconfigured' when RESEND_API_KEY is absent instead of faking delivery.
- * - Enforces request timeouts via AbortController so hung provider calls fail safely & queue for retry.
+ * - ERR-001: NEVER fabricates provider message IDs when Resend omits or returns an empty `id`.
+ * - Enforces request timeouts via AbortController and parses HTTP 429 Retry-After headers.
  * - Sanitizes headers to prevent CR/LF header injection and passes Idempotency-Key + Reply-To.
  */
 export class ResendEmailTransport implements EmailTransport {
@@ -133,19 +245,35 @@ export class ResendEmailTransport implements EmailTransport {
         }),
       });
 
-      const body = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
+      const retryAfterSeconds =
+        response.status === 429 ? parseRetryAfterSeconds(response.headers.get('retry-after')) : undefined;
+
+      const body = (await response.json().catch(() => ({}))) as { id?: unknown; message?: string };
       if (!response.ok) {
         return {
           status: 'failed',
+          httpStatus: response.status,
+          retryAfterSeconds,
           error: body.message || `Resend HTTP ${response.status}`,
+        };
+      }
+
+      // ERR-001: Strictly require a real non-empty provider message ID from Resend. NEVER fabricate one!
+      const realProviderId = typeof body.id === 'string' ? body.id.trim() : '';
+      if (!realProviderId || realProviderId.length > 160) {
+        return {
+          status: 'failed',
+          httpStatus: response.status,
+          error: 'Resend API returned HTTP 2xx without a valid provider message ID; marking retryable failure instead of fabricating an ID.',
         };
       }
 
       const acceptedAt = new Date().toISOString();
       return {
-        status: 'sent',
-        providerReference: body.id || `resend_${Date.now()}`,
+        status: 'provider_accepted',
+        providerReference: realProviderId,
         providerAcceptedAt: acceptedAt,
+        httpStatus: response.status,
       };
     } catch (err: any) {
       const isTimeout = err?.name === 'AbortError' || /abort|timeout/i.test(String(err?.message || ''));
@@ -376,10 +504,166 @@ export class TransactionalEmailService {
     return resolveDualNotificationConfig(this.dualConfigOverrides);
   }
 
+  private async reconcilePendingWebhooksForOutbox(
+    outboxId: string,
+    providerReference: string,
+    correlationId?: string
+  ): Promise<void> {
+    if (!this.db.listPendingWebhookEventsByMessageId || !this.db.getOutboxById) return;
+    const pendingEvents = await this.db.listPendingWebhookEventsByMessageId(providerReference);
+    if (pendingEvents.length === 0) return;
+
+    for (const evt of pendingEvents) {
+      const current = await this.db.getOutboxById(outboxId);
+      if (!current) break;
+      const bounceMessage =
+        typeof (evt.payload as any)?.data?.bounce?.message === 'string'
+          ? (evt.payload as any).data.bounce.message
+          : undefined;
+      await this.applyWebhookTransitionToOutbox(
+        current,
+        evt.eventType,
+        evt.eventTimestampUtc,
+        evt.providerEventId,
+        bounceMessage,
+        correlationId
+      );
+      if (this.db.markWebhookEventReconciled) {
+        await this.db.markWebhookEventReconciled(evt.id, outboxId);
+      }
+    }
+  }
+
+  private async applyWebhookTransitionToOutbox(
+    existing: EmailOutboxRecord,
+    eventType: string,
+    eventTs: string,
+    providerEventId: string,
+    bounceReason?: string,
+    correlationId?: string
+  ): Promise<{ status: string; updated: boolean }> {
+    const normalizedType = eventType.trim().toLowerCase();
+
+    if (normalizedType === 'email.delivered') {
+      // ERR-005: Preserve original deliveredAt on duplicate or late email.delivered events.
+      // Never overwrite permanent bounce/complaint terminal state.
+      if (existing.status === 'bounced' || existing.status === 'complained') {
+        return { status: existing.status, updated: false };
+      }
+      const preservedDeliveredAt = existing.deliveredAt || eventTs;
+      await this.db.updateOutboxStatus(existing.id, {
+        status: 'delivered',
+        providerReference: existing.providerReference,
+        deliveryAttempts: existing.deliveryAttempts,
+        deliveredAt: preservedDeliveredAt,
+        sentAt: existing.sentAt || existing.providerAcceptedAt || preservedDeliveredAt,
+        nextRetryAt: null,
+        claimedBy: null,
+        claimedAt: null,
+        leaseExpiresAt: null,
+        lastWebhookEventId: providerEventId,
+        lastWebhookEventAt: eventTs,
+      });
+      logStructured('info', 'transactional_email_delivery_confirmed', {
+        correlationId,
+        outboxId: existing.id,
+        entityReference: existing.entityReference,
+        providerReference: existing.providerReference,
+        deliveredAt: preservedDeliveredAt,
+      });
+      return { status: 'delivered', updated: true };
+    }
+
+    if (normalizedType === 'email.delivery_delayed') {
+      // ERR-005: Out-of-order monotonic protection — never downgrade delivered/bounced/complained
+      if (
+        existing.status === 'delivered' ||
+        existing.status === 'bounced' ||
+        existing.status === 'complained'
+      ) {
+        return { status: existing.status, updated: false };
+      }
+      const reason = bounceReason || 'Resend webhook reported email.delivery_delayed';
+      await this.db.updateOutboxStatus(existing.id, {
+        status: 'delivery_delayed',
+        providerReference: existing.providerReference,
+        deliveryAttempts: existing.deliveryAttempts,
+        lastError: reason,
+        deliveryDelayedAt: existing.deliveryDelayedAt || eventTs,
+        nextRetryAt: null,
+        lastWebhookEventId: providerEventId,
+        lastWebhookEventAt: eventTs,
+      });
+      logStructured('warn', 'transactional_email_delivery_delayed', {
+        correlationId,
+        outboxId: existing.id,
+        entityReference: existing.entityReference,
+        reason,
+      });
+      return { status: 'delivery_delayed', updated: true };
+    }
+
+    if (normalizedType === 'email.bounced') {
+      const reason = bounceReason || 'Resend webhook reported email.bounced';
+      await this.db.updateOutboxStatus(existing.id, {
+        status: 'bounced',
+        providerReference: existing.providerReference,
+        deliveryAttempts: existing.deliveryAttempts,
+        lastError: reason,
+        bouncedAt: existing.bouncedAt || eventTs,
+        nextRetryAt: null,
+        claimedBy: null,
+        claimedAt: null,
+        leaseExpiresAt: null,
+        lastWebhookEventId: providerEventId,
+        lastWebhookEventAt: eventTs,
+      });
+      logStructured('warn', 'transactional_email_bounced', {
+        correlationId,
+        outboxId: existing.id,
+        entityReference: existing.entityReference,
+        reason,
+      });
+      return { status: 'bounced', updated: true };
+    }
+
+    if (normalizedType === 'email.complained') {
+      const reason = bounceReason || 'Resend webhook reported email.complained';
+      await this.db.updateOutboxStatus(existing.id, {
+        status: 'complained',
+        providerReference: existing.providerReference,
+        deliveryAttempts: existing.deliveryAttempts,
+        lastError: reason,
+        complainedAt: existing.complainedAt || eventTs,
+        nextRetryAt: null,
+        claimedBy: null,
+        claimedAt: null,
+        leaseExpiresAt: null,
+        lastWebhookEventId: providerEventId,
+        lastWebhookEventAt: eventTs,
+      });
+      logStructured('warn', 'transactional_email_complained', {
+        correlationId,
+        outboxId: existing.id,
+        entityReference: existing.entityReference,
+        reason,
+      });
+      return { status: 'complained', updated: true };
+    }
+
+    return { status: existing.status, updated: false };
+  }
+
   private async dispatchOutboxRecord(
     record: EmailOutboxRecord,
     correlationId?: string
-  ): Promise<'sent' | 'failed' | 'unconfigured'> {
+  ): Promise<DeliveryStatusSummary> {
+    // ERR-002: Never re-dispatch terminal or non-retryable bounce/complaint/delivered states
+    if (record.status === 'delivered') return 'delivered';
+    if (record.status === 'bounced') return 'bounced';
+    if (record.status === 'complained') return 'complained';
+    if (record.status === 'provider_accepted' || record.status === 'sent') return 'provider_accepted';
+
     const attemptNumber = (record.deliveryAttempts || 0) + 1;
     const attemptTimestamp = new Date().toISOString();
     const replyTo =
@@ -389,7 +673,13 @@ export class TransactionalEmailService {
       record.idempotencyKey ||
       (typeof record.metadata?.idempotencyKey === 'string'
         ? record.metadata.idempotencyKey
-        : record.dedupeKey);
+        : buildNotificationIdempotencyKey({
+            entityType: record.entityType,
+            entityReference: record.entityReference,
+            notificationType: record.notificationType,
+            recipientEmail: record.recipientEmail,
+            eventRevision: record.eventRevision ?? 1,
+          }));
 
     let result: EmailSendResult;
     try {
@@ -408,25 +698,42 @@ export class TransactionalEmailService {
       };
     }
 
-    if (result.status === 'sent') {
+    const acceptedByProvider = result.status === 'provider_accepted' || result.status === 'sent';
+    const validProviderRef = typeof result.providerReference === 'string' ? result.providerReference.trim() : '';
+
+    if (acceptedByProvider && validProviderRef) {
       const acceptedAt = result.providerAcceptedAt || new Date().toISOString();
       await this.db.updateOutboxStatus(record.id, {
-        status: 'sent',
-        providerReference: result.providerReference,
+        status: 'provider_accepted',
+        providerReference: validProviderRef,
         deliveryAttempts: attemptNumber,
+        lastError: null,
         lastAttemptAt: attemptTimestamp,
         providerAcceptedAt: acceptedAt,
         sentAt: acceptedAt,
         nextRetryAt: null,
+        claimedBy: null,
+        claimedAt: null,
+        leaseExpiresAt: null,
       });
-      logStructured('info', 'transactional_email_sent', {
+      logStructured('info', 'transactional_email_provider_accepted', {
         correlationId,
         entityType: record.entityType,
         entityReference: record.entityReference,
         notificationType: record.notificationType,
-        providerReference: result.providerReference,
+        providerReference: validProviderRef,
       });
-      return 'sent';
+
+      // ERR-005: Reconcile any webhook that arrived before provider_reference was persisted
+      await this.reconcilePendingWebhooksForOutbox(record.id, validProviderRef, correlationId).catch(() => {});
+      return 'provider_accepted';
+    }
+
+    if (acceptedByProvider && !validProviderRef) {
+      result = {
+        status: 'failed',
+        error: 'Email transport reported acceptance without a valid provider message ID.',
+      };
     }
 
     if (result.status === 'unconfigured') {
@@ -436,6 +743,9 @@ export class TransactionalEmailService {
         lastAttemptAt: attemptTimestamp,
         lastError: result.error,
         nextRetryAt: null,
+        claimedBy: null,
+        claimedAt: null,
+        leaseExpiresAt: null,
       });
       logStructured('warn', 'transactional_email_unconfigured', {
         correlationId,
@@ -446,25 +756,36 @@ export class TransactionalEmailService {
       return 'unconfigured';
     }
 
-    // Exponential backoff retry schedule: 2m, 8m, 32m, 2h
-    const backoffMinutes = Math.min(120, Math.pow(2, attemptNumber) * 2);
-    const nextRetry = new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString();
+    // ERR-002: Bounded retries with exponential backoff + jitter (or Retry-After on 429) -> dead_letter at max attempts
+    const exhausted = attemptNumber >= MAX_OUTBOX_DELIVERY_ATTEMPTS;
+    const baseDelaySeconds =
+      result.retryAfterSeconds ?? Math.min(7200, Math.pow(2, attemptNumber) * 120);
+    const jitterSeconds = Math.floor(Math.random() * 15);
+    const nextRetry = exhausted
+      ? null
+      : new Date(Date.now() + (baseDelaySeconds + jitterSeconds) * 1000).toISOString();
+
     await this.db.updateOutboxStatus(record.id, {
-      status: 'failed',
+      status: exhausted ? 'dead_letter' : 'failed',
       deliveryAttempts: attemptNumber,
       lastAttemptAt: attemptTimestamp,
-      lastError: result.error,
-      nextRetryAt: attemptNumber < 5 ? nextRetry : null,
+      lastError: result.error || 'Email delivery failed.',
+      nextRetryAt: nextRetry,
+      deadLetteredAt: exhausted ? attemptTimestamp : null,
+      claimedBy: null,
+      claimedAt: null,
+      leaseExpiresAt: null,
     });
-    logStructured('error', 'transactional_email_failed', {
+    logStructured('error', exhausted ? 'transactional_email_dead_lettered' : 'transactional_email_failed', {
       correlationId,
       entityType: record.entityType,
       entityReference: record.entityReference,
       notificationType: record.notificationType,
       attemptNumber,
+      nextRetryAt: nextRetry,
       error: result.error,
     });
-    return 'failed';
+    return exhausted ? 'dead_letter' : 'failed';
   }
 
   private buildServiceInquiryTemplates(record: SolutionRequestRecord) {
@@ -896,117 +1217,387 @@ export class TransactionalEmailService {
     };
   }
 
-  public async enqueueAndSendSolutionRequestEmails(
-    record: SolutionRequestRecord,
-    correlationId?: string
-  ): Promise<DualRecipientDeliveryOutcome> {
-    const dualConfig = this.getDualNotificationConfig();
-    const templates = this.buildServiceInquiryTemplates(record);
-    const safeClientReplyTo = isValidEmailAddress(record.email) ? record.email.trim().toLowerCase() : undefined;
-
-    // 1. Customer confirmation outbox record
-    const custOutbox = await this.db.createOutboxRecord({
-      dedupeKey: `sol:${record.referenceCode}:customer`,
-      entityType: 'solution_request',
-      entityReference: record.referenceCode,
-      recipientEmail: record.email,
-      replyTo: corporateIdentity.contact.email,
-      idempotencyKey: `sol-${record.referenceCode}-customer`,
-      requestSource: templates.requestSource,
-      notificationType: 'customer_confirmation',
-      subject: templates.customerSubject,
-      htmlBody: templates.customerHtml,
-      textBody: templates.customerText,
-      metadata: {
-        correlationId,
-        referenceCode: record.referenceCode,
-        replyTo: corporateIdentity.contact.email,
-        requestSource: templates.requestSource,
-      },
-    });
-
-    const customerStatus = await this.dispatchOutboxRecord(custOutbox.record, correlationId);
-
-    // 2. Dual-recipient independent delivery (each authorized recipient gets its own durable outbox record & isolated try/catch)
-    const recipients = dualConfig.serviceInquiry.enabled ? dualConfig.serviceInquiry.recipients : [];
-    const recipientStatuses: Array<'sent' | 'failed' | 'unconfigured'> = [];
-
-    if (dualConfig.serviceInquiry.enabled && recipients.length > 0) {
-      const dispatchResults = await Promise.allSettled(
-        recipients.map(async (recipientEmail, idx) => {
-          const outboxItem = await this.db.createOutboxRecord({
-            dedupeKey: `sol:${record.referenceCode}:recipient:${recipientEmail}`,
-            entityType: 'solution_request',
-            entityReference: record.referenceCode,
-            recipientEmail,
-            replyTo: safeClientReplyTo,
-            idempotencyKey: `sol-${record.referenceCode}-recipient-${idx + 1}`,
-            requestSource: templates.requestSource,
-            notificationType: 'admin_alert',
-            subject: templates.internalSubject,
-            htmlBody: templates.internalHtml,
-            textBody: templates.internalText,
-            metadata: {
-              correlationId,
-              referenceCode: record.referenceCode,
-              recipientSlot: idx + 1,
-              replyTo: safeClientReplyTo,
-              requestSource: templates.requestSource,
-            },
-          });
-          return this.dispatchOutboxRecord(outboxItem.record, correlationId);
-        })
-      );
-
-      for (const settled of dispatchResults) {
-        if (settled.status === 'fulfilled') {
-          recipientStatuses.push(settled.value);
-        } else {
-          recipientStatuses.push('failed');
-          logStructured('error', 'dual_recipient_inquiry_dispatch_error', {
-            correlationId,
-            referenceCode: record.referenceCode,
-            error: settled.reason?.message || 'Unexpected error sending recipient notification',
-          });
-        }
-      }
-    }
-
-    const deliveredCount = recipientStatuses.filter((s) => s === 'sent').length;
-    const failedCount = recipientStatuses.filter((s) => s === 'failed').length;
+  private summarizeOutcome(
+    customerStatus: DeliveryStatusSummary,
+    recipientStatuses: DeliveryStatusSummary[],
+    notificationsEnabled: boolean
+  ): DualRecipientDeliveryOutcome {
+    const providerAcceptedCount = recipientStatuses.filter(
+      (s) => s === 'provider_accepted' || s === 'delivered'
+    ).length;
+    const confirmedDeliveredCount = recipientStatuses.filter((s) => s === 'delivered').length;
+    const failedCount = recipientStatuses.filter(
+      (s) => s === 'failed' || s === 'dead_letter' || s === 'bounced' || s === 'complained'
+    ).length;
     const unconfiguredCount = recipientStatuses.filter((s) => s === 'unconfigured').length;
-    const partialFailure = deliveredCount > 0 && failedCount > 0;
+    const partialFailure = providerAcceptedCount > 0 && failedCount > 0;
 
-    let adminStatus: 'sent' | 'failed' | 'unconfigured';
-    if (!dualConfig.serviceInquiry.enabled || recipients.length === 0) {
+    let adminStatus: DeliveryStatusSummary;
+    if (!notificationsEnabled || recipientStatuses.length === 0) {
       adminStatus = 'unconfigured';
-    } else if (deliveredCount === recipients.length) {
-      adminStatus = 'sent';
-    } else if (unconfiguredCount === recipients.length) {
+    } else if (confirmedDeliveredCount === recipientStatuses.length) {
+      adminStatus = 'delivered';
+    } else if (providerAcceptedCount === recipientStatuses.length) {
+      adminStatus = 'provider_accepted';
+    } else if (unconfiguredCount === recipientStatuses.length) {
       adminStatus = 'unconfigured';
+    } else if (recipientStatuses.every((s) => s === 'queued')) {
+      adminStatus = 'queued';
     } else {
       adminStatus = 'failed';
     }
 
-    const overallStatus: 'sent' | 'failed' | 'unconfigured' =
-      customerStatus === 'sent' && (adminStatus === 'sent' || !dualConfig.serviceInquiry.enabled)
-        ? 'sent'
-        : customerStatus === 'unconfigured' && adminStatus === 'unconfigured'
-        ? 'unconfigured'
-        : 'failed';
+    const customerAccepted = customerStatus === 'provider_accepted' || customerStatus === 'delivered';
+    const adminAccepted =
+      !notificationsEnabled || adminStatus === 'provider_accepted' || adminStatus === 'delivered';
 
-    await this.db.updateSolutionRequestEmailStatus(record.referenceCode, overallStatus);
+    let overallStatus: DeliveryStatusSummary;
+    if (customerStatus === 'delivered' && (!notificationsEnabled || adminStatus === 'delivered')) {
+      overallStatus = 'delivered';
+    } else if (customerAccepted && adminAccepted) {
+      overallStatus = 'provider_accepted';
+    } else if (customerStatus === 'unconfigured' && adminStatus === 'unconfigured') {
+      overallStatus = 'unconfigured';
+    } else if (customerStatus === 'queued' && (adminStatus === 'queued' || !notificationsEnabled)) {
+      overallStatus = 'queued';
+    } else {
+      overallStatus = 'failed';
+    }
+
+    let deliveryState: DualRecipientDeliveryOutcome['deliveryState'];
+    if (overallStatus === 'delivered') {
+      deliveryState = 'confirmed_delivered';
+    } else if (overallStatus === 'provider_accepted') {
+      deliveryState = 'provider_accepted_awaiting_webhook';
+    } else if (partialFailure) {
+      deliveryState = 'partial_failure';
+    } else if (overallStatus === 'unconfigured') {
+      deliveryState = 'unconfigured';
+    } else if (overallStatus === 'queued') {
+      deliveryState = 'retry_scheduled';
+    } else {
+      deliveryState = 'failed';
+    }
 
     return {
       customerStatus,
       adminStatus,
       overallStatus,
-      notifiedRecipientsCount: recipients.length,
-      deliveredRecipientsCount: deliveredCount,
+      deliveryState,
+      notifiedRecipientsCount: recipientStatuses.length,
+      providerAcceptedRecipientsCount: providerAcceptedCount,
+      confirmedDeliveredRecipientsCount: confirmedDeliveredCount,
+      // ERR-004: deliveredRecipientsCount reflects ONLY webhook-confirmed deliveries, NEVER provider acceptance
+      deliveredRecipientsCount: confirmedDeliveredCount,
       failedRecipientsCount: failedCount,
       partialFailure,
-      notificationsEnabled: dualConfig.serviceInquiry.enabled,
+      notificationsEnabled,
     };
+  }
+
+  private mapOutboxStatusToSummary(status: EmailOutboxRecord['status']): DeliveryStatusSummary {
+    if (status === 'delivered') return 'delivered';
+    if (status === 'provider_accepted' || status === 'sent' || status === 'delivery_delayed') {
+      return 'provider_accepted';
+    }
+    if (status === 'unconfigured') return 'unconfigured';
+    if (status === 'queued' || status === 'processing' || status === 'retry_scheduled') return 'queued';
+    if (status === 'dead_letter') return 'dead_letter';
+    if (status === 'bounced') return 'bounced';
+    if (status === 'complained') return 'complained';
+    return 'failed';
+  }
+
+  /**
+   * ERR-010: Builds all outbox inputs (customer confirmation + dual authorized recipients)
+   * with deterministic recipient-identity idempotency keys (ERR-003) so the database can persist
+   * the parent request and all notification records atomically in a single transaction.
+   */
+  public buildSolutionRequestOutboxInputs(
+    record: SolutionRequestRecord,
+    correlationId?: string
+  ) {
+    const dualConfig = this.getDualNotificationConfig();
+    const templates = this.buildServiceInquiryTemplates(record);
+    const safeClientReplyTo = isValidEmailAddress(record.email) ? record.email.trim().toLowerCase() : undefined;
+    const normalizedCustomerEmail = record.email.trim().toLowerCase();
+
+    const items: CreateOutboxInput[] = [
+      {
+        dedupeKey: `sol:${record.referenceCode}:customer:${normalizedCustomerEmail}`,
+        entityType: 'solution_request' as const,
+        entityReference: record.referenceCode,
+        recipientEmail: normalizedCustomerEmail,
+        replyTo: corporateIdentity.contact.email,
+        idempotencyKey: buildNotificationIdempotencyKey({
+          entityType: 'solution_request',
+          entityReference: record.referenceCode,
+          notificationType: 'customer_confirmation',
+          recipientEmail: normalizedCustomerEmail,
+          eventRevision: 1,
+        }),
+        requestSource: templates.requestSource,
+        notificationType: 'customer_confirmation' as const,
+        subject: templates.customerSubject,
+        htmlBody: templates.customerHtml,
+        textBody: templates.customerText,
+        eventRevision: 1,
+        metadata: {
+          correlationId,
+          referenceCode: record.referenceCode,
+          replyTo: corporateIdentity.contact.email,
+          requestSource: templates.requestSource,
+        },
+      },
+    ];
+
+    const recipients = dualConfig.serviceInquiry.enabled ? dualConfig.serviceInquiry.recipients : [];
+    for (const rawRecipient of recipients) {
+      const recipientEmail = rawRecipient.trim().toLowerCase();
+      items.push({
+        dedupeKey: `sol:${record.referenceCode}:recipient:${recipientEmail}`,
+        entityType: 'solution_request' as const,
+        entityReference: record.referenceCode,
+        recipientEmail,
+        replyTo: safeClientReplyTo,
+        idempotencyKey: buildNotificationIdempotencyKey({
+          entityType: 'solution_request',
+          entityReference: record.referenceCode,
+          notificationType: 'admin_alert',
+          recipientEmail,
+          eventRevision: 1,
+        }),
+        requestSource: templates.requestSource,
+        notificationType: 'admin_alert' as const,
+        subject: templates.internalSubject,
+        htmlBody: templates.internalHtml,
+        textBody: templates.internalText,
+        eventRevision: 1,
+        metadata: {
+          correlationId,
+          referenceCode: record.referenceCode,
+          replyTo: safeClientReplyTo,
+          requestSource: templates.requestSource,
+        },
+      });
+    }
+
+    return { items, dualConfig };
+  }
+
+  public buildAppointmentOutboxInputs(
+    appointment: AppointmentRecord,
+    correlationId?: string,
+    kind: 'requested' | 'rescheduled' | 'cancelled' = 'requested'
+  ) {
+    const dualConfig = this.getDualNotificationConfig();
+    const templates = this.buildConsultationTemplates(appointment, kind);
+    const safeClientReplyTo = isValidEmailAddress(appointment.email)
+      ? appointment.email.trim().toLowerCase()
+      : undefined;
+    const normalizedCustomerEmail = appointment.email.trim().toLowerCase();
+    const dedupeSuffix = kind === 'requested' ? 'req' : `${kind}:${appointment.updatedAt}`;
+    const eventRevision = kind === 'requested' ? 1 : `${kind}-${appointment.updatedAt.replace(/[^0-9]/g, '').slice(0, 14)}`;
+    const notificationType = kind === 'requested' ? ('appointment_request' as const) : ('appointment_update' as const);
+
+    const items: CreateOutboxInput[] = [
+      {
+        dedupeKey: `apt:${appointment.referenceCode}:customer:${normalizedCustomerEmail}:${dedupeSuffix}`,
+        entityType: 'appointment' as const,
+        entityReference: appointment.referenceCode,
+        recipientEmail: normalizedCustomerEmail,
+        replyTo: corporateIdentity.contact.email,
+        idempotencyKey: buildNotificationIdempotencyKey({
+          entityType: 'appointment',
+          entityReference: appointment.referenceCode,
+          notificationType,
+          recipientEmail: normalizedCustomerEmail,
+          eventRevision,
+        }),
+        requestSource: templates.requestSource,
+        notificationType,
+        subject: templates.customerSubject,
+        htmlBody: templates.customerHtml,
+        textBody: templates.customerText,
+        eventRevision: 1,
+        metadata: {
+          correlationId,
+          referenceCode: appointment.referenceCode,
+          kind,
+          replyTo: corporateIdentity.contact.email,
+          requestSource: templates.requestSource,
+        },
+      },
+    ];
+
+    const recipients = dualConfig.executiveConsultation.enabled
+      ? dualConfig.executiveConsultation.recipients
+      : [];
+    for (const rawRecipient of recipients) {
+      const recipientEmail = rawRecipient.trim().toLowerCase();
+      items.push({
+        dedupeKey: `apt:${appointment.referenceCode}:recipient:${recipientEmail}:${dedupeSuffix}`,
+        entityType: 'appointment' as const,
+        entityReference: appointment.referenceCode,
+        recipientEmail,
+        replyTo: safeClientReplyTo,
+        idempotencyKey: buildNotificationIdempotencyKey({
+          entityType: 'appointment',
+          entityReference: appointment.referenceCode,
+          notificationType: 'admin_alert',
+          recipientEmail,
+          eventRevision,
+        }),
+        requestSource: templates.requestSource,
+        notificationType: 'admin_alert' as const,
+        subject: templates.internalSubject,
+        htmlBody: templates.internalHtml,
+        textBody: templates.internalText,
+        eventRevision: 1,
+        metadata: {
+          correlationId,
+          referenceCode: appointment.referenceCode,
+          kind,
+          replyTo: safeClientReplyTo,
+          requestSource: templates.requestSource,
+        },
+      });
+    }
+
+    return { items, dualConfig };
+  }
+
+  public async dispatchPersistedSolutionOutbox(
+    referenceCode: string,
+    outboxRecords: EmailOutboxRecord[],
+    notificationsEnabled: boolean,
+    correlationId?: string
+  ): Promise<DualRecipientDeliveryOutcome> {
+    const customerRecord = outboxRecords.find((o) => o.notificationType === 'customer_confirmation');
+    const adminRecords = outboxRecords.filter((o) => o.notificationType === 'admin_alert');
+
+    const customerStatus: DeliveryStatusSummary = customerRecord
+      ? await this.dispatchOutboxRecord(customerRecord, correlationId)
+      : 'unconfigured';
+
+    const recipientStatuses: DeliveryStatusSummary[] = [];
+    if (notificationsEnabled && adminRecords.length > 0) {
+      const settled = await Promise.allSettled(
+        adminRecords.map((item) => this.dispatchOutboxRecord(item, correlationId))
+      );
+      for (const s of settled) {
+        if (s.status === 'fulfilled') {
+          recipientStatuses.push(s.value);
+        } else {
+          recipientStatuses.push('failed');
+          logStructured('error', 'dual_recipient_inquiry_dispatch_error', {
+            correlationId,
+            referenceCode,
+            error: s.reason?.message || 'Unexpected error sending recipient notification',
+          });
+        }
+      }
+    }
+
+    const outcome = this.summarizeOutcome(customerStatus, recipientStatuses, notificationsEnabled);
+    const legacyDbStatus: 'pending' | 'sent' | 'failed' | 'unconfigured' =
+      outcome.overallStatus === 'provider_accepted' || outcome.overallStatus === 'delivered'
+        ? 'sent'
+        : outcome.overallStatus === 'unconfigured'
+        ? 'unconfigured'
+        : outcome.overallStatus === 'queued'
+        ? 'pending'
+        : 'failed';
+    await this.db.updateSolutionRequestEmailStatus(referenceCode, legacyDbStatus);
+    return outcome;
+  }
+
+  public async dispatchPersistedAppointmentOutbox(
+    referenceCode: string,
+    outboxRecords: EmailOutboxRecord[],
+    notificationsEnabled: boolean,
+    correlationId?: string
+  ): Promise<DualRecipientDeliveryOutcome> {
+    const customerRecord = outboxRecords.find(
+      (o) => o.notificationType === 'appointment_request' || o.notificationType === 'appointment_update'
+    );
+    const adminRecords = outboxRecords.filter((o) => o.notificationType === 'admin_alert');
+
+    const customerStatus: DeliveryStatusSummary = customerRecord
+      ? await this.dispatchOutboxRecord(customerRecord, correlationId)
+      : 'unconfigured';
+
+    const recipientStatuses: DeliveryStatusSummary[] = [];
+    if (notificationsEnabled && adminRecords.length > 0) {
+      const settled = await Promise.allSettled(
+        adminRecords.map((item) => this.dispatchOutboxRecord(item, correlationId))
+      );
+      for (const s of settled) {
+        if (s.status === 'fulfilled') {
+          recipientStatuses.push(s.value);
+        } else {
+          recipientStatuses.push('failed');
+          logStructured('error', 'dual_recipient_consultation_dispatch_error', {
+            correlationId,
+            referenceCode,
+            error: s.reason?.message || 'Unexpected error sending consultation notification',
+          });
+        }
+      }
+    }
+
+    return this.summarizeOutcome(customerStatus, recipientStatuses, notificationsEnabled);
+  }
+
+  /**
+   * ERR-011: Retrieves ACTUAL persisted delivery status for duplicate idempotent submissions
+   * instead of returning fabricated zeros or hardcoded 'unconfigured'.
+   */
+  public async getPersistedDeliveryOutcome(
+    entityType: 'solution_request' | 'appointment',
+    entityReference: string
+  ): Promise<DualRecipientDeliveryOutcome> {
+    const dualConfig = this.getDualNotificationConfig();
+    const enabled =
+      entityType === 'solution_request'
+        ? dualConfig.serviceInquiry.enabled
+        : dualConfig.executiveConsultation.enabled;
+
+    if (!this.db.listOutboxByEntity) {
+      return this.summarizeOutcome('unconfigured', [], enabled);
+    }
+
+    const rows = await this.db.listOutboxByEntity(entityType, entityReference);
+    if (rows.length === 0) {
+      return this.summarizeOutcome('queued', [], enabled);
+    }
+
+    const customerRow = rows.find((r) => r.notificationType !== 'admin_alert');
+    const adminRows = rows.filter((r) => r.notificationType === 'admin_alert');
+
+    const customerStatus = customerRow
+      ? this.mapOutboxStatusToSummary(customerRow.status)
+      : 'unconfigured';
+    const recipientStatuses = adminRows.map((r) => this.mapOutboxStatusToSummary(r.status));
+    return this.summarizeOutcome(customerStatus, recipientStatuses, enabled);
+  }
+
+  public async enqueueAndSendSolutionRequestEmails(
+    record: SolutionRequestRecord,
+    correlationId?: string
+  ): Promise<DualRecipientDeliveryOutcome> {
+    const { items, dualConfig } = this.buildSolutionRequestOutboxInputs(record, correlationId);
+    const outboxRecords: EmailOutboxRecord[] = [];
+    for (const item of items) {
+      const created = await this.db.createOutboxRecord(item);
+      outboxRecords.push(created.record);
+    }
+    return this.dispatchPersistedSolutionOutbox(
+      record.referenceCode,
+      outboxRecords,
+      dualConfig.serviceInquiry.enabled,
+      correlationId
+    );
   }
 
   public async enqueueAndSendAppointmentEmails(
@@ -1014,119 +1605,18 @@ export class TransactionalEmailService {
     correlationId?: string,
     kind: 'requested' | 'rescheduled' | 'cancelled' = 'requested'
   ): Promise<DualRecipientDeliveryOutcome> {
-    const dualConfig = this.getDualNotificationConfig();
-    const templates = this.buildConsultationTemplates(appointment, kind);
-    const safeClientReplyTo = isValidEmailAddress(appointment.email)
-      ? appointment.email.trim().toLowerCase()
-      : undefined;
-    const dedupeSuffix = kind === 'requested' ? 'req' : `${kind}:${appointment.updatedAt}`;
-    const notificationType = kind === 'requested' ? 'appointment_request' : 'appointment_update';
-
-    // 1. Customer confirmation outbox record
-    const custOutbox = await this.db.createOutboxRecord({
-      dedupeKey: `apt:${appointment.referenceCode}:customer:${dedupeSuffix}`,
-      entityType: 'appointment',
-      entityReference: appointment.referenceCode,
-      recipientEmail: appointment.email,
-      replyTo: corporateIdentity.contact.email,
-      idempotencyKey: `apt-${appointment.referenceCode}-customer-${kind}`,
-      requestSource: templates.requestSource,
-      notificationType,
-      subject: templates.customerSubject,
-      htmlBody: templates.customerHtml,
-      textBody: templates.customerText,
-      metadata: {
-        correlationId,
-        referenceCode: appointment.referenceCode,
-        kind,
-        replyTo: corporateIdentity.contact.email,
-        requestSource: templates.requestSource,
-      },
-    });
-
-    const customerStatus = await this.dispatchOutboxRecord(custOutbox.record, correlationId);
-
-    // 2. Dual-recipient independent delivery
-    const recipients = dualConfig.executiveConsultation.enabled
-      ? dualConfig.executiveConsultation.recipients
-      : [];
-    const recipientStatuses: Array<'sent' | 'failed' | 'unconfigured'> = [];
-
-    if (dualConfig.executiveConsultation.enabled && recipients.length > 0) {
-      const dispatchResults = await Promise.allSettled(
-        recipients.map(async (recipientEmail, idx) => {
-          const outboxItem = await this.db.createOutboxRecord({
-            dedupeKey: `apt:${appointment.referenceCode}:recipient:${recipientEmail}:${dedupeSuffix}`,
-            entityType: 'appointment',
-            entityReference: appointment.referenceCode,
-            recipientEmail,
-            replyTo: safeClientReplyTo,
-            idempotencyKey: `apt-${appointment.referenceCode}-recipient-${idx + 1}-${kind}`,
-            requestSource: templates.requestSource,
-            notificationType: 'admin_alert',
-            subject: templates.internalSubject,
-            htmlBody: templates.internalHtml,
-            textBody: templates.internalText,
-            metadata: {
-              correlationId,
-              referenceCode: appointment.referenceCode,
-              kind,
-              recipientSlot: idx + 1,
-              replyTo: safeClientReplyTo,
-              requestSource: templates.requestSource,
-            },
-          });
-          return this.dispatchOutboxRecord(outboxItem.record, correlationId);
-        })
-      );
-
-      for (const settled of dispatchResults) {
-        if (settled.status === 'fulfilled') {
-          recipientStatuses.push(settled.value);
-        } else {
-          recipientStatuses.push('failed');
-          logStructured('error', 'dual_recipient_consultation_dispatch_error', {
-            correlationId,
-            referenceCode: appointment.referenceCode,
-            error: settled.reason?.message || 'Unexpected error sending consultation notification',
-          });
-        }
-      }
+    const { items, dualConfig } = this.buildAppointmentOutboxInputs(appointment, correlationId, kind);
+    const outboxRecords: EmailOutboxRecord[] = [];
+    for (const item of items) {
+      const created = await this.db.createOutboxRecord(item);
+      outboxRecords.push(created.record);
     }
-
-    const deliveredCount = recipientStatuses.filter((s) => s === 'sent').length;
-    const failedCount = recipientStatuses.filter((s) => s === 'failed').length;
-    const unconfiguredCount = recipientStatuses.filter((s) => s === 'unconfigured').length;
-    const partialFailure = deliveredCount > 0 && failedCount > 0;
-
-    let adminStatus: 'sent' | 'failed' | 'unconfigured';
-    if (!dualConfig.executiveConsultation.enabled || recipients.length === 0) {
-      adminStatus = 'unconfigured';
-    } else if (deliveredCount === recipients.length) {
-      adminStatus = 'sent';
-    } else if (unconfiguredCount === recipients.length) {
-      adminStatus = 'unconfigured';
-    } else {
-      adminStatus = 'failed';
-    }
-
-    const overallStatus: 'sent' | 'failed' | 'unconfigured' =
-      customerStatus === 'sent' && (adminStatus === 'sent' || !dualConfig.executiveConsultation.enabled)
-        ? 'sent'
-        : customerStatus === 'unconfigured' && adminStatus === 'unconfigured'
-        ? 'unconfigured'
-        : 'failed';
-
-    return {
-      customerStatus,
-      adminStatus,
-      overallStatus,
-      notifiedRecipientsCount: recipients.length,
-      deliveredRecipientsCount: deliveredCount,
-      failedRecipientsCount: failedCount,
-      partialFailure,
-      notificationsEnabled: dualConfig.executiveConsultation.enabled,
-    };
+    return this.dispatchPersistedAppointmentOutbox(
+      appointment.referenceCode,
+      outboxRecords,
+      dualConfig.executiveConsultation.enabled,
+      correlationId
+    );
   }
 
   /**
@@ -1142,17 +1632,39 @@ export class TransactionalEmailService {
     return this.enqueueAndSendAppointmentEmails(appointment, correlationId, kind);
   }
 
-  public async processRetryQueue(limit = 20, correlationId?: string): Promise<number> {
+  /**
+   * ERR-002: Atomic multi-worker notification queue processing with worker lease claiming,
+   * expired lease recovery, bounded retries, dead-lettering, and non-retryable bounce/complaint guard.
+   */
+  public async processRetryQueue(
+    limit = 20,
+    correlationId?: string,
+    workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`,
+    leaseSeconds = 120
+  ): Promise<number> {
     if (!this.transport.isConfigured) return 0;
-    const pending = await this.db.listRetryableOutbox(limit);
+
+    const claimed = this.db.claimRetryableOutbox
+      ? await this.db.claimRetryableOutbox(workerId, limit, leaseSeconds)
+      : await this.db.listRetryableOutbox(limit);
+
     let processed = 0;
-    for (const item of pending) {
+    for (const item of claimed) {
+      if (
+        item.status === 'bounced' ||
+        item.status === 'complained' ||
+        item.status === 'delivered' ||
+        item.status === 'dead_letter'
+      ) {
+        continue;
+      }
       try {
         await this.dispatchOutboxRecord(item, correlationId);
         processed += 1;
       } catch (err: any) {
         logStructured('error', 'outbox_retry_item_error', {
           correlationId,
+          workerId,
           outboxId: item.id,
           error: err?.message,
         });
@@ -1162,66 +1674,150 @@ export class TransactionalEmailService {
   }
 
   /**
-   * Processes verified Resend delivery webhook events (email.delivered, email.bounced, email.complained)
-   * to record genuine inbox delivery confirmation timestamps on durable outbox rows.
+   * Controlled admin manual retry for failed or dead-lettered notifications.
+   * Rejects already delivered records and never silently bypasses audit logging.
+   */
+  public async adminRetryOutboxRecord(
+    outboxId: string,
+    correlationId?: string
+  ): Promise<{ ok: boolean; status?: DeliveryStatusSummary; error?: string }> {
+    if (!this.db.getOutboxById) {
+      return { ok: false, error: 'Repository does not support single-record outbox inspection.' };
+    }
+    const existing = await this.db.getOutboxById(outboxId);
+    if (!existing) {
+      return { ok: false, error: 'Notification outbox record not found.' };
+    }
+    if (existing.status === 'delivered') {
+      return { ok: false, error: 'Notification was already confirmed delivered and cannot be re-dispatched.' };
+    }
+    if (existing.status === 'complained') {
+      return {
+        ok: false,
+        error: 'Notification received a spam complaint and is permanently suppressed from re-dispatch.',
+      };
+    }
+
+    // Reset attempt count if dead-lettered so admin manual retry gets a clean attempt
+    const resetRecord: EmailOutboxRecord = {
+      ...existing,
+      status: 'queued',
+      deliveryAttempts: existing.status === 'dead_letter' ? 0 : existing.deliveryAttempts,
+    };
+    await this.db.updateOutboxStatus(existing.id, {
+      status: 'queued',
+      deliveryAttempts: resetRecord.deliveryAttempts,
+      nextRetryAt: null,
+      deadLetteredAt: null,
+      claimedBy: null,
+      claimedAt: null,
+      leaseExpiresAt: null,
+      lastError: null,
+    });
+
+    const newStatus = await this.dispatchOutboxRecord(resetRecord, correlationId);
+    return { ok: true, status: newStatus };
+  }
+
+  /**
+   * ERR-005 & ERR-006: Processes verified Resend delivery webhook events with:
+   * - Strict UTC ISO-8601 timestamp validation & normalization
+   * - Durable event deduplication via notification_webhook_events
+   * - Preservation of original deliveredAt timestamp across duplicates
+   * - Out-of-order monotonic transition protection
+   * - Pending reconciliation storage if webhook arrives before provider_reference is saved
    */
   public async handleResendWebhookEvent(
     payload: ResendWebhookEventPayload,
-    correlationId?: string
-  ): Promise<{ matched: boolean; status?: string; outboxId?: string }> {
+    correlationId?: string,
+    options: { svixId?: string; svixTimestamp?: string } = {}
+  ): Promise<{
+    matched: boolean;
+    deduplicated?: boolean;
+    pendingReconciliation?: boolean;
+    status?: string;
+    outboxId?: string;
+    eventTimestampUtc?: string;
+  }> {
     const eventType = String(payload.type || '').trim().toLowerCase();
     const emailId = typeof payload.data?.email_id === 'string' ? payload.data.email_id.trim() : '';
+    const normalizedTs = normalizeWebhookTimestamp(payload.created_at, options.svixTimestamp);
+
+    if (!eventType) {
+      return { matched: false, eventTimestampUtc: normalizedTs.iso };
+    }
+
+    const providerEventId =
+      (options.svixId && options.svixId.trim()) ||
+      crypto
+        .createHash('sha256')
+        .update(`${eventType}|${emailId}|${String(payload.created_at || '')}`)
+        .digest('hex');
+
+    let persistedWebhookId: string | undefined;
+    if (this.db.recordWebhookEventOnce) {
+      const recorded = await this.db.recordWebhookEventOnce({
+        provider: 'resend',
+        providerEventId,
+        eventType,
+        providerMessageId: emailId || undefined,
+        eventTimestampUtc: normalizedTs.iso,
+        payload: (payload as unknown as Record<string, unknown>) || {},
+      });
+      persistedWebhookId = recorded.record.id;
+      if (!recorded.inserted && recorded.record.reconciled) {
+        return {
+          matched: true,
+          deduplicated: true,
+          status: 'duplicate_ignored',
+          outboxId: recorded.record.outboxId,
+          eventTimestampUtc: normalizedTs.iso,
+        };
+      }
+    }
+
     if (!emailId || !this.db.findOutboxByProviderReference) {
-      return { matched: false };
+      return {
+        matched: false,
+        pendingReconciliation: Boolean(persistedWebhookId),
+        status: persistedWebhookId ? 'pending_reconciliation' : 'ignored',
+        eventTimestampUtc: normalizedTs.iso,
+      };
     }
 
     const existing = await this.db.findOutboxByProviderReference(emailId);
     if (!existing) {
-      return { matched: false };
+      return {
+        matched: false,
+        pendingReconciliation: Boolean(persistedWebhookId),
+        status: persistedWebhookId ? 'pending_reconciliation' : 'unmatched',
+        eventTimestampUtc: normalizedTs.iso,
+      };
     }
 
-    const eventTs = payload.created_at || new Date().toISOString();
+    const bounceReason =
+      typeof payload.data?.bounce?.message === 'string' ? payload.data.bounce.message : undefined;
 
-    if (eventType === 'email.delivered') {
-      await this.db.updateOutboxStatus(existing.id, {
-        status: 'delivered',
-        providerReference: existing.providerReference,
-        deliveryAttempts: existing.deliveryAttempts,
-        deliveredAt: eventTs,
-        sentAt: existing.sentAt || eventTs,
-        nextRetryAt: null,
-      });
-      logStructured('info', 'transactional_email_delivery_confirmed', {
-        correlationId,
-        outboxId: existing.id,
-        entityReference: existing.entityReference,
-        providerReference: emailId,
-      });
-      return { matched: true, status: 'delivered', outboxId: existing.id };
+    const transition = await this.applyWebhookTransitionToOutbox(
+      existing,
+      eventType,
+      normalizedTs.iso,
+      providerEventId,
+      bounceReason,
+      correlationId
+    );
+
+    if (persistedWebhookId && this.db.markWebhookEventReconciled) {
+      await this.db.markWebhookEventReconciled(persistedWebhookId, existing.id);
     }
 
-    if (eventType === 'email.bounced' || eventType === 'email.complained' || eventType === 'email.delivery_delayed') {
-      const reason =
-        payload.data?.bounce?.message ||
-        `Resend webhook reported ${eventType}`;
-      await this.db.updateOutboxStatus(existing.id, {
-        status: eventType === 'email.delivery_delayed' ? existing.status : 'failed',
-        providerReference: existing.providerReference,
-        deliveryAttempts: existing.deliveryAttempts,
-        lastError: reason,
-        nextRetryAt: null,
-      });
-      logStructured('warn', 'transactional_email_webhook_issue', {
-        correlationId,
-        outboxId: existing.id,
-        entityReference: existing.entityReference,
-        eventType,
-        reason,
-      });
-      return { matched: true, status: eventType, outboxId: existing.id };
-    }
-
-    return { matched: true, status: existing.status, outboxId: existing.id };
+    return {
+      matched: true,
+      deduplicated: false,
+      status: transition.status,
+      outboxId: existing.id,
+      eventTimestampUtc: normalizedTs.iso,
+    };
   }
 
   public getConfiguredAdminInbox(): string {
@@ -1354,7 +1950,7 @@ export class TransactionalEmailService {
       text: textLines.join('\n'),
     });
 
-    if (result.status === 'sent') {
+    if ((result.status === 'provider_accepted' || result.status === 'sent') && result.providerReference?.trim()) {
       logStructured('info', 'portal_email_provider_accepted', {
         correlationId: params.correlationId,
         emailType: params.emailType,

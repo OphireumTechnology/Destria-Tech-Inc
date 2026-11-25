@@ -47,6 +47,9 @@ class AIVoiceService {
   private recognition: any = null;
   private isRecognitionRunning = false;
   private recognitionRestartTimeout: any = null;
+  private idleTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly idleTimeoutMs = 5 * 60 * 1000;
+  private lastResponseLatencyMs: number | null = null;
 
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private currentAudio: HTMLAudioElement | null = null;
@@ -58,6 +61,24 @@ class AIVoiceService {
 
   constructor() {
     this.sessionId = `dti-session-${Date.now()}`;
+  }
+
+  public getLastResponseLatencyMs(): number | null {
+    return this.lastResponseLatencyMs;
+  }
+
+  private resetIdleTimer() {
+    if (this.idleTimeoutTimer) {
+      clearTimeout(this.idleTimeoutTimer);
+      this.idleTimeoutTimer = null;
+    }
+    if (this.status === 'disconnected') return;
+    this.idleTimeoutTimer = setTimeout(() => {
+      if (this.status !== 'disconnected') {
+        this.callbacks.onError?.('Voice session paused after 5 minutes of inactivity.');
+        this.stopSession();
+      }
+    }, this.idleTimeoutMs);
   }
 
   public setCallbacks(callbacks: VoiceEventCallbacks) {
@@ -161,6 +182,7 @@ class AIVoiceService {
       }
 
       this.setStatus('idle');
+      this.resetIdleTimer();
 
       const greeting = this.language.startsWith('fil')
         ? 'Magandang araw po. Ako ang inyong DESTRIA TECH INC AI Corporate Solutions Consultant. Paano ko po matutulungan ang inyong customized enterprise technology project ngayon?'
@@ -182,6 +204,11 @@ class AIVoiceService {
 
   public stopSession() {
     this.cancelSpeech();
+
+    if (this.idleTimeoutTimer) {
+      clearTimeout(this.idleTimeoutTimer);
+      this.idleTimeoutTimer = null;
+    }
 
     if (this.recognition) {
       try {
@@ -207,9 +234,18 @@ class AIVoiceService {
 
     if (this.audioContext && this.audioContext.state !== 'closed') {
       try {
-        this.audioContext.close();
+        void this.audioContext.close();
       } catch {}
       this.audioContext = null;
+      this.analyser = null;
+    }
+
+    if (this.outputAudioContext && this.outputAudioContext.state !== 'closed') {
+      try {
+        void this.outputAudioContext.close();
+      } catch {}
+      this.outputAudioContext = null;
+      this.outputAnalyser = null;
     }
 
     this.setStatus('disconnected');
@@ -248,6 +284,8 @@ class AIVoiceService {
       return;
     }
 
+    this.resetIdleTimer();
+    const requestStartedAt = Date.now();
     try {
       const response = await fetch(apiUrl('/api/voice/process'), {
         method: 'POST',
@@ -260,6 +298,7 @@ class AIVoiceService {
       });
 
       if (response.ok) {
+        this.lastResponseLatencyMs = Date.now() - requestStartedAt;
         const data = await response.json();
         const replyText =
           data.replyText ||

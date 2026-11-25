@@ -1,3 +1,4 @@
+import fs from 'fs';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -16,12 +17,22 @@ function normalizeBasePath(rawBase?: string): string {
  * Generates refresh-safe static `<route>/index.html` entry points for every
  * canonical static route in `src/config/routeManifest.json`, plus a clean SPA
  * `dist/404.html` and `dist/CNAME` for GitHub Pages custom-domain hosting.
+ * Also strips raw AI Studio prompt paste text files from `dist/assets/aistudio`
+ * so internal directive text and recipient addresses are never published.
  */
 function enterpriseCleanRoutesPlugin(): Plugin {
   return {
     name: 'destria-enterprise-clean-routes',
     closeBundle() {
       const distDir = path.resolve(import.meta.dirname, 'dist');
+      const distAiStudioDir = path.join(distDir, 'assets', 'aistudio');
+      if (fs.existsSync(distAiStudioDir)) {
+        for (const entry of fs.readdirSync(distAiStudioDir)) {
+          if (entry.startsWith('Paste_')) {
+            fs.rmSync(path.join(distAiStudioDir, entry), { force: true });
+          }
+        }
+      }
       generateStaticPagesRoutes(distDir);
     },
   };

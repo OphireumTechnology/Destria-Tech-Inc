@@ -1,0 +1,359 @@
+{
+  "schemaVersion": "1.0.0",
+  "instructionId": "DTI-MASTER-REPAIR-001",
+  "project": "DESTRIA TECH INC — Enterprise Web Platform & Client Portal",
+  "repository": "https://github.com/OphireumTechnology/Destria-Tech-Inc",
+  "canonicalOrigin": "https://destriatech.com",
+  "releaseClassification": "CODE_READY_EXTERNAL_INTEGRATION_BLOCKED",
+  "classificationRationale": "All 18 confirmed codebase defects (ERR-001 through ERR-018) are repaired in source code, covered by additive SQL migration 005, and verified by automated local/mocked regression tests. Live external production credentials (Supabase live database, Resend live domain/webhooks, live payment gateway merchant keys, Gemini Live voice runtime, and GitHub repository push) are outside the sandbox and must be executed by the repository owner in staging before production commissioning.",
+  "summary": {
+    "totalConfirmedDefects": 18,
+    "mandatoryDirectiveDefects": 12,
+    "additionalCodebaseDefects": 6,
+    "repairedInSourceCode": 18,
+    "verifiedLocalAutomated": 18,
+    "verifiedLiveExternal": 0,
+    "externalStagingRequired": 6
+  },
+  "defects": [
+    {
+      "id": "ERR-001",
+      "group": "mandatory",
+      "severity": "critical",
+      "title": "Resend API acceptance without valid provider message ID & missing HTTP 429 Retry-After parsing",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": true,
+      "filesModified": [
+        "src/server/services/emailService.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-001, ERR-002, ERR-003, ERR-004"
+      ],
+      "externalDependencies": [
+        "Live Resend API key & verified destriatech.com sending domain"
+      ]
+    },
+    {
+      "id": "ERR-002",
+      "group": "mandatory",
+      "severity": "critical",
+      "title": "Non-atomic outbox claiming, duplicate worker dispatch, unbounded retries, and missing bounce/complaint suppression",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": true,
+      "filesModified": [
+        "supabase/migrations/005_enterprise_production_readiness.sql",
+        "src/server/db/types.ts",
+        "src/server/db/supabaseRepository.ts",
+        "src/server/services/emailService.ts",
+        "server.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-001, ERR-002, ERR-003, ERR-004"
+      ],
+      "externalDependencies": [
+        "Apply supabase/migrations/005_enterprise_production_readiness.sql on live Supabase PostgreSQL"
+      ]
+    },
+    {
+      "id": "ERR-003",
+      "group": "mandatory",
+      "severity": "high",
+      "title": "Weak/non-deterministic email idempotency keys lacking recipient-identity binding",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": false,
+      "filesModified": [
+        "src/server/services/emailService.ts",
+        "supabase/migrations/005_enterprise_production_readiness.sql"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-001, ERR-002, ERR-003, ERR-004"
+      ],
+      "externalDependencies": []
+    },
+    {
+      "id": "ERR-004",
+      "group": "mandatory",
+      "severity": "high",
+      "title": "Conflation of HTTP provider acceptance with webhook-confirmed inbox delivery",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": true,
+      "filesModified": [
+        "src/server/services/emailService.ts",
+        "src/server/db/types.ts",
+        "src/server/app.ts",
+        "tests/phase1-stabilization.test.ts",
+        "tests/dual-recipient-notifications.test.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-001, ERR-002, ERR-003, ERR-004",
+        "tests/phase1-stabilization.test.ts",
+        "tests/dual-recipient-notifications.test.ts"
+      ],
+      "externalDependencies": [
+        "Configure Resend webhook endpoint on Railway staging/production"
+      ]
+    },
+    {
+      "id": "ERR-005",
+      "group": "mandatory",
+      "severity": "high",
+      "title": "Resend/Svix webhook timestamp normalization, replay protection, and durable deduplication",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": true,
+      "filesModified": [
+        "src/server/services/emailService.ts",
+        "src/server/app.ts",
+        "src/server/db/supabaseRepository.ts",
+        "supabase/migrations/005_enterprise_production_readiness.sql"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-005 & ERR-006"
+      ],
+      "externalDependencies": [
+        "Configure RESEND_WEBHOOK_SECRET in Railway staging/production"
+      ]
+    },
+    {
+      "id": "ERR-006",
+      "group": "mandatory",
+      "severity": "high",
+      "title": "Out-of-order webhook regression, overwritten deliveredAt, and dropped early webhooks",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": false,
+      "filesModified": [
+        "src/server/services/emailService.ts",
+        "src/server/db/supabaseRepository.ts",
+        "supabase/migrations/005_enterprise_production_readiness.sql"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-005 & ERR-006"
+      ],
+      "externalDependencies": []
+    },
+    {
+      "id": "ERR-007",
+      "group": "mandatory",
+      "severity": "critical",
+      "title": "Fabricated sbx_* stub payment adapters instead of real gateway HTTP integrations and honest GoTyme deferral",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": true,
+      "filesModified": [
+        "src/server/portal/payments/paymentAdapters.ts",
+        "src/server/portal/portalRoutes.ts",
+        "src/server/app.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-007, ERR-008, ERR-009, ERR-013, ERR-017, ERR-018"
+      ],
+      "externalDependencies": [
+        "Live sandbox/production merchant API keys for Xendit, PayPal, Maya, PayMongo, or Card gateway"
+      ]
+    },
+    {
+      "id": "ERR-008",
+      "group": "mandatory",
+      "severity": "high",
+      "title": "Missing server-to-server payment status verification endpoint",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": true,
+      "filesModified": [
+        "src/server/portal/payments/paymentAdapters.ts",
+        "src/server/app.ts",
+        "src/server/portal/localPortalRepository.ts",
+        "src/server/portal/supabasePortalRepository.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-007, ERR-008, ERR-009, ERR-013, ERR-017, ERR-018"
+      ],
+      "externalDependencies": [
+        "Live payment gateway sandbox credentials"
+      ]
+    },
+    {
+      "id": "ERR-009",
+      "group": "mandatory",
+      "severity": "critical",
+      "title": "Missing RBAC-authorized, idempotent, over-refund-protected payment refund orchestration",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": true,
+      "filesModified": [
+        "supabase/migrations/005_enterprise_production_readiness.sql",
+        "src/server/portal/types.ts",
+        "src/server/portal/localPortalRepository.ts",
+        "src/server/portal/supabasePortalRepository.ts",
+        "src/server/portal/payments/paymentAdapters.ts",
+        "src/server/app.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-007, ERR-008, ERR-009, ERR-013, ERR-017, ERR-018"
+      ],
+      "externalDependencies": [
+        "Apply migration 005 and verify sandbox refund call with live provider credentials"
+      ]
+    },
+    {
+      "id": "ERR-010",
+      "group": "mandatory",
+      "severity": "critical",
+      "title": "Non-atomic intake registration vs notification outbox creation",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": true,
+      "filesModified": [
+        "supabase/migrations/005_enterprise_production_readiness.sql",
+        "src/server/db/types.ts",
+        "src/server/db/supabaseRepository.ts",
+        "src/server/services/emailService.ts",
+        "src/server/app.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-010, ERR-011, ERR-012"
+      ],
+      "externalDependencies": [
+        "Apply migration 005 RPCs in live Supabase PostgreSQL"
+      ]
+    },
+    {
+      "id": "ERR-011",
+      "group": "mandatory",
+      "severity": "high",
+      "title": "Duplicate intake submissions fabricated notification success instead of reporting persisted outbox status",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": false,
+      "filesModified": [
+        "src/server/services/emailService.ts",
+        "src/server/app.ts",
+        "src/server/db/supabaseRepository.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-010, ERR-011, ERR-012"
+      ],
+      "externalDependencies": []
+    },
+    {
+      "id": "ERR-012",
+      "group": "mandatory",
+      "severity": "high",
+      "title": "Appointment deduplication caught generic 23505 collisions instead of explicit idempotency constraint",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": true,
+      "filesModified": [
+        "supabase/migrations/005_enterprise_production_readiness.sql",
+        "src/server/db/supabaseRepository.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-010, ERR-011, ERR-012"
+      ],
+      "externalDependencies": [
+        "Apply migration 005 unique constraint in live Supabase PostgreSQL"
+      ]
+    },
+    {
+      "id": "ERR-013",
+      "group": "additional",
+      "severity": "critical",
+      "title": "Malware quarantine not enforced on file URL signing and file download endpoints",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": false,
+      "filesModified": [
+        "src/server/portal/portalRoutes.ts",
+        "src/server/portal/localPortalRepository.ts",
+        "src/server/portal/supabasePortalRepository.ts",
+        "src/server/app.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-007, ERR-008, ERR-009, ERR-013, ERR-017, ERR-018"
+      ],
+      "externalDependencies": []
+    },
+    {
+      "id": "ERR-014",
+      "group": "additional",
+      "severity": "medium",
+      "title": "AI Voice session leaked outputAudioContext and lacked idle auto-cleanup & latency tracking",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": true,
+      "filesModified": [
+        "src/services/aiVoiceService.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-014, ERR-015, ERR-016"
+      ],
+      "externalDependencies": [
+        "Live browser microphone & Gemini Live API key testing"
+      ]
+    },
+    {
+      "id": "ERR-015",
+      "group": "additional",
+      "severity": "high",
+      "title": "Express server lacked HTTP slowloris timeouts, workerId tagging, and graceful SIGTERM/SIGINT shutdown",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": false,
+      "filesModified": [
+        "server.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-014, ERR-015, ERR-016"
+      ],
+      "externalDependencies": []
+    },
+    {
+      "id": "ERR-016",
+      "group": "additional",
+      "severity": "low",
+      "title": "Residual logger service name and missing unified --brand-* CSS root aliases",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": false,
+      "filesModified": [
+        "src/server/logger.ts",
+        "src/index.css"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-014, ERR-015, ERR-016"
+      ],
+      "externalDependencies": []
+    },
+    {
+      "id": "ERR-017",
+      "group": "additional",
+      "severity": "medium",
+      "title": "Admin Executive Console lacked Notification Ops (outbox + controlled retry) and System Health observability views",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": false,
+      "filesModified": [
+        "src/admin/AdminPortalApp.tsx",
+        "src/server/app.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-007, ERR-008, ERR-009, ERR-013, ERR-017, ERR-018"
+      ],
+      "externalDependencies": []
+    },
+    {
+      "id": "ERR-018",
+      "group": "additional",
+      "severity": "high",
+      "title": "Portal checkout used non-canonical redirect URLs and did not persist providerTransactionId/checkoutUrl on payment record",
+      "status": "VERIFIED_LOCAL_AUTOMATED",
+      "liveStagingRequired": false,
+      "filesModified": [
+        "src/server/portal/portalRoutes.ts",
+        "src/server/portal/localPortalRepository.ts",
+        "src/server/portal/supabasePortalRepository.ts"
+      ],
+      "regressionTests": [
+        "tests/master-enterprise-repair.test.ts#ERR-007, ERR-008, ERR-009, ERR-013, ERR-017, ERR-018"
+      ],
+      "externalDependencies": []
+    }
+  ],
+  "documentationArtifacts": [
+    "docs/audit/confirmed-defect-register.md",
+    "docs/deployment/environment-variable-manifest.md",
+    "docs/operations/monitoring-and-alerting.md",
+    "docs/operations/backup-restoration.md",
+    "docs/security/security-architecture.md",
+    "docs/development/requirements-traceability-matrix.json",
+    "docs/development/requirements-traceability-matrix.md"
+  ]
+}

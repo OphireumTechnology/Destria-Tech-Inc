@@ -1,67 +1,26 @@
-# DESTRIA TECH INC — Backup, Recovery & Rollback Readiness Runbook
+# DESTRIA TECH INC — Backup, Migration & Restoration Runbook
 
-**Status:** `BLOCKED` (Live database backup restoration drill has **not** been executed because no live Supabase PostgreSQL instance is provisioned in this workspace)  
-**Owner:** DESTRIA TECH INC Infrastructure & Engineering Operations  
-**Last Updated:** 2026-11-25  
+## 1. Authoritative Data Stores
+1. **Supabase PostgreSQL**: Stores `solution_requests`, `consultation_appointments`, `notification_records`, `notification_webhook_events`, `audit_logs`, `admin_users`, and all Client Portal commerce/project tables including `portal_payment_refunds`.
+2. **Supabase Private Storage (`portal-vault`)**: Stores isolated client uploads referenced by `project_attachments.stored_file_name` and verified via SHA-256 checksums (`content_sha256`).
 
----
+## 2. Additive SQL Migration Sequence
+Apply migrations strictly in numerical order inside the Supabase SQL Editor or Supabase CLI:
+1. `supabase/migrations/001_phase1_stabilization.sql`
+2. `supabase/migrations/002_client_portal_schema.sql`
+3. `supabase/migrations/003_dual_recipient_notifications.sql`
+4. `supabase/migrations/004_client_portal_hardening.sql`
+5. `supabase/migrations/005_enterprise_production_readiness.sql`
 
-## 1. Recovery Objectives (Target SLA)
+All migrations use idempotent guards (`IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, safe constraint replacements) and enable Row-Level Security (`RLS`) on every new table.
 
-| Metric | Target | Notes |
-| :--- | :--- | :--- |
-| **RPO (Recovery Point Objective)** | `<= 15 minutes` (PITR) / `<= 24 hours` (Daily Snapshot) | Requires Supabase Pro/Team Point-in-Time Recovery (PITR) enabled before production launch. |
-| **RTO (Recovery Time Objective)** | `<= 60 minutes` | Includes database restoration, Railway backend redeploy/rollback, and `/ready` + smoke verification. |
+## 3. Backup & Point-in-Time Recovery (PITR) Policy
+- **Automated Daily Backups**: Enable Supabase daily automated backups and Point-in-Time Recovery (PITR) on the production project before onboarding live client engagements.
+- **Pre-Migration Snapshot**: Always capture a manual database backup/dump prior to applying new migrations in staging or production.
+- **Zero-Data-Loss Outbox Recovery**: Because inquiry/consultation records and outbox rows are persisted atomically via `register_solution_request_with_outbox` and `register_appointment_with_outbox`, restoring PostgreSQL preserves exact notification state; expired `processing` leases automatically recover via `claim_retryable_notifications` on worker startup.
 
----
-
-## 2. Pre-Deployment Backup Procedure (Mandatory Before Applying Migration `003`)
-
-1. **Create Manual Logical Backup Snapshot (PostgreSQL):**
-   ```bash
-   pg_dump "$SUPABASE_DB_URL" \
-     --format=custom \
-     --no-owner \
-     --no-privileges \
-     --file="destria_pre_migration003_$(date -u +%Y%m%dT%H%M%SZ).dump"
-   ```
-2. **Verify Dump Archive Integrity:**
-   ```bash
-   pg_restore --list destria_pre_migration003_*.dump | head -n 40
-   ```
-3. **Export Private Storage Object Inventory:**
-   - Record object manifest and SHA-256 checksums for the `portal-private-files` Supabase Storage bucket.
-4. **Apply Migration `003_enterprise_portal_stabilization.sql`:**
-   - Migration `003` is strictly additive (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, `CREATE POLICY` guarded safely). No existing tables or rows are dropped or truncated.
-
----
-
-## 3. Staging Backup Restoration Drill Protocol (Required Before Go-Live)
-
-> **Honesty Declaration:** This restoration drill has **NOT** been executed yet. Production release is blocked until a live restoration drill is completed against a non-production Supabase staging project and signed off with timestamps and row-count parity evidence.
-
-1. Restore the latest logical dump or PITR snapshot into an isolated **Supabase Staging Clone** project:
-   ```bash
-   pg_restore --dbname="$STAGING_CLONE_DB_URL" --clean --if-exists --no-owner destria_pre_migration003_*.dump
-   ```
-2. Verify row counts and schema integrity across critical tables:
-   - `solution_requests`, `consultation_appointments`, `email_outbox`, `audit_logs`, `admin_users`
-   - `portal_auth_users`, `portal_sessions`, `client_profiles`, `billing_addresses`
-   - `orders`, `payments`, `invoices`, `credit_wallets`, `projects`, `project_attachments`, `approved_proposals`, `custom_package_inquiries`
-3. Verify RLS policies remain active (`SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public';`).
-4. Point a staging Railway instance at the restored database and confirm `GET /ready` returns `200 OK` and a test client login + signed file download succeeds.
-
----
-
-## 4. Application Rollback Plan
-
-### Frontend Rollback (GitHub Pages — `destriatech.com`)
-1. Revert the merge commit on `main` (or re-run the prior known-good `deploy-pages.yml` workflow artifact).
-2. Confirm `dist/CNAME` contains `destriatech.com` and run `npm run verify:routing:dist`.
-3. Verify `https://destriatech.com/`, `https://destriatech.com/portal/login`, and `https://destriatech.com/portal/documents` resolve with HTTP 200 and zero `/#/` redirects.
-
-### Backend Rollback (Railway — `api.destriatech.com`)
-1. Trigger instant Railway deployment rollback to the previous verified release container.
-2. Because Migration `003` is strictly additive (new columns have safe defaults/nullability and new tables are non-breaking), rolling back the Node.js application container does **not** require destructive database down-migrations.
-3. Verify `GET https://api.destriatech.com/healthz` and `GET https://api.destriatech.com/ready` return `200 OK`.
-4. Review structured logs (`x-request-id`) for 15 minutes post-rollback before declaring incident closure.
+## 4. Restoration Verification Checklist
+1. Restore PostgreSQL snapshot to an isolated staging branch/instance first.
+2. Verify schema presence (`notification_webhook_events`, `portal_payment_refunds`, RPC `claim_retryable_notifications`).
+3. Confirm `GET /ready` returns `200` and `GET /api/admin/system-health` reports `database: HEALTHY` and `portalPersistence: HEALTHY`.
+4. Verify no duplicate emails are dispatched for already `delivered` or `provider_accepted` outbox records.

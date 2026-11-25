@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import express, { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -39,6 +40,7 @@ function resolveDistDirectory(): string | null {
 
 async function startServer() {
   const { app, db, emailService } = createApp();
+  const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
@@ -76,24 +78,67 @@ async function startServer() {
     }
   }
 
-  // Periodic background email outbox retry worker (only when both DB & email provider are configured)
+  // Periodic background email outbox retry worker with atomic lease claiming
+  let retryTimer: ReturnType<typeof setInterval> | null = null;
   if (db.isConfigured && emailService.isConfigured()) {
-    const timer = setInterval(() => {
-      void emailService.processRetryQueue(15).catch((err) => {
-        logStructured('warn', 'outbox_retry_worker_error', { error: err?.message });
+    retryTimer = setInterval(() => {
+      void emailService.processRetryQueue(15, undefined, workerId, 120).catch((err) => {
+        logStructured('warn', 'outbox_retry_worker_error', {
+          workerId,
+          error: err?.message,
+        });
       });
     }, 60_000);
-    timer.unref();
+    retryTimer.unref();
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     logStructured('info', 'server_started', {
       port: PORT,
+      workerId,
       environment: process.env.NODE_ENV || 'development',
       databaseConfigured: db.isConfigured,
       emailConfigured: emailService.isConfigured(),
     });
   });
+
+  // Harden HTTP server socket & header timeouts against slowloris / hung upstream connections
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 15_000;
+  server.keepAliveTimeout = 65_000;
+
+  let isShuttingDown = false;
+  const gracefulShutdown = (signal: NodeJS.Signals) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    logStructured('info', 'server_shutdown_initiated', { signal, workerId });
+    if (retryTimer) {
+      clearInterval(retryTimer);
+      retryTimer = null;
+    }
+    const forceExitTimer = setTimeout(() => {
+      logStructured('warn', 'server_shutdown_forced_exit', { signal, workerId });
+      process.exit(1);
+    }, 10_000);
+    forceExitTimer.unref();
+
+    server.close((closeErr) => {
+      clearTimeout(forceExitTimer);
+      if (closeErr) {
+        logStructured('error', 'server_shutdown_error', {
+          signal,
+          workerId,
+          error: closeErr.message,
+        });
+        process.exit(1);
+      }
+      logStructured('info', 'server_shutdown_completed', { signal, workerId });
+      process.exit(0);
+    });
+  };
+
+  process.once('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.once('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 // Guard auto-start when imported by unit tests

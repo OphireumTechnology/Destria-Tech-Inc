@@ -7,7 +7,13 @@ import {
   ClientActivityLogRecord,
   ClientAddressRecord,
   CustomPackageInquiryRecord,
+  FileScanStatus,
   NotificationRecord,
+  OrderRecord,
+  PaymentProviderId,
+  PaymentRecord,
+  PaymentRefundRecord,
+  PaymentStatus,
   PortalCurrency,
   PortalProfileRecord,
   PortalRepository,
@@ -1317,6 +1323,270 @@ export class SupabasePortalRepository extends LocalPortalRepository {
       detail: String(data.detail || input.detail),
       relatedPath: data.related_path || undefined,
       createdAt: String(data.created_at),
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Enterprise Payment Lifecycle, Refunds & Quarantine Controls (Migration 005)
+  // -------------------------------------------------------------------------
+  public override async getPaymentByIdInternal(paymentId: string): Promise<PaymentRecord | null> {
+    const { data, error } = await this.client
+      .from('payments')
+      .select('*')
+      .eq('id', paymentId)
+      .maybeSingle();
+    this.assertDbOk(error, 'getPaymentByIdInternal');
+    if (!data) return null;
+    return {
+      id: String(data.id),
+      orderId: String(data.order_id),
+      orderNumber: String(data.order_number || ''),
+      userId: String(data.user_id),
+      provider: data.provider as PaymentProviderId,
+      environment: (data.environment || 'sandbox') as 'disabled' | 'sandbox' | 'live',
+      amountMinor: Number(data.amount_minor),
+      currency: data.currency as PortalCurrency,
+      status: data.status as PaymentStatus,
+      providerTransactionId: data.provider_transaction_id || undefined,
+      checkoutUrl: data.checkout_url || undefined,
+      idempotencyKey: String(data.idempotency_key || ''),
+      failureReason: data.failure_reason || undefined,
+      refundedMinor: Number(data.refunded_minor || 0),
+      createdAt: String(data.created_at),
+      updatedAt: String(data.updated_at || data.created_at),
+    };
+  }
+
+  public override async updatePaymentInitiation(
+    paymentId: string,
+    patch: {
+      providerTransactionId?: string;
+      checkoutUrl?: string;
+      environment: 'disabled' | 'sandbox' | 'live';
+      status?: PaymentStatus;
+      failureReason?: string;
+    }
+  ): Promise<PaymentRecord | null> {
+    const updatePayload: Record<string, unknown> = {
+      environment: patch.environment,
+      updated_at: new Date().toISOString(),
+    };
+    if (patch.providerTransactionId) updatePayload.provider_transaction_id = patch.providerTransactionId;
+    if (patch.checkoutUrl !== undefined) updatePayload.checkout_url = patch.checkoutUrl;
+    if (patch.status) updatePayload.status = patch.status;
+    if (patch.failureReason !== undefined) updatePayload.failure_reason = patch.failureReason;
+
+    const { data, error } = await this.client
+      .from('payments')
+      .update(updatePayload)
+      .eq('id', paymentId)
+      .select('*')
+      .maybeSingle();
+    this.assertDbOk(error, 'updatePaymentInitiation');
+    if (!data) return null;
+    return this.getPaymentByIdInternal(paymentId);
+  }
+
+  public override async recordAuthorizedRefund(input: {
+    paymentId: string;
+    orderId: string;
+    provider: PaymentProviderId;
+    providerTransactionId?: string;
+    providerRefundId?: string;
+    amountMinor: number;
+    currency: PortalCurrency;
+    reason: string;
+    status: 'pending' | 'succeeded' | 'failed';
+    idempotencyKey: string;
+    requestedBy: string;
+    approvedBy?: string;
+  }): Promise<{
+    refund: PaymentRefundRecord;
+    payment?: PaymentRecord;
+    order?: OrderRecord;
+    deduplicated: boolean;
+  }> {
+    if (!Number.isInteger(input.amountMinor) || input.amountMinor <= 0) {
+      throw new Error('Refund amountMinor must be a positive integer in minor currency units.');
+    }
+
+    const mapRefund = (row: any): PaymentRefundRecord => ({
+      id: String(row.id),
+      paymentId: String(row.payment_id),
+      orderId: String(row.order_id),
+      provider: row.provider as PaymentProviderId,
+      providerTransactionId: row.provider_transaction_id || undefined,
+      providerRefundId: row.provider_refund_id || undefined,
+      amountMinor: Number(row.amount_minor),
+      currency: row.currency as PortalCurrency,
+      reason: String(row.reason),
+      status: row.status as 'pending' | 'succeeded' | 'failed',
+      idempotencyKey: String(row.idempotency_key),
+      requestedBy: String(row.requested_by),
+      approvedBy: row.approved_by || undefined,
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at || row.created_at),
+    });
+
+    const payment = await this.getPaymentByIdInternal(input.paymentId);
+    if (!payment) {
+      throw new Error('Payment record not found.');
+    }
+
+    const remaining = payment.amountMinor - (payment.refundedMinor || 0);
+    if (input.status !== 'failed' && input.amountMinor > remaining) {
+      throw new Error(
+        `Requested refund (${input.amountMinor}) exceeds remaining refundable minor units (${remaining}).`
+      );
+    }
+
+    const { data, error } = await this.client
+      .from('portal_payment_refunds')
+      .insert({
+        payment_id: input.paymentId,
+        order_id: input.orderId,
+        provider: input.provider,
+        provider_transaction_id: input.providerTransactionId || null,
+        provider_refund_id: input.providerRefundId || null,
+        amount_minor: input.amountMinor,
+        currency: input.currency,
+        reason: input.reason.trim(),
+        status: input.status,
+        idempotency_key: input.idempotencyKey,
+        requested_by: input.requestedBy,
+        approved_by: input.approvedBy || null,
+      })
+      .select('*')
+      .single();
+
+    if (error && (error as any).code === '23505') {
+      const { data: existing, error: fetchErr } = await this.client
+        .from('portal_payment_refunds')
+        .select('*')
+        .eq('idempotency_key', input.idempotencyKey)
+        .maybeSingle();
+      this.assertDbOk(fetchErr, 'recordAuthorizedRefund.dedupeFetch');
+      if (existing) {
+        return {
+          refund: mapRefund(existing),
+          payment,
+          order: (await this.getOrderByIdInternal(input.orderId)) || undefined,
+          deduplicated: true,
+        };
+      }
+    }
+    this.assertDbOk(error, 'recordAuthorizedRefund.insert');
+
+    let updatedPayment = payment;
+    if (input.status === 'succeeded') {
+      const nextRefundedMinor = Math.min(
+        payment.amountMinor,
+        (payment.refundedMinor || 0) + input.amountMinor
+      );
+      const nextStatus: PaymentStatus =
+        nextRefundedMinor >= payment.amountMinor ? 'refunded' : 'partially_refunded';
+      const nowIso = new Date().toISOString();
+      const { error: payErr } = await this.client
+        .from('payments')
+        .update({
+          refunded_minor: nextRefundedMinor,
+          status: nextStatus,
+          updated_at: nowIso,
+        })
+        .eq('id', input.paymentId);
+      this.assertDbOk(payErr, 'recordAuthorizedRefund.updatePayment');
+
+      const orderPatch: Record<string, unknown> = {
+        payment_status: nextStatus,
+        updated_at: nowIso,
+      };
+      if (nextStatus === 'refunded') {
+        orderPatch.fulfillment_status = 'cancelled';
+      }
+      const { error: ordErr } = await this.client
+        .from('orders')
+        .update(orderPatch)
+        .eq('id', input.orderId);
+      this.assertDbOk(ordErr, 'recordAuthorizedRefund.updateOrder');
+
+      const refreshed = await this.getPaymentByIdInternal(input.paymentId);
+      if (refreshed) updatedPayment = refreshed;
+    }
+
+    return {
+      refund: mapRefund(data),
+      payment: updatedPayment,
+      order: (await this.getOrderByIdInternal(input.orderId)) || undefined,
+      deduplicated: false,
+    };
+  }
+
+  public override async listRefundsByPaymentId(paymentId: string): Promise<PaymentRefundRecord[]> {
+    const { data, error } = await this.client
+      .from('portal_payment_refunds')
+      .select('*')
+      .eq('payment_id', paymentId)
+      .order('created_at', { ascending: false });
+    this.assertDbOk(error, 'listRefundsByPaymentId');
+    return (data || []).map((row: any) => ({
+      id: String(row.id),
+      paymentId: String(row.payment_id),
+      orderId: String(row.order_id),
+      provider: row.provider as PaymentProviderId,
+      providerTransactionId: row.provider_transaction_id || undefined,
+      providerRefundId: row.provider_refund_id || undefined,
+      amountMinor: Number(row.amount_minor),
+      currency: row.currency as PortalCurrency,
+      reason: String(row.reason),
+      status: row.status as 'pending' | 'succeeded' | 'failed',
+      idempotencyKey: String(row.idempotency_key),
+      requestedBy: String(row.requested_by),
+      approvedBy: row.approved_by || undefined,
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at || row.created_at),
+    }));
+  }
+
+  public override async updateAttachmentScanStatus(
+    fileId: string,
+    scanStatus: FileScanStatus,
+    quarantineReason?: string
+  ): Promise<ProjectAttachmentRecord | null> {
+    const { data, error } = await this.client
+      .from('project_attachments')
+      .update({
+        scan_status: scanStatus,
+        quarantine_reason:
+          scanStatus === 'clean'
+            ? null
+            : quarantineReason ||
+              (scanStatus === 'flagged'
+                ? 'Flagged by security screening.'
+                : 'Pending security screening.'),
+      })
+      .eq('id', fileId)
+      .select('*')
+      .maybeSingle();
+    this.assertDbOk(error, 'updateAttachmentScanStatus');
+    if (!data) return null;
+    return {
+      id: String(data.id),
+      userId: String(data.user_id),
+      projectId: data.project_id || undefined,
+      orderId: data.order_id || undefined,
+      ticketId: data.ticket_id || undefined,
+      fileName: String(data.file_name),
+      storedFileName: String(data.stored_file_name),
+      mimeType: String(data.mime_type),
+      extension: String(data.extension),
+      sizeBytes: Number(data.size_bytes),
+      category: data.category,
+      version: Number(data.version || 1),
+      uploadedByRole: data.uploaded_by_role || 'client',
+      scanStatus: (data.scan_status || 'quarantined_unscanned') as FileScanStatus,
+      quarantineReason: data.quarantine_reason || undefined,
+      contentSha256: data.content_sha256 || undefined,
+      uploadedAt: String(data.uploaded_at || data.created_at),
     };
   }
 }
