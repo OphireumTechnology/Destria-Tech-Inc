@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { GlobalDigitalGlobe } from './animations/GlobalDigitalGlobe';
 import {
-  COMPANY_CONFIG,
   corporateIdentity,
   CORPORATE_SERVICE_STATEMENT,
   COMMERCIAL_ENGAGEMENT_STATEMENT,
@@ -38,7 +37,6 @@ interface AboutSectionProps {
 }
 
 export const AboutSection: React.FC<AboutSectionProps> = ({ onOpenPortal }) => {
-  const [showBrandBoardModal, setShowBrandBoardModal] = useState(false);
   const [showCorporateProfileModal, setShowCorporateProfileModal] = useState(false);
 
   return (
@@ -432,40 +430,6 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onOpenPortal }) => {
           </div>
         </div>
 
-        {/* Official Destria Brand Identity Board Reference Banner */}
-        <div className="mt-10 rounded-2xl bg-gradient-to-r from-[#0B1F3B] via-[#111827] to-[#0B1F3B] border border-slate-700/80 p-6 sm:p-8 flex flex-col lg:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="relative w-20 h-14 rounded-xl overflow-hidden border border-slate-700 shrink-0 bg-[#0B1F3B]">
-              <img
-                src={COMPANY_CONFIG.brandBoardUrl}
-                alt="DESTRIA TECH INC Official Brand Identity Board"
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-            </div>
-            <div>
-              <span className="text-xs font-mono text-[#D4AF37] uppercase">
-                Official Brand Identity Board &amp; Color System
-              </span>
-              <h4 className="text-base font-bold text-white mt-0.5">
-                Graphite #111827 · Technology Cyan #00C2C7 · Silver Gray #F3F4F6 · Gold #D4AF37 · Deep Navy #0B1F3B
-              </h4>
-              <p className="text-xs text-slate-400 mt-1">
-                Approved visual identity standard governing all {corporateIdentity.legalName} digital
-                products, portals, documentation, and corporate communications.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setShowBrandBoardModal(true)}
-            className="px-4 py-2 text-xs font-semibold text-slate-200 hover:text-white border border-slate-600 hover:border-[#00C2C7] rounded-lg transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
-          >
-            <Eye className="w-3.5 h-3.5 text-[#00C2C7]" />
-            <span>Inspect Brand Board</span>
-          </button>
-        </div>
-
         {/* Corporate Governance Standards */}
         <div className="mt-14">
           <div className="max-w-2xl mb-8">
@@ -522,36 +486,6 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onOpenPortal }) => {
           </div>
         </div>
       </div>
-
-      {/* Official Destria Tech Inc Brand Identity Board Modal */}
-      {showBrandBoardModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-          <div className="relative max-w-4xl w-full max-h-[90vh] bg-[#111827] border border-slate-700 rounded-2xl overflow-hidden flex flex-col shadow-2xl">
-            <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-white">DESTRIA TECH INC — Official Brand Identity Board</h3>
-                <p className="text-xs text-slate-400">
-                  Official visual reference asset for emblem usage, color system, and corporate typography
-                </p>
-              </div>
-              <button
-                onClick={() => setShowBrandBoardModal(false)}
-                className="px-3 py-1 text-xs font-semibold text-slate-300 hover:text-white border border-slate-700 rounded-md cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-            <div className="p-4 sm:p-6 overflow-auto flex items-center justify-center bg-[#0B1F3B]">
-              <img
-                src={COMPANY_CONFIG.brandBoardUrl}
-                alt="DESTRIA TECH INC Official Brand Identity Board"
-                className="w-full max-h-[70vh] object-contain rounded-lg border border-slate-800"
-                loading="lazy"
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Official Destria Tech Inc Corporate Profile PDF Viewer Modal */}
       {showCorporateProfileModal && (
