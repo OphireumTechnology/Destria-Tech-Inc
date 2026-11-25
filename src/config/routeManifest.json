@@ -47,6 +47,7 @@
     "/portal/payments",
     "/portal/files",
     "/portal/deliverables",
+    "/portal/documents",
     "/portal/support",
     "/portal/notifications",
     "/portal/profile",

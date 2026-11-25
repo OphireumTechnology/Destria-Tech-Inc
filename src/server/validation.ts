@@ -39,6 +39,7 @@ export interface ValidatedAppointmentPayload {
   phone: string;
   companyName: string;
   briefReferenceCode?: string;
+  executivePathway: 'ceo' | 'cto' | 'advisory';
   consultationType: 'video' | 'phone' | 'in_person';
   scheduledDate: string;
   scheduledTimeSlot: string;
@@ -50,6 +51,7 @@ export interface ValidatedAppointmentPayload {
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const ALLOWED_CONSULTATION_TYPES = new Set(['video', 'phone', 'in_person']);
+const ALLOWED_EXECUTIVE_PATHWAYS = new Set(['ceo', 'cto', 'advisory']);
 
 export function sanitizeText(value: unknown, maxLen: number): string {
   if (typeof value !== 'string') return '';
@@ -313,6 +315,7 @@ export function validateAppointmentPayload(raw: unknown): {
   const phone = sanitizeText(body.phone, 40);
   const companyName = sanitizeText(body.companyName, 160) || 'Enterprise Client';
   const briefReferenceCode = sanitizeText(body.briefReferenceCode, 60) || undefined;
+  const executivePathwayRaw = sanitizeText(body.executivePathway, 20).toLowerCase() || 'advisory';
   const consultationTypeRaw = sanitizeText(body.consultationType, 30);
   const scheduledDate = sanitizeText(body.scheduledDate, 20);
   const scheduledTimeSlot = sanitizeText(body.scheduledTimeSlot, 40);
@@ -323,6 +326,10 @@ export function validateAppointmentPayload(raw: unknown): {
   if (fullName.length < 2) errors.push('Full name is required.');
   if (!isValidEmail(email)) errors.push('A valid email address is required.');
   if (phone.length < 7) errors.push('A valid phone number is required.');
+
+  if (!ALLOWED_EXECUTIVE_PATHWAYS.has(executivePathwayRaw)) {
+    errors.push('Executive consultation pathway must be one of: ceo, cto, advisory.');
+  }
 
   if (!ALLOWED_CONSULTATION_TYPES.has(consultationTypeRaw)) {
     errors.push('Consultation type must be one of: video, phone, in_person.');
@@ -360,6 +367,7 @@ export function validateAppointmentPayload(raw: unknown): {
       phone,
       companyName,
       briefReferenceCode,
+      executivePathway: executivePathwayRaw as 'ceo' | 'cto' | 'advisory',
       consultationType: consultationTypeRaw as 'video' | 'phone' | 'in_person',
       scheduledDate,
       scheduledTimeSlot,

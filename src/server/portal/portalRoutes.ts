@@ -24,6 +24,7 @@ import {
   enforceCommercialPolicyOnOutput,
 } from '../aiCommercialPolicy';
 import { ROUTES, buildOrderDetailRoute } from '../../config/routes';
+import type { TransactionalEmailService } from '../services/emailService';
 
 function sanitizeProductForPublicCatalog(product: ProductRecord) {
   return {
@@ -111,6 +112,90 @@ const PAYMENT_PROVIDERS: PaymentProviderId[] = [
 ];
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB per file in JSON base64 payload
+
+/**
+ * Server-side magic-byte signature verification.
+ * Rejects spoofed executables/scripts (PE MZ, ELF, Mach-O, shebang, PHP/HTML script tags)
+ * and verifies file content headers match the declared extension.
+ */
+export function validateUploadedFileSignature(
+  ext: string,
+  buffer: Buffer
+): { ok: true } | { ok: false; reason: string } {
+  if (buffer.length < 4) {
+    return { ok: false, reason: 'Uploaded file is too small or corrupted.' };
+  }
+
+  // Reject executable & script payloads regardless of extension
+  const startsWithMz = buffer[0] === 0x4d && buffer[1] === 0x5a; // Windows PE/EXE/DLL
+  const startsWithElf =
+    buffer[0] === 0x7f && buffer[1] === 0x45 && buffer[2] === 0x4c && buffer[3] === 0x46; // Linux ELF
+  const startsWithShebang = buffer[0] === 0x23 && buffer[1] === 0x21; // #! script
+  const headText = buffer.subarray(0, Math.min(buffer.length, 256)).toString('utf8').trimStart().toLowerCase();
+  const containsDangerousMarkup =
+    headText.startsWith('<!doctype html') ||
+    headText.startsWith('<html') ||
+    headText.startsWith('<script') ||
+    headText.startsWith('<?php') ||
+    headText.startsWith('<svg');
+
+  if (startsWithMz || startsWithElf || startsWithShebang || containsDangerousMarkup) {
+    return {
+      ok: false,
+      reason: 'File rejected: executable binary or active script content is prohibited.',
+    };
+  }
+
+  switch (ext) {
+    case 'pdf':
+      if (buffer.subarray(0, 5).toString('ascii') === '%PDF-') return { ok: true };
+      return { ok: false, reason: 'File signature does not match PDF format (%PDF-).' };
+    case 'png':
+      if (
+        buffer.length >= 8 &&
+        buffer[0] === 0x89 &&
+        buffer[1] === 0x50 &&
+        buffer[2] === 0x4e &&
+        buffer[3] === 0x47 &&
+        buffer[4] === 0x0d &&
+        buffer[5] === 0x0a &&
+        buffer[6] === 0x1a &&
+        buffer[7] === 0x0a
+      ) {
+        return { ok: true };
+      }
+      return { ok: false, reason: 'File signature does not match PNG format.' };
+    case 'jpg':
+    case 'jpeg':
+      if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return { ok: true };
+      return { ok: false, reason: 'File signature does not match JPEG format.' };
+    case 'webp':
+      if (
+        buffer.length >= 12 &&
+        buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+        buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+      ) {
+        return { ok: true };
+      }
+      return { ok: false, reason: 'File signature does not match WEBP format.' };
+    case 'zip':
+    case 'docx':
+    case 'xlsx':
+    case 'pptx':
+      if (buffer[0] === 0x50 && buffer[1] === 0x4b && (buffer[2] === 0x03 || buffer[2] === 0x05 || buffer[2] === 0x07)) {
+        return { ok: true };
+      }
+      return { ok: false, reason: `File signature does not match OOXML/ZIP archive format (.${ext}).` };
+    case 'mp4':
+    case 'mov':
+      if (buffer.length >= 8 && buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
+        return { ok: true };
+      }
+      return { ok: false, reason: `File signature does not match ISO media container (.${ext}).` };
+    default:
+      return { ok: false, reason: `Unsupported file extension (.${ext}).` };
+  }
+}
 
 function sha256Hex(value: string): string {
   return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
@@ -208,10 +293,27 @@ export function createPortalRouter(options: {
   repo: PortalRepository;
   paymentRegistry?: PaymentGatewayRegistry;
   signingSecret?: string;
+  emailService?: TransactionalEmailService;
 }): Router {
   const router = Router();
   const repo = options.repo;
+  const emailService = options.emailService;
   const paymentRegistry = options.paymentRegistry || new PaymentGatewayRegistry();
+
+  // Fail closed when durable production persistence is unconfigured
+  router.use((_req: Request, res: Response, next: NextFunction) => {
+    if (repo.mode === 'unconfigured') {
+      res.status(503).json({
+        success: false,
+        code: 'DATABASE_UNAVAILABLE',
+        error:
+          'Client Portal durable persistence is not configured on this server. Production in-memory fallback is disabled.',
+      });
+      return;
+    }
+    next();
+  });
+
   const configuredSigningSecret = (
     options.signingSecret ||
     process.env.PORTAL_SIGNING_SECRET ||
@@ -474,7 +576,21 @@ export function createPortalRouter(options: {
     });
 
     setPortalSessionCookie(res, rawSessionToken);
-    logStructured('info', 'portal_client_registered', { userId: user.id, mode: repo.mode });
+
+    const emailDispatch = emailService
+      ? await emailService.sendPortalVerificationEmail({
+          to: user.email,
+          fullName: profile.fullName || firstName,
+          verificationToken,
+          correlationId: (req as any).correlationId,
+        })
+      : { deliveryStatus: 'unconfigured' as const, provider: 'resend' };
+
+    logStructured('info', 'portal_client_registered', {
+      userId: user.id,
+      mode: repo.mode,
+      emailDeliveryStatus: emailDispatch.deliveryStatus,
+    });
 
     res.status(201).json({
       success: true,
@@ -486,8 +602,11 @@ export function createPortalRouter(options: {
         accountStatus: user.accountStatus,
       },
       profile,
+      emailDelivery: emailDispatch,
       verificationNotice:
-        'Account created. Please verify your email address using the verification link sent to your inbox.',
+        emailDispatch.deliveryStatus === 'provider_accepted'
+          ? 'Account created. Verification email has been accepted by our mail provider for delivery.'
+          : 'Account created. Transactional email delivery is currently unconfigured or deferred; please use the verification screen or contact support.',
       ...(isDevHelperEnabled ? { devVerificationToken: verificationToken } : {}),
     });
   });
@@ -567,9 +686,23 @@ export function createPortalRouter(options: {
     const token = crypto.randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     await repo.setVerificationToken(user.id, sha256Hex(token), expiresAt);
+    const profile = await repo.getProfile(user.id);
+    const emailDispatch = emailService
+      ? await emailService.sendPortalVerificationEmail({
+          to: user.email,
+          fullName: profile?.fullName || user.email.split('@')[0],
+          verificationToken: token,
+          correlationId: (req as any).correlationId,
+        })
+      : { deliveryStatus: 'unconfigured' as const, provider: 'resend' };
+
     res.status(200).json({
       success: true,
-      message: 'A new verification link has been issued.',
+      emailDelivery: emailDispatch,
+      message:
+        emailDispatch.deliveryStatus === 'provider_accepted'
+          ? 'A new verification email has been accepted for delivery.'
+          : 'A new verification code was generated, but transactional email delivery is currently unavailable on this server.',
       ...(isDevHelperEnabled ? { devVerificationToken: token } : {}),
     });
   });
@@ -587,15 +720,38 @@ export function createPortalRouter(options: {
     }
     const user = await repo.findUserByEmail(email);
     let devResetToken: string | undefined;
+    let deliveryStatus:
+      | 'request_accepted'
+      | 'provider_accepted'
+      | 'failed'
+      | 'unconfigured' = 'request_accepted';
     if (user) {
       const token = crypto.randomBytes(24).toString('hex');
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       await repo.setResetToken(user.id, sha256Hex(token), expiresAt);
       devResetToken = token;
+      const profile = await repo.getProfile(user.id);
+      if (emailService) {
+        const dispatch = await emailService.sendPortalPasswordRecoveryEmail({
+          to: user.email,
+          fullName: profile?.fullName || user.email.split('@')[0],
+          resetToken: token,
+          correlationId: (req as any).correlationId,
+        });
+        deliveryStatus =
+          dispatch.deliveryStatus === 'provider_accepted' ||
+          dispatch.deliveryStatus === 'failed' ||
+          dispatch.deliveryStatus === 'unconfigured'
+            ? dispatch.deliveryStatus
+            : 'request_accepted';
+      } else {
+        deliveryStatus = 'unconfigured';
+      }
     }
-    // Uniform response to prevent account enumeration
+    // Uniform anti-enumeration response regardless of whether account exists
     res.status(200).json({
       success: true,
+      deliveryState: isProd ? 'request_accepted' : deliveryStatus,
       message: 'If an account matches that email, password recovery instructions have been issued.',
       ...(isDevHelperEnabled && devResetToken ? { devResetToken } : {}),
     });
@@ -612,6 +768,17 @@ export function createPortalRouter(options: {
     if (!user) {
       res.status(400).json({ success: false, error: 'Reset token is invalid or has expired.' });
       return;
+    }
+    if (emailService) {
+      const profile = await repo.getProfile(user.id);
+      await emailService.sendPortalSecurityAlertEmail({
+        to: user.email,
+        fullName: profile?.fullName || user.email.split('@')[0],
+        eventTitle: 'Your Client Portal Password Was Reset',
+        eventDetails:
+          'Your DESTRIA TECH INC Client Portal password was reset via a single-use recovery token and all prior active sessions were revoked.',
+        correlationId: (req as any).correlationId,
+      });
     }
     res.status(200).json({ success: true, message: 'Password updated. All previous sessions have been revoked. Please sign in.' });
   });
@@ -1488,6 +1655,23 @@ export function createPortalRouter(options: {
       return;
     }
 
+    const signatureCheck = validateUploadedFileSignature(ext, buffer);
+    if (signatureCheck.ok === false) {
+      logStructured('warn', 'portal_file_upload_signature_rejected', {
+        userId,
+        fileName: baseName,
+        extension: ext,
+        reason: signatureCheck.reason,
+      });
+      res.status(400).json({
+        success: false,
+        code: 'INVALID_FILE_SIGNATURE',
+        error: signatureCheck.reason,
+      });
+      return;
+    }
+
+    const contentSha256 = crypto.createHash('sha256').update(buffer).digest('hex');
     const existingFiles = await repo.listAttachments(userId, projectId);
     const priorVersions = existingFiles.filter((f) => f.fileName.toLowerCase() === baseName.toLowerCase()).length;
     const storedFileName = `${userId}_${crypto.randomUUID()}.${ext}`;
@@ -1504,6 +1688,10 @@ export function createPortalRouter(options: {
         category,
         version: priorVersions + 1,
         uploadedByRole: 'client',
+        scanStatus: 'quarantined_unscanned',
+        quarantineReason:
+          'Automated antivirus/malware scanner is not integrated in this runtime; file signature verified and stored in private isolated vault.',
+        contentSha256,
       },
       buffer
     );
@@ -1526,12 +1714,21 @@ export function createPortalRouter(options: {
       res.status(404).json({ success: false, error: 'File not found or access denied.' });
       return;
     }
+    if (found.record.scanStatus === 'flagged') {
+      res.status(403).json({
+        success: false,
+        code: 'FILE_QUARANTINED',
+        error: 'This file has been flagged by security screening and cannot be downloaded.',
+      });
+      return;
+    }
     const exp = Math.floor(Date.now() / 1000) + 300; // 5-minute signed link
     const sig = signDownloadUrlToken(fileId, userId, exp);
     res.status(200).json({
       success: true,
       downloadUrl: `/api/portal/files/download/${encodeURIComponent(fileId)}?uid=${encodeURIComponent(userId)}&exp=${exp}&sig=${sig}`,
       expiresAt: new Date(exp * 1000).toISOString(),
+      scanStatus: found.record.scanStatus || 'quarantined_unscanned',
     });
   });
 
@@ -1752,6 +1949,17 @@ export function createPortalRouter(options: {
     if (req.portalSessionTokenHash) {
       await repo.revokeOtherUserSessions(user.id, req.portalSessionTokenHash);
     }
+    if (emailService) {
+      const profile = await repo.getProfile(user.id);
+      await emailService.sendPortalSecurityAlertEmail({
+        to: user.email,
+        fullName: profile?.fullName || user.email.split('@')[0],
+        eventTitle: 'Client Portal Password Updated',
+        eventDetails:
+          'Your Client Portal password was changed from Security Settings and all other active sessions were signed out.',
+        correlationId: (req as any).correlationId,
+      });
+    }
     res.status(200).json({
       success: true,
       message: 'Password updated successfully. All other active sessions have been signed out.',
@@ -1778,9 +1986,22 @@ export function createPortalRouter(options: {
     const token = crypto.randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     await repo.requestEmailChange(user.id, newEmail, sha256Hex(token), expiresAt);
+    const profile = await repo.getProfile(user.id);
+    const emailDispatch = emailService
+      ? await emailService.sendPortalEmailChangeEmail({
+          to: newEmail,
+          fullName: profile?.fullName || user.email.split('@')[0],
+          confirmationToken: token,
+          correlationId: (req as any).correlationId,
+        })
+      : { deliveryStatus: 'unconfigured' as const, provider: 'resend' };
     res.status(200).json({
       success: true,
-      message: 'Verification code issued to confirm your new email address.',
+      emailDelivery: emailDispatch,
+      message:
+        emailDispatch.deliveryStatus === 'provider_accepted'
+          ? 'Verification email accepted for delivery to confirm your new email address.'
+          : 'Verification code issued to confirm your new email address.',
       ...(isDevHelperEnabled ? { devEmailChangeToken: token } : {}),
     });
   });

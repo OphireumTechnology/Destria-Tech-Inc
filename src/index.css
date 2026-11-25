@@ -15,6 +15,15 @@
     --destria-tech-blue: #0EA5E9;
     --destria-emerald-teal: #10B981;
     --destria-white: #FFFFFF;
+    /* Coordinated floating UI layer contract */
+    --destria-z-sticky-bar: 35;
+    --destria-z-floating-widget: 40;
+    --destria-z-header: 50;
+    --destria-z-modal: 60;
+  }
+
+  html, body {
+    overflow-x: clip;
   }
 
   body {

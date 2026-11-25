@@ -133,7 +133,7 @@ function createEmptyState(): PortalStoreState {
 }
 
 export class LocalPortalRepository implements PortalRepository {
-  public readonly mode = 'local_dev' as const;
+  public readonly mode: PortalRepository['mode'] = 'local_dev';
   private state: PortalStoreState;
   private readonly persistDir: string | null;
   private readonly filesDir: string | null;

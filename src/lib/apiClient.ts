@@ -1,97 +1,104 @@
-export const PRODUCTION_RAILWAY_API_URL = 'https://api.ophireummultimedia.com';
+export const PRODUCTION_RAILWAY_API_URL = 'https://api.destriatech.com';
 
-const GITHUB_PAGES_HOSTNAMES = new Set([
+const STATIC_FRONTEND_HOSTNAMES = new Set([
   'destriatech.com',
   'www.destriatech.com',
-  'ophireummultimedia.com',
-  'www.ophireummultimedia.com',
   'ophireumtechnology.github.io',
 ]);
 
+/**
+ * Sanitizes and normalizes an API base URL (removes trailing slashes, rejects non-http(s) schemes).
+ */
 export function normalizeApiBaseUrl(raw?: string | null): string {
-  if (typeof raw !== 'string') return '';
-  const trimmed = raw.trim().replace(/\/+$/, '');
+  const trimmed = (raw || '').trim();
   if (!trimmed) return '';
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-      return '';
-    }
-    return parsed.origin + (parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, ''));
-  } catch {
-    return '';
-  }
+  if (!/^https?:\/\//i.test(trimmed)) return '';
+  return trimmed.replace(/\/+$/, '');
 }
 
+/**
+ * Resolves the API base URL for browser and test environments:
+ * 1. Explicit VITE_API_BASE_URL build-time override always wins.
+ * 2. Local development (localhost / 127.0.0.1) uses relative `/api/*` against local Express + Vite server.
+ * 3. Static GitHub Pages origins automatically target the dedicated DESTRIA TECH INC backend API.
+ * 4. Same-origin deployments (e.g., running directly on Railway or AI Studio preview) use relative `/api/*`.
+ */
 export function resolveApiBaseUrl(options?: {
   envBaseUrl?: string;
   hostname?: string;
-  isProd?: boolean;
 }): string {
-  const envVal =
+  const envUrl = normalizeApiBaseUrl(
     options?.envBaseUrl !== undefined
       ? options.envBaseUrl
-      : typeof import.meta !== 'undefined' && import.meta.env
-      ? (import.meta.env.VITE_API_BASE_URL as string | undefined)
-      : undefined;
+      : (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL
+  );
+  if (envUrl) return envUrl;
 
-  const normalizedEnv = normalizeApiBaseUrl(envVal);
-  if (normalizedEnv) {
-    return normalizedEnv;
+  const host = (
+    options?.hostname !== undefined
+      ? options.hostname
+      : typeof window !== 'undefined'
+        ? window.location.hostname
+        : ''
+  )
+    .trim()
+    .toLowerCase();
+
+  if (!host || host === 'localhost' || host === '127.0.0.1') {
+    return '';
   }
 
-  const hostname =
-    options?.hostname !== undefined
-      ? options.hostname.toLowerCase()
-      : typeof window !== 'undefined' && window.location
-      ? window.location.hostname.toLowerCase()
-      : '';
-
-  // On GitHub Pages static origins without explicit override, target the Railway API domain
-  // instead of issuing relative /api/* requests against static GitHub Pages hosting.
-  if (hostname && GITHUB_PAGES_HOSTNAMES.has(hostname)) {
+  if (STATIC_FRONTEND_HOSTNAMES.has(host)) {
     return PRODUCTION_RAILWAY_API_URL;
   }
 
-  // Local development (localhost, 127.0.0.1) and unified full-stack Node previews (.run.app, .up.railway.app)
-  // use relative same-origin paths (/api/*).
   return '';
 }
 
-export function buildApiUrl(path: string, baseUrl: string): string {
+/**
+ * Builds an absolute or relative API endpoint URL safely.
+ */
+export function buildApiUrl(path: string, baseUrl?: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const cleanBase = normalizeApiBaseUrl(baseUrl);
-  return cleanBase ? `${cleanBase}${normalizedPath}` : normalizedPath;
+  const resolvedBase =
+    baseUrl !== undefined ? normalizeApiBaseUrl(baseUrl) : resolveApiBaseUrl();
+  return resolvedBase ? `${resolvedBase}${normalizedPath}` : normalizedPath;
 }
 
 export function apiUrl(path: string): string {
-  return buildApiUrl(path, resolveApiBaseUrl());
+  return buildApiUrl(path);
 }
 
-export function getBackendConnectionInfo(): {
-  baseUrl: string;
-  mode: 'explicit_env' | 'github_pages_railway' | 'same_origin';
-} {
-  const envRaw =
-    typeof import.meta !== 'undefined' && import.meta.env
-      ? normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL as string | undefined)
-      : '';
+/**
+ * Performs a fetch against the configured API origin with standardized JSON error handling and timeout.
+ */
+export async function apiFetchJson<T = unknown>(
+  path: string,
+  init?: RequestInit & { timeoutMs?: number }
+): Promise<{ ok: boolean; status: number; data: T }> {
+  const timeoutMs = init?.timeoutMs ?? 20_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (envRaw) {
-    return { baseUrl: envRaw, mode: 'explicit_env' };
+  try {
+    const response = await fetch(apiUrl(path), {
+      ...init,
+      signal: init?.signal || controller.signal,
+    });
+    const data = (await response.json().catch(() => ({}))) as T;
+    return {
+      ok: response.ok,
+      status: response.status,
+      data,
+    };
+  } finally {
+    clearTimeout(timer);
   }
-
-  const resolved = resolveApiBaseUrl();
-  if (resolved === PRODUCTION_RAILWAY_API_URL) {
-    return { baseUrl: resolved, mode: 'github_pages_railway' };
-  }
-
-  return { baseUrl: '', mode: 'same_origin' };
 }
 
-export function createIdempotencyKey(): string {
+export function createIdempotencyKey(prefix = 'dti'): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
+    return `${prefix}-${crypto.randomUUID()}`;
   }
-  return `opm-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }

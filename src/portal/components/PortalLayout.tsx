@@ -73,7 +73,7 @@ export const PortalLayout: React.FC<{
       items: [
         { label: 'Project Workspaces', path: ROUTES.PORTAL.PROJECTS, icon: FolderKanban, matchPrefixes: [ROUTES.PORTAL.PROJECTS] },
         { label: 'Corporate Communications', path: ROUTES.PORTAL.MESSAGES, icon: MessageSquare },
-        { label: 'Deliverables & Files', path: ROUTES.PORTAL.FILES, icon: FolderOpen, matchPrefixes: [ROUTES.PORTAL.DELIVERABLES] },
+        { label: 'Deliverables & Files', path: ROUTES.PORTAL.FILES, icon: FolderOpen, matchPrefixes: [ROUTES.PORTAL.DELIVERABLES, ROUTES.PORTAL.DOCUMENTS] },
       ],
     },
     {
@@ -238,7 +238,7 @@ export const PortalLayout: React.FC<{
   );
 
   return (
-    <div className="min-h-screen bg-[#FAF8F4] text-[#0F1D36] flex">
+    <div className="min-h-screen bg-[#FAF8F4] text-[#0F1D36] flex overflow-x-clip">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-[264px] shrink-0 sticky top-0 h-screen border-r border-[#0F1D36]">
         {renderSidebarContent()}
@@ -276,9 +276,9 @@ export const PortalLayout: React.FC<{
 
         {/* Top Header */}
         <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[#E6E2D8]">
-          <div className="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          <div className="px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
             {/* Left: Mobile trigger + Welcome */}
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               <button
                 onClick={() => setMobileNavOpen(true)}
                 className="lg:hidden p-2 rounded-lg border border-[#E6E2D8] text-[#0F1D36] hover:bg-[#FAF8F4] cursor-pointer"

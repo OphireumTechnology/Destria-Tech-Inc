@@ -17,12 +17,14 @@ export type VoiceState =
   | 'speaking'
   | 'error';
 export type VoiceLanguage = 'en-US' | 'fil-PH';
+export type VoiceEngineType = 'gemini_neural' | 'browser_fallback' | 'none';
 
 export interface VoiceEventCallbacks {
   onStatusChange?: (status: VoiceState) => void;
   onTranscript?: (text: string, isFinal: boolean) => void;
   onAiResponse?: (text: string, intent?: any) => void;
   onVolumeChange?: (volume: number) => void;
+  onVoiceEngineChange?: (engine: VoiceEngineType) => void;
   onAppointmentBooked?: (appointment: ConsultationAppointment) => void;
   onBookingRequested?: () => void;
   onError?: (errorMessage: string) => void;
@@ -31,10 +33,14 @@ export interface VoiceEventCallbacks {
 class AIVoiceService {
   private status: VoiceState = 'disconnected';
   private language: VoiceLanguage = 'en-US';
+  private activeVoiceEngine: VoiceEngineType = 'none';
   private callbacks: VoiceEventCallbacks = {};
 
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
+  private outputAudioContext: AudioContext | null = null;
+  private outputAnalyser: AnalyserNode | null = null;
+  private currentBufferSource: AudioBufferSourceNode | null = null;
   private mediaStream: MediaStream | null = null;
   private animationFrameId: number | null = null;
 
@@ -332,7 +338,7 @@ class AIVoiceService {
       }
     };
 
-    // 1. Attempt server-side natural female Gemini TTS (Kore voice)
+    // 1. Attempt server-side natural female Gemini Neural TTS (Kore voice)
     try {
       const ttsRes = await fetch(apiUrl('/api/voice/speak'), {
         method: 'POST',
@@ -342,6 +348,15 @@ class AIVoiceService {
       if (ttsRes.ok) {
         const ttsData = await ttsRes.json();
         if (ttsData.success && ttsData.audioBase64 && !this.isSpeakerMuted) {
+          this.setActiveVoiceEngine('gemini_neural');
+          const playedViaWebAudio = await this.playNeuralAudioWithAnalyser(
+            ttsData.audioBase64,
+            finishSpeaking
+          );
+          if (playedViaWebAudio) {
+            return;
+          }
+
           const audio = new Audio(`data:${ttsData.mimeType || 'audio/wav'};base64,${ttsData.audioBase64}`);
           this.currentAudio = audio;
           audio.onended = finishSpeaking;
@@ -359,12 +374,78 @@ class AIVoiceService {
     this.speakWithBrowserFemaleVoice(spokenText, finishSpeaking);
   }
 
+  private setActiveVoiceEngine(engine: VoiceEngineType) {
+    this.activeVoiceEngine = engine;
+    this.callbacks.onVoiceEngineChange?.(engine);
+  }
+
+  public getActiveVoiceEngine(): VoiceEngineType {
+    return this.activeVoiceEngine;
+  }
+
+  private async playNeuralAudioWithAnalyser(
+    audioBase64: string,
+    onComplete: () => void
+  ): Promise<boolean> {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return false;
+
+      if (!this.outputAudioContext || this.outputAudioContext.state === 'closed') {
+        this.outputAudioContext = new AudioCtx();
+      }
+      if (this.outputAudioContext.state === 'suspended') {
+        await this.outputAudioContext.resume();
+      }
+
+      const binary = window.atob(audioBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+
+      const decoded = await this.outputAudioContext.decodeAudioData(bytes.buffer.slice(0));
+      if (this.isSpeakerMuted) {
+        onComplete();
+        return true;
+      }
+
+      const source = this.outputAudioContext.createBufferSource();
+      source.buffer = decoded;
+
+      const outputAnalyser = this.outputAudioContext.createAnalyser();
+      outputAnalyser.fftSize = 256;
+      source.connect(outputAnalyser);
+      outputAnalyser.connect(this.outputAudioContext.destination);
+
+      this.outputAnalyser = outputAnalyser;
+      this.currentBufferSource = source;
+
+      source.onended = () => {
+        if (this.currentBufferSource === source) {
+          this.currentBufferSource = null;
+          this.outputAnalyser = null;
+        }
+        onComplete();
+      };
+
+      source.start(0);
+      return true;
+    } catch {
+      this.outputAnalyser = null;
+      this.currentBufferSource = null;
+      return false;
+    }
+  }
+
   private speakWithBrowserFemaleVoice(cleanText: string, onComplete: () => void) {
     if (typeof window === 'undefined' || !('speechSynthesis' in window) || this.isSpeakerMuted) {
+      this.setActiveVoiceEngine('none');
       onComplete();
       return;
     }
 
+    this.setActiveVoiceEngine('browser_fallback');
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.rate = 0.98;
     utterance.pitch = 1.02;
@@ -409,6 +490,15 @@ class AIVoiceService {
   }
 
   public cancelSpeech() {
+    if (this.currentBufferSource) {
+      try {
+        this.currentBufferSource.onended = null;
+        this.currentBufferSource.stop();
+        this.currentBufferSource.disconnect();
+      } catch {}
+      this.currentBufferSource = null;
+      this.outputAnalyser = null;
+    }
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
@@ -500,24 +590,34 @@ class AIVoiceService {
   }
 
   private startVolumeMonitoring() {
-    const dataArray = new Uint8Array(this.analyser?.frequencyBinCount || 32);
+    const micDataArray = new Uint8Array(this.analyser?.frequencyBinCount || 32);
 
     const checkVolume = () => {
       if (this.status === 'disconnected') return;
 
       if (this.status === 'speaking') {
-        const simulated = Math.min(
-          100,
-          Math.floor(40 + Math.sin(Date.now() / 80) * 35 + Math.random() * 20)
-        );
-        this.callbacks.onVolumeChange?.(simulated);
-      } else if (this.analyser && !this.isMicMuted) {
-        this.analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
+        if (this.outputAnalyser) {
+          const outData = new Uint8Array(this.outputAnalyser.frequencyBinCount);
+          this.outputAnalyser.getByteFrequencyData(outData);
+          let sum = 0;
+          for (let i = 0; i < outData.length; i++) {
+            sum += outData[i];
+          }
+          const avg = outData.length > 0 ? sum / outData.length : 0;
+          const normalized = Math.min(100, Math.round((avg / 255) * 100 * 2.4));
+          this.callbacks.onVolumeChange?.(normalized);
+        } else {
+          // Browser SpeechSynthesis does not expose an audio stream to Web Audio API;
+          // emit a calm, steady non-random indicator level when fallback speech is active.
+          this.callbacks.onVolumeChange?.(28);
         }
-        const avg = sum / dataArray.length;
+      } else if (this.analyser && !this.isMicMuted) {
+        this.analyser.getByteFrequencyData(micDataArray);
+        let sum = 0;
+        for (let i = 0; i < micDataArray.length; i++) {
+          sum += micDataArray[i];
+        }
+        const avg = micDataArray.length > 0 ? sum / micDataArray.length : 0;
         const normalized = Math.min(100, Math.round((avg / 255) * 100 * 2.2));
         if (normalized > 18 && this.status === 'idle') {
           this.setStatus('listening');

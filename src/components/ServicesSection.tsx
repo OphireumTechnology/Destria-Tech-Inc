@@ -609,9 +609,9 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
         </div>
       </div>
 
-      {/* STICKY MULTI-SERVICE SOLUTION BUILDER BAR */}
+      {/* STICKY MULTI-SERVICE SOLUTION BUILDER BAR — Coordinated above/left of floating AI Consultant */}
       {selectedServices.length > 0 && (
-        <div className="fixed bottom-4 left-3 right-20 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto sm:w-full sm:max-w-xl z-30 bg-[#111827]/95 backdrop-blur-md border border-[#00C2C7]/60 rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 shadow-2xl flex items-center justify-between gap-2.5 sm:gap-3">
+        <div className="fixed bottom-[84px] left-3 right-3 sm:bottom-6 sm:left-6 sm:right-auto sm:w-[calc(100vw-290px)] sm:max-w-lg z-[35] bg-[#111827]/95 backdrop-blur-md border border-[#00C2C7]/60 rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 shadow-2xl flex items-center justify-between gap-2.5 sm:gap-3">
           <div className="min-w-0">
             <div className="text-xs font-bold text-white truncate">
               {selectedServices.length} {selectedServices.length === 1 ? 'Solution' : 'Solutions'} Selected for Assessment

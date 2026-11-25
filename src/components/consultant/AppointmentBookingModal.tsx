@@ -14,11 +14,12 @@ import {
 } from 'lucide-react';
 import {
   ConsultationAppointment,
+  ExecutiveConsultationPathway,
   supabaseService,
   AVAILABLE_SLOTS,
   ProjectBrief,
 } from '../../services/supabaseService';
-import { COMPANY_CONFIG } from '../../data/companyConfig';
+import { COMPANY_CONFIG, corporateIdentity } from '../../data/companyConfig';
 import { createIdempotencyKey } from '../../lib/apiClient';
 
 interface AppointmentBookingModalProps {
@@ -66,12 +67,13 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
 
   const dates = getUpcomingDates();
 
+  const [executivePathway, setExecutivePathway] = useState<ExecutiveConsultationPathway>('ceo');
   const [consultationType, setConsultationType] = useState<'video' | 'phone' | 'in_person'>('video');
   const [selectedDate, setSelectedDate] = useState<string>(dates[0]?.dateStr || '');
   const [selectedSlot, setSelectedSlot] = useState<string>('');
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
-  const [timezone, setTimezone] = useState<string>('Asia/Manila');
+  const [timezone, setTimezone] = useState<string>('America/Denver');
   const [isCheckingSlots, setIsCheckingSlots] = useState<boolean>(false);
 
   const [clientName, setClientName] = useState<string>(
@@ -98,7 +100,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
   const idempotencyKeyRef = useRef<string>(createIdempotencyKey());
   useEffect(() => {
     idempotencyKeyRef.current = createIdempotencyKey();
-  }, [selectedDate, selectedSlot, consultationType, clientName, clientEmail, clientPhone]);
+  }, [executivePathway, selectedDate, selectedSlot, consultationType, clientName, clientEmail, clientPhone]);
 
   useEffect(() => {
     if (!isOpen || !selectedDate) return;
@@ -145,6 +147,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
       phone: clientPhone.trim(),
       companyName: clientCompany.trim() || 'Enterprise Client',
       briefReferenceCode: projectBrief?.referenceCode,
+      executivePathway,
       consultationType,
       scheduledDate: selectedDate,
       scheduledTimeSlot: selectedSlot,
@@ -269,6 +272,12 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                     {submittedResult.appointment.status.replace('_', ' ')}
                   </span>
                 </div>
+                <div className="flex justify-between py-1 border-b border-slate-800 gap-3">
+                  <span className="text-slate-400 shrink-0">Executive Pathway:</span>
+                  <span className="font-semibold text-white text-right">
+                    {submittedResult.appointment.assignedConsultant}
+                  </span>
+                </div>
                 <div className="flex justify-between py-1 border-b border-slate-800">
                   <span className="text-slate-400">Consultation Date:</span>
                   <span className="font-bold text-white">
@@ -276,7 +285,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                   </span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-800">
-                  <span className="text-slate-400">Time Slot (PHT):</span>
+                  <span className="text-slate-400">Time Slot ({submittedResult.appointment.clientTimezone}):</span>
                   <span className="font-bold text-[#00C2C7] font-mono">
                     {submittedResult.appointment.scheduledTimeSlot}
                   </span>
@@ -353,10 +362,54 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
             </div>
           ) : (
             <form onSubmit={handleConfirmBooking} className="space-y-6">
-              {/* Step 1: Channel */}
+              {/* Step 1: Executive Consultation Pathway (CEO vs. CTO) */}
               <div className="space-y-2">
                 <label className="block text-[11px] font-mono uppercase text-slate-400 font-bold">
-                  1. Select Consultation Channel
+                  1. Select Executive Consultation Pathway
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setExecutivePathway('ceo')}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      executivePathway === 'ceo'
+                        ? 'bg-[#D4AF37]/10 border-[#D4AF37] text-white shadow-md'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="text-[10px] font-mono uppercase text-[#D4AF37]">CEO Consultation</div>
+                    <div className="font-bold text-white text-xs mt-0.5">
+                      {corporateIdentity.leadership.ceo.name}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                      Corporate strategy, business development, strategic partnerships, enterprise engagements &amp; executive commercial discussions.
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExecutivePathway('cto')}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      executivePathway === 'cto'
+                        ? 'bg-[#00C2C7]/10 border-[#00C2C7] text-white shadow-md'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="text-[10px] font-mono uppercase text-[#00C2C7]">CTO Consultation</div>
+                    <div className="font-bold text-white text-xs mt-0.5">
+                      {corporateIdentity.leadership.cto.name}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                      Technology architecture, AI systems, software engineering, blockchain, cloud infrastructure &amp; technical assessments.
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Step 2: Channel */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-mono uppercase text-slate-400 font-bold">
+                  2. Select Consultation Channel
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <button
@@ -407,11 +460,11 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                 </div>
               </div>
 
-              {/* Step 2: Date & Slots */}
+              {/* Step 3: Date & Slots */}
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="block text-[11px] font-mono uppercase text-slate-400 font-bold">
-                    2. Select Consultation Date & Time Slot (PHT)
+                    3. Select Consultation Date &amp; Time Slot ({timezone})
                   </label>
                   <select
                     aria-label="Client Timezone"
@@ -419,12 +472,13 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                     onChange={(e) => setTimezone(e.target.value)}
                     className="px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-[10px] font-mono text-slate-300"
                   >
-                    <option value="Asia/Manila">Asia/Manila (UTC+8)</option>
-                    <option value="Asia/Singapore">Asia/Singapore (UTC+8)</option>
+                    <option value="America/Denver">America/Denver (Wyoming HQ · MT)</option>
+                    <option value="America/New_York">America/New_York (ET)</option>
+                    <option value="America/Los_Angeles">America/Los_Angeles (PT)</option>
                     <option value="UTC">UTC</option>
-                    <option value="America/Los_Angeles">America/Los_Angeles</option>
-                    <option value="America/New_York">America/New_York</option>
                     <option value="Europe/London">Europe/London</option>
+                    <option value="Asia/Singapore">Asia/Singapore (UTC+8)</option>
+                    <option value="Asia/Manila">Asia/Manila (UTC+8)</option>
                   </select>
                 </div>
 
@@ -486,10 +540,10 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                 </div>
               </div>
 
-              {/* Step 3: Contact */}
+              {/* Step 4: Contact */}
               <div className="space-y-3">
                 <label className="block text-[11px] font-mono uppercase text-slate-400 font-bold">
-                  3. Contact & Confirmation Information
+                  4. Contact &amp; Confirmation Information
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>

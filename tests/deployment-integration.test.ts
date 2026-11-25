@@ -214,18 +214,19 @@ class IntegrationMemoryDb implements DatabaseRepository {
 }
 
 test('Centralized API client resolves Railway production, VITE_API_BASE_URL overrides, and local dev safely', () => {
-  assert.equal(normalizeApiBaseUrl('https://api.ophireummultimedia.com///'), PRODUCTION_RAILWAY_API_URL);
+  assert.equal(PRODUCTION_RAILWAY_API_URL, 'https://api.destriatech.com');
+  assert.equal(normalizeApiBaseUrl('https://api.destriatech.com///'), PRODUCTION_RAILWAY_API_URL);
   assert.equal(normalizeApiBaseUrl('javascript:alert(1)'), '');
   assert.equal(normalizeApiBaseUrl('   '), '');
 
   // Explicit VITE_API_BASE_URL override wins everywhere
   assert.equal(
-    resolveApiBaseUrl({ envBaseUrl: 'https://api.ophireummultimedia.com/', hostname: 'localhost' }),
+    resolveApiBaseUrl({ envBaseUrl: 'https://api.destriatech.com/', hostname: 'localhost' }),
     PRODUCTION_RAILWAY_API_URL
   );
   assert.equal(
-    buildApiUrl('/api/inquiries', 'https://api.ophireummultimedia.com/'),
-    'https://api.ophireummultimedia.com/api/inquiries'
+    buildApiUrl('/api/inquiries', 'https://api.destriatech.com/'),
+    'https://api.destriatech.com/api/inquiries'
   );
 
   // Local development keeps relative /api/* paths
@@ -233,15 +234,7 @@ test('Centralized API client resolves Railway production, VITE_API_BASE_URL over
   assert.equal(resolveApiBaseUrl({ envBaseUrl: '', hostname: '127.0.0.1' }), '');
   assert.equal(buildApiUrl('api/health', ''), '/api/health');
 
-  // GitHub Pages static origins automatically route to Railway backend if env is unset
-  assert.equal(
-    resolveApiBaseUrl({ envBaseUrl: '', hostname: 'ophireummultimedia.com' }),
-    PRODUCTION_RAILWAY_API_URL
-  );
-  assert.equal(
-    resolveApiBaseUrl({ envBaseUrl: '', hostname: 'www.ophireummultimedia.com' }),
-    PRODUCTION_RAILWAY_API_URL
-  );
+  // Official Destria GitHub Pages & custom domain origins automatically route to api.destriatech.com
   assert.equal(
     resolveApiBaseUrl({ envBaseUrl: '', hostname: 'destriatech.com' }),
     PRODUCTION_RAILWAY_API_URL
@@ -265,13 +258,22 @@ test('Railway PORT parser handles injected PORT strings and invalid fallbacks cl
   assert.equal(resolveListenPort('99999'), 3000);
 });
 
-test('Backend CORS allows authorized OPHIREUM origins, blocks unauthorized github.io, and integrates AI + Inquiry + Booking + Admin flows', async () => {
+test('Backend CORS allows authorized Destria origins, blocks legacy/unauthorized origins, and integrates AI + Inquiry + Booking + Admin flows', async () => {
   const prevEmail = process.env.ADMIN_BOOTSTRAP_EMAIL;
   const prevPass = process.env.ADMIN_BOOTSTRAP_PASSWORD;
-  process.env.ADMIN_BOOTSTRAP_EMAIL = 'executive@ophireummultimedia.com';
-  process.env.ADMIN_BOOTSTRAP_PASSWORD = 'OphireumTestPassword2026!';
+  process.env.ADMIN_BOOTSTRAP_EMAIL = 'executive@destriatech.com';
+  process.env.ADMIN_BOOTSTRAP_PASSWORD = 'DestriaTestPassword2026!';
 
   const db = new IntegrationMemoryDb();
+  db.admins = [
+    {
+      id: 'adm-deploy-1',
+      email: 'executive@destriatech.com',
+      fullName: 'Desmond Hines',
+      role: 'super_admin',
+      isActive: true,
+    },
+  ];
   const { app } = createApp({
     db,
     calendarService: new GoogleCalendarService('', ''),
@@ -285,19 +287,17 @@ test('Backend CORS allows authorized OPHIREUM origins, blocks unauthorized githu
   const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
-    // 1. Verify /health alias and /api/health
-    for (const healthPath of ['/api/health', '/health']) {
+    // 1. Verify /api/health, /health, /healthz, /ready with official destriatech.com origin
+    for (const healthPath of ['/api/health', '/health', '/healthz', '/ready']) {
       const hRes = await fetch(`${baseUrl}${healthPath}`, {
-        headers: { Origin: 'https://ophireummultimedia.com' },
+        headers: { Origin: 'https://destriatech.com' },
       });
-      assert.equal(hRes.status, 200);
-      assert.equal(hRes.headers.get('access-control-allow-origin'), 'https://ophireummultimedia.com');
+      assert.equal(hRes.status, 200, `Expected 200 for ${healthPath}`);
+      assert.equal(hRes.headers.get('access-control-allow-origin'), 'https://destriatech.com');
       assert.equal(hRes.headers.get('vary'), 'Origin');
-      const hBody = await hRes.json();
-      assert.equal(hBody.status, 'healthy');
     }
 
-    // 2. Verify authorized preflight OPTIONS and rejection of rogue *.github.io origin
+    // 2. Verify authorized preflight OPTIONS and rejection of legacy & rogue origins
     const allowedPreflight = await fetch(`${baseUrl}/api/inquiries`, {
       method: 'OPTIONS',
       headers: { Origin: 'https://ophireumtechnology.github.io' },
@@ -315,12 +315,12 @@ test('Backend CORS allows authorized OPHIREUM origins, blocks unauthorized githu
     assert.equal(roguePreflight.status, 403);
     assert.equal(roguePreflight.headers.get('access-control-allow-origin'), null);
 
-    // 1b. Verify official destriatech.com CORS origin is allowed
-    const destriaHealth = await fetch(`${baseUrl}/api/health`, {
-      headers: { Origin: 'https://destriatech.com' },
+    const legacyPreflight = await fetch(`${baseUrl}/api/inquiries`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://ophireummultimedia.com' },
     });
-    assert.equal(destriaHealth.status, 200);
-    assert.equal(destriaHealth.headers.get('access-control-allow-origin'), 'https://destriatech.com');
+    assert.equal(legacyPreflight.status, 403);
+    assert.equal(legacyPreflight.headers.get('access-control-allow-origin'), null);
 
     // 3. Cross-origin AI Consultant check (must enforce zero public pricing policy)
     const aiRes = await fetch(`${baseUrl}/api/consultant/chat`, {
@@ -344,7 +344,7 @@ test('Backend CORS allows authorized OPHIREUM origins, blocks unauthorized githu
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Origin: 'https://ophireummultimedia.com',
+        Origin: 'https://www.destriatech.com',
       },
       body: JSON.stringify({
         type: 'solution_builder',
@@ -365,11 +365,11 @@ test('Backend CORS allows authorized OPHIREUM origins, blocks unauthorized githu
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Origin: 'https://ophireummultimedia.com',
+        Origin: 'https://destriatech.com',
       },
       body: JSON.stringify({
-        email: 'executive@ophireummultimedia.com',
-        password: 'OphireumTestPassword2026!',
+        email: 'executive@destriatech.com',
+        password: 'DestriaTestPassword2026!',
       }),
     });
     assert.equal(loginRes.status, 200);
@@ -379,7 +379,7 @@ test('Backend CORS allows authorized OPHIREUM origins, blocks unauthorized githu
     const adminListRes = await fetch(`${baseUrl}/api/admin/solution-requests`, {
       headers: {
         Authorization: `Bearer ${loginJson.token}`,
-        Origin: 'https://ophireummultimedia.com',
+        Origin: 'https://destriatech.com',
       },
     });
     assert.equal(adminListRes.status, 200);

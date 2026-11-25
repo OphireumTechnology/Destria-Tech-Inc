@@ -401,6 +401,8 @@ export interface ProjectMilestoneRecord {
   sortOrder: number;
 }
 
+export type FileScanStatus = 'quarantined_unscanned' | 'clean' | 'flagged';
+
 export interface ProjectAttachmentRecord {
   id: string;
   userId: string;
@@ -415,6 +417,9 @@ export interface ProjectAttachmentRecord {
   category: 'brief' | 'reference' | 'message_attachment' | 'deliverable' | 'support_attachment';
   version: number;
   uploadedByRole: 'client' | 'team';
+  scanStatus?: FileScanStatus;
+  quarantineReason?: string;
+  contentSha256?: string;
   uploadedAt: string;
 }
 
@@ -594,7 +599,7 @@ export interface ApprovedProposalRecord {
 }
 
 export interface PortalRepository {
-  readonly mode: 'supabase' | 'local_dev';
+  readonly mode: 'supabase' | 'local_dev' | 'unconfigured';
   // Auth & Users
   findUserByEmail(email: string): Promise<PortalUserRecord | null>;
   findUserById(userId: string): Promise<PortalUserRecord | null>;

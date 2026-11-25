@@ -422,10 +422,10 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
           FLOATING LAUNCHER BUTTON (Bottom-Right)
           ========================================================================= */}
       {!isOpen && (
-        <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3">
-          {/* Subtle Callout Bubble */}
+        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 flex items-center gap-3">
+          {/* Subtle Callout Bubble (Desktop XL+ only to prevent collisions on mobile/tablet) */}
           {hasUnreadNotice && (
-            <div className="hidden sm:flex items-center gap-2 px-3.5 py-2 bg-[#111827] border border-[#00C2C7]/30 text-xs text-slate-200 rounded-xl shadow-2xl animate-fade-in">
+            <div className="hidden xl:flex items-center gap-2 px-3.5 py-2 bg-[#111827] border border-[#00C2C7]/30 text-xs text-slate-200 rounded-xl shadow-2xl animate-fade-in">
               <span className="w-2 h-2 rounded-full bg-[#00C2C7] animate-ping" />
               <span>Two-way AI voice enabled: <strong>Speak with AI Solutions</strong></span>
               <button 
@@ -474,10 +474,10 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
           ========================================================================= */}
       {isOpen && (
         <div 
-          className={`fixed right-3 sm:right-6 bottom-3 sm:bottom-6 z-50 bg-[#0B1220] border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${
+          className={`fixed right-3 sm:right-6 bottom-3 sm:bottom-6 z-[55] bg-[#0B1220] border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${
             isMinimized 
-              ? 'w-80 h-16' 
-              : 'w-[calc(100vw-24px)] sm:w-[460px] md:w-[500px] h-[calc(100vh-50px)] sm:h-[670px] max-h-[90vh]'
+              ? 'w-[min(320px,calc(100vw-24px))] h-16' 
+              : 'w-[calc(100vw-24px)] sm:w-[460px] md:w-[500px] h-[calc(100dvh-24px)] sm:h-[670px] max-h-[calc(100dvh-24px)] sm:max-h-[90dvh]'
           }`}
         >
           {/* Top Header */}

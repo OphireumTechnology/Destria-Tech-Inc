@@ -77,6 +77,7 @@ export interface AppointmentRecord {
   phone: string;
   companyName: string;
   briefReferenceCode?: string;
+  executivePathway?: 'ceo' | 'cto' | 'advisory';
   consultationType: 'video' | 'phone' | 'in_person';
   scheduledDate: string;
   scheduledTimeSlot: string;
@@ -174,6 +175,7 @@ export interface CreateAppointmentInput {
   phone: string;
   companyName: string;
   briefReferenceCode?: string;
+  executivePathway?: 'ceo' | 'cto' | 'advisory';
   consultationType: 'video' | 'phone' | 'in_person';
   scheduledDate: string;
   scheduledTimeSlot: string;

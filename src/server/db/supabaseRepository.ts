@@ -61,14 +61,18 @@ function mapAppointmentRow(row: any): AppointmentRecord {
     phone: String(row.client_phone || ''),
     companyName: String(row.client_company || 'Enterprise Client'),
     briefReferenceCode: row.brief_reference_code || undefined,
+    executivePathway:
+      row.executive_pathway === 'ceo' || row.executive_pathway === 'cto'
+        ? row.executive_pathway
+        : 'advisory',
     consultationType: row.consultation_type,
     scheduledDate: String(row.scheduled_date),
     scheduledTimeSlot: String(row.scheduled_time_slot),
     durationMinutes: Number(row.duration_minutes || 30),
-    clientTimezone: String(row.client_timezone || 'Asia/Manila'),
+    clientTimezone: String(row.client_timezone || 'America/Denver'),
     meetingLink: row.meeting_link || undefined,
     meetingLocation: row.meeting_location || undefined,
-    assignedConsultant: String(row.assigned_consultant || 'Destria Tech Inc Solutions Architecture Team'),
+    assignedConsultant: String(row.assigned_consultant || 'DESTRIA TECH INC Solutions Architecture Team'),
     status: row.status || 'pending_review',
     calendarSyncStatus: row.calendar_sync_status || 'unconfigured',
     calendarEventId: row.calendar_event_id || undefined,
@@ -313,6 +317,7 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
         client_phone: input.phone,
         client_company: input.companyName,
         brief_reference_code: input.briefReferenceCode || null,
+        executive_pathway: input.executivePathway || 'advisory',
         consultation_type: input.consultationType,
         scheduled_date: input.scheduledDate,
         scheduled_time_slot: input.scheduledTimeSlot,

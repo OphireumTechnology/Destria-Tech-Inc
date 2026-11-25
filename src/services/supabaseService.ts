@@ -59,11 +59,14 @@ export interface ProjectBrief {
   status: 'draft' | 'reviewed_by_client' | 'confirmed';
 }
 
+export type ExecutiveConsultationPathway = 'ceo' | 'cto' | 'advisory';
+
 export interface ConsultationAppointment {
   id?: string;
   referenceCode: string;
   client: ClientProfile;
   briefReferenceCode?: string;
+  executivePathway?: ExecutiveConsultationPathway;
   consultationType: 'video' | 'phone' | 'in_person';
   scheduledDate: string;
   scheduledTimeSlot: string;
@@ -124,6 +127,7 @@ export const supabaseService = {
     phone: string;
     companyName: string;
     briefReferenceCode?: string;
+    executivePathway?: ExecutiveConsultationPathway;
     consultationType: 'video' | 'phone' | 'in_person';
     scheduledDate: string;
     scheduledTimeSlot: string;
@@ -162,6 +166,7 @@ export const supabaseService = {
           companyName: raw.companyName,
         },
         briefReferenceCode: raw.briefReferenceCode,
+        executivePathway: raw.executivePathway || params.executivePathway || 'advisory',
         consultationType: raw.consultationType,
         scheduledDate: raw.scheduledDate,
         scheduledTimeSlot: raw.scheduledTimeSlot,
@@ -234,8 +239,17 @@ export const supabaseService = {
       if (period === 'AM' && hours === 12) hours = 0;
 
       const [yyyy, mm, dd] = appointment.scheduledDate.split('-').map(Number);
-      // Manila UTC+8 to UTC conversion
-      const utcStart = new Date(Date.UTC(yyyy, mm - 1, dd, hours - 8, m));
+      const tzOffsetHoursMap: Record<string, number> = {
+        'America/Denver': -7,
+        'America/New_York': -5,
+        'America/Los_Angeles': -8,
+        UTC: 0,
+        'Europe/London': 0,
+        'Asia/Manila': 8,
+        'Asia/Singapore': 8,
+      };
+      const offsetHours = tzOffsetHoursMap[appointment.clientTimezone] ?? -7;
+      const utcStart = new Date(Date.UTC(yyyy, mm - 1, dd, hours - offsetHours, m));
       const utcEnd = new Date(utcStart.getTime() + appointment.durationMinutes * 60 * 1000);
 
       const fmt = (d: Date) => d.toISOString().replace(/-|:|\.\d\d\d/g, '');

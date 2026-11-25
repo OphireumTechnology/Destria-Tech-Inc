@@ -1,0 +1,1560 @@
+# DESTRIA TECH INC
+## MASTER ENTERPRISE SOURCE-CODE REPAIR, STABILIZATION, INTEGRATION AND QUALITY ASSURANCE DIRECTIVE
+
+**Execution mode:** Comprehensive source-code repair and implementation  
+**Priority:** Critical  
+**Scope:** Entire web application, frontend, backend, database, integrations and security infrastructure
+
+**GitHub repository:**  
+https://github.com/OphireumTechnology/Destria-Tech-Inc
+
+**Production website:**  
+https://destriatech.com/
+
+**Development website:**  
+https://ophireumtechnology.github.io/Destria-Tech-Inc/
+
+**Existing repair branch:**  
+`repair/core-stabilization-nov25`
+
+---
+
+# 1. PRIMARY DEVELOPMENT OBJECTIVE
+
+Act as a senior enterprise software architect, full-stack software engineer, cybersecurity engineer, database architect, AI systems engineer, DevOps engineer and quality assurance specialist.
+
+Conduct a comprehensive inspection, reconciliation, repair and validation of the entire DESTRIA TECH INC web application.
+
+Identify and resolve all confirmed:
+
+- Source-code errors.
+- Software bugs.
+- Functional defects.
+- Architectural weaknesses.
+- Missing integrations.
+- Incomplete development components.
+- Security vulnerabilities.
+- Database persistence failures.
+- Authentication failures.
+- API communication errors.
+- Frontend and backend inconsistencies.
+- Responsive design defects.
+- Broken navigation and URLs.
+- Failed business processes.
+- AI response inaccuracies.
+- Deployment configuration errors.
+- Regression failures.
+- Performance bottlenecks.
+- Operational readiness gaps.
+
+Do not merely generate recommendations or documentary reports. Implement actual source-code repairs wherever technically possible.
+
+Do not mark any component as completed without supporting implementation and validation evidence.
+
+---
+
+# 2. NON-NEGOTIABLE DEVELOPMENT PROTECTION RULES
+
+Preserve all existing working features and functionality.
+
+Strictly retain:
+
+- Existing public website design and corporate branding.
+- Corporate logo and emblem.
+- Corporate color palette.
+- Existing corporate content.
+- Existing technology service offerings.
+- Client Portal functionality.
+- Existing database records.
+- Existing customer accounts.
+- Existing project records.
+- Existing commercial agreements.
+- Existing financial records.
+- Existing security controls.
+- Existing AI corporate knowledge.
+- Existing customized commercial engagement policies.
+
+Do not perform an unnecessary full application rewrite.
+
+Do not replace functional components with mock interfaces.
+
+Do not introduce simulated backend responses into production.
+
+Do not delete historical records.
+
+Do not disable security controls to resolve development errors.
+
+Do not remove failing tests merely to obtain successful GitHub workflows.
+
+Do not expose credentials, API keys, database secrets, authentication tokens or private customer information.
+
+Do not merge or deploy to production without explicit release approval.
+
+---
+
+# 3. SOURCE-CODE RECONCILIATION AND BASELINE STABILIZATION
+
+Before implementing new repairs:
+
+1. Retrieve the latest GitHub main branch.
+2. Inspect the latest Google AI Studio source-code uploads.
+3. Inspect all existing open pull requests and repair branches.
+4. Review the existing `repair/core-stabilization-nov25` branch.
+5. Review PRs #3, #4, #5, #8 and #9, subject to their current repository status.
+6. Identify duplicated, superseded and conflicting changes.
+7. Preserve the latest valid functionality.
+8. Reconcile previously implemented authentication, routing, corporate identity and AI improvements.
+9. Identify any regression introduced by recent Google AI Studio uploads.
+10. Establish a reproducible development baseline.
+
+Previously validated repair commit:
+
+`74ba76b4419cd868324c572fbe74008c71fc4eeb`
+
+Previously successful workflow:
+
+https://github.com/OphireumTechnology/Destria-Tech-Inc/actions/runs/45556066061
+
+Additional responsive header repair:
+
+`209cdd3589cfe9e8dcb6d2c28cbead6267e7c1d3`
+
+Verify whether these commits remain relevant to the latest main branch.
+
+Do not blindly overwrite newer source code with older branch contents.
+
+---
+
+# 4. REPAIR THE ENTIRE CLEAN URL ARCHITECTURE
+
+Priority: Critical
+
+Permanently eliminate unnecessary hash-based routing throughout the web application.
+
+Incorrect URL examples:
+
+```text
+https://destriatech.com/#/portal/login
+https://destriatech.com/#/portal/register
+https://destriatech.com/#/portal/forgot-password
+```
+
+Required clean URL examples:
+
+```text
+https://destriatech.com/
+https://destriatech.com/portal
+https://destriatech.com/portal/login
+https://destriatech.com/portal/register
+https://destriatech.com/portal/forgot-password
+https://destriatech.com/portal/reset-password
+https://destriatech.com/portal/verify-email
+https://destriatech.com/portal/dashboard
+https://destriatech.com/portal/profile
+https://destriatech.com/portal/projects
+https://destriatech.com/portal/proposals
+https://destriatech.com/portal/orders
+https://destriatech.com/portal/invoices
+https://destriatech.com/portal/documents
+https://destriatech.com/portal/support
+https://destriatech.com/portal/settings
+```
+
+These are target route examples. Reconcile them against the actual implemented route inventory and implement missing routes only where supported by the approved application scope.
+
+Inspect and repair:
+
+- HashRouter usage.
+- Custom routing implementations.
+- Browser history navigation.
+- Internal navigation links.
+- Programmatic redirects.
+- Authentication redirects.
+- Registration redirects.
+- Password recovery callbacks.
+- Email verification callbacks.
+- Protected routes.
+- Administrative routes.
+- Dynamic project and document routes.
+- Browser back and forward navigation.
+- Direct URL access.
+- Page refresh behavior.
+- Nested route asset resolution.
+- GitHub Pages static hosting compatibility.
+
+Preserve necessary security-related query parameters and authentication callback data. Do not indiscriminately remove URL characters required for legitimate functionality.
+
+Implement static entry generation for supported routes.
+
+Generate appropriate production `index.html` entry files and a controlled SPA fallback.
+
+Ensure that both hosting environments function correctly:
+
+```text
+https://destriatech.com/
+https://ophireumtechnology.github.io/Destria-Tech-Inc/
+```
+
+Support migration of existing legacy hash links to canonical clean URLs.
+
+Do not create redirect loops.
+
+Do not introduce broken asset paths.
+
+Do not claim that GitHub Pages supports arbitrary server-side rewrite rules. Where dynamic routes cannot be reliably served through static entries, implement a tested compatible solution or document the requirement for a hosting provider supporting SPA rewrites.
+
+Acceptance criteria:
+
+- No unnecessary hash-based URLs generated.
+- No broken internal links.
+- No unexpected GitHub Pages 404 errors.
+- Direct navigation works.
+- Browser refresh works.
+- Protected routes remain protected.
+- Authentication callbacks work.
+- JavaScript, CSS and image assets load correctly.
+
+---
+
+# 5. RESPONSIVE INTERFACE AND OVERLAPPING COMPONENT REPAIR
+
+Priority: Critical
+
+Inspect the entire public website, Client Portal and administrative interfaces for layout defects.
+
+Repair:
+
+- Horizontal page overflow.
+- Clipped header navigation.
+- Overlapping navigation buttons.
+- Corporate logo misalignment.
+- Incorrect text wrapping.
+- Footer obstruction.
+- Overlapping AI chat widgets.
+- Overlapping voice notification banners.
+- Floating service assessment panels.
+- Fixed-position component collisions.
+- Incorrect z-index stacking.
+- Modal positioning.
+- Dropdown clipping.
+- Mobile menu overflow.
+- Unresponsive tables.
+- Inconsistent form widths.
+- Excessive whitespace.
+- Incorrect viewport sizing.
+
+Implement a coordinated responsive layout system for:
+
+- Header.
+- Navigation.
+- Corporate branding.
+- Main content.
+- Footer.
+- AI chat launcher.
+- AI voice launcher.
+- Toast notifications.
+- Service assessment panel.
+- Consultation modal.
+- Client Portal sidebar.
+- Administrative navigation.
+
+Create a shared floating-interface positioning strategy.
+
+Floating controls must not obscure:
+
+- Footer contact information.
+- Legal information.
+- Copyright notices.
+- Primary action buttons.
+- Form submission buttons.
+- Navigation elements.
+- Other floating controls.
+
+Do not use global `overflow-x: hidden` as the sole solution. Identify and repair the actual overflowing elements.
+
+Test at viewport widths:
+
+```text
+320px
+360px
+375px
+390px
+414px
+768px
+1024px
+1280px
+1366px
+1440px
+1920px
+2560px
+```
+
+Preserve the existing corporate design while improving alignment, spacing, typography, readability and accessibility.
+
+---
+
+# 6. CORPORATE IDENTITY AND CENTRALIZED CONFIGURATION
+
+Maintain one authoritative corporate configuration.
+
+Official corporate details:
+
+```text
+Legal Name: DESTRIA TECH INC
+Corporate Network: DESTRIA NETWORK
+Abbreviation: DTI
+
+Founder and Chief Executive Officer:
+Desmond Hines
+
+Chief Technology Officer:
+Leodenis Languisan
+
+Headquarters Address:
+SUITE 6082 - 30 N Gould St #6082
+Sheridan, Sheridan County, WY 82801 USA
+
+International Telephone:
++1 (307) 419-4277
+
+E.164 Telephone:
++13074194277
+
+Telephone Link:
+tel:+13074194277
+
+Corporate Email:
+info@destriatech.com
+
+Official Website:
+https://destriatech.com/
+```
+
+Centralize corporate identity in:
+
+```text
+src/data/companyConfig.ts
+```
+
+Ensure all applicable frontend and backend modules consume the authoritative configuration.
+
+Remove obsolete corporate branding, outdated telephone numbers, incorrect leadership assignments and legacy corporate addresses from active customer-facing content.
+
+Preserve legitimate historical customer records and migration evidence.
+
+Correct all applicable:
+
+- Website content.
+- AI system instructions.
+- Voice responses.
+- Email templates.
+- Corporate proposals.
+- Consultation forms.
+- Metadata.
+- Schema.org structured data.
+- Portal information.
+- Downloadable documents.
+
+Do not invent additional offices, certifications, licenses, regulatory approvals or corporate affiliations.
+
+---
+
+# 7. DEDICATED BACKEND INFRASTRUCTURE
+
+Priority: Critical
+
+Inspect the entire backend architecture.
+
+Target infrastructure:
+
+```text
+Frontend:
+GitHub Pages
+
+Backend:
+Dedicated Railway service for DESTRIA TECH INC
+
+Database:
+Dedicated Supabase PostgreSQL project
+
+Storage:
+Private Supabase Storage
+
+Email:
+Verified transactional email provider
+
+Artificial Intelligence:
+Approved Gemini API integration
+
+Production API:
+https://api.destriatech.com
+```
+
+The production API address is a proposed target until DNS and Railway configuration are verified.
+
+Repair:
+
+- Incorrect API base URLs.
+- Legacy Ophireum API fallbacks.
+- Cross-origin request failures.
+- Incorrect environment variable handling.
+- Backend startup failures.
+- Incorrect server ports.
+- API timeout handling.
+- Unhandled exceptions.
+- Inconsistent HTTP status codes.
+- Missing input validation.
+- Missing request authentication.
+- Missing request correlation.
+- Improper error disclosure.
+
+Production must not silently fall back to another company's backend.
+
+Implement appropriate endpoints:
+
+```text
+/healthz
+/ready
+/api/health
+```
+
+Health checks must accurately distinguish:
+
+```text
+Healthy
+Degraded
+Unconfigured
+Unavailable
+```
+
+Readiness must fail when mandatory dependencies are unavailable.
+
+Never report healthy status for unconfigured critical infrastructure.
+
+Document required environment variables using placeholders only.
+
+If dedicated Railway infrastructure is not configured, complete source-code readiness and report the exact external provisioning requirements.
+
+---
+
+# 8. SUPABASE DATABASE PERSISTENCE AND DATA INTEGRITY
+
+Priority: Critical
+
+Audit all database repositories, adapters, migrations and business operations.
+
+Identify:
+
+- In-memory repositories used in production.
+- Temporary data stores.
+- Simulated records.
+- Missing database write operations.
+- Missing update operations.
+- Missing ownership validation.
+- Missing database constraints.
+- Incomplete migrations.
+- Duplicate records.
+- Missing transaction boundaries.
+- Incorrect data relationships.
+
+Implement durable PostgreSQL persistence for applicable modules:
+
+- Client accounts.
+- Corporate profiles.
+- Authentication records.
+- Verification tokens.
+- Recovery tokens.
+- Sessions.
+- Client inquiries.
+- Consultation appointments.
+- Technical assessments.
+- Formal proposals.
+- Proposal approvals.
+- Project records.
+- Project milestones.
+- Deliverables.
+- Support tickets.
+- Messages.
+- Notifications.
+- Invoices.
+- Authorized payments.
+- Document metadata.
+- Audit logs.
+
+Use the existing schema wherever possible.
+
+Do not create duplicate tables unnecessarily.
+
+Implement:
+
+- Primary keys.
+- Foreign keys.
+- Unique constraints.
+- Appropriate indexes.
+- Database transactions.
+- Idempotent operations.
+- Concurrency protection.
+- Record ownership.
+- Tenant isolation.
+- Row Level Security where applicable.
+- Server-side authorization.
+- Audit timestamps.
+- Safe migration procedures.
+
+Production must not silently substitute an in-memory repository when the database becomes unavailable.
+
+Verify that records survive:
+
+- Browser refresh.
+- User logout and login.
+- Backend restart.
+- Railway redeployment.
+- Multiple concurrent sessions.
+
+Do not apply destructive migrations to production.
+
+---
+
+# 9. CLIENT AUTHENTICATION AND ACCOUNT SECURITY
+
+Priority: Critical
+
+Audit the complete authentication lifecycle.
+
+Repair:
+
+- Client registration.
+- Account creation.
+- Email verification.
+- Login.
+- Logout.
+- Session management.
+- Password recovery.
+- Password reset.
+- Password changes.
+- Email address changes.
+- Account security settings.
+- Protected routes.
+- Administrative authorization.
+
+Preserve the existing approved authentication architecture unless a documented migration is necessary.
+
+Implement appropriate controls:
+
+- Secure password hashing.
+- Password strength requirements.
+- Cryptographically secure tokens.
+- Token expiration.
+- Single-use verification and recovery tokens.
+- Token hashing at rest.
+- Session expiration.
+- Session revocation.
+- Rate limiting.
+- Brute-force protection.
+- Account enumeration protection.
+- Server-side role enforcement.
+- Secure cookie or token handling.
+- CSRF protection where applicable.
+- MFA for privileged administrative access.
+
+Do not permit unauthorized role escalation.
+
+Do not allow clients to access another client's records.
+
+Do not expose authentication tokens through logs, analytics, browser console messages or error responses.
+
+---
+
+# 10. EMAIL VERIFICATION AND TRANSACTIONAL EMAIL DELIVERY
+
+Priority: Critical
+
+The audit identified missing or incomplete actual email dispatch.
+
+Inspect:
+
+```text
+src/server/portal/portalRoutes.ts
+```
+
+Inspect all associated authentication services, repositories and email adapters.
+
+Repair actual transactional email delivery for:
+
+- Registration verification.
+- Verification email resend.
+- Password recovery.
+- Email address changes.
+- Account security notifications.
+- Consultation confirmations.
+- Proposal notifications.
+- Project notifications.
+- Support notifications.
+- Authorized invoice notifications.
+
+Use an approved email provider such as Resend, subject to actual account and domain configuration.
+
+Implement:
+
+- Verified sender identity.
+- Secure backend email credentials.
+- Corporate email templates.
+- Correct canonical website links.
+- Provider request tracking.
+- Delivery status tracking.
+- Retry handling.
+- Duplicate-send prevention.
+- Rate limiting.
+- Privacy-safe audit logging.
+- Webhook signature verification where applicable.
+
+Distinguish the following states:
+
+```text
+Request accepted
+Queued
+Provider accepted
+Delivered
+Deferred
+Bounced
+Failed
+Delivery unverified
+```
+
+Do not tell users an email was delivered when no provider delivery evidence exists.
+
+Do not expose development verification or recovery tokens in production responses.
+
+Where email transport is unavailable, report the actual configuration failure through operational monitoring while preserving neutral public authentication responses.
+
+---
+
+# 11. COMPLETE PASSWORD RECOVERY WORKFLOW
+
+Priority: Critical
+
+Implement and verify the entire password recovery process.
+
+Required workflow:
+
+```text
+User requests password recovery
+        ↓
+Validate request and rate limits
+        ↓
+Generate secure recovery token
+        ↓
+Store token hash and expiration
+        ↓
+Submit recovery email to provider
+        ↓
+User receives email
+        ↓
+User opens clean reset-password URL
+        ↓
+Validate token
+        ↓
+Display new password form
+        ↓
+Update password securely
+        ↓
+Invalidate recovery token
+        ↓
+Revoke applicable existing sessions
+        ↓
+Return user to secure login
+```
+
+Test:
+
+- Registered account.
+- Unknown account.
+- Invalid email.
+- Expired token.
+- Invalid token.
+- Previously used token.
+- Multiple recovery requests.
+- Provider failure.
+- Provider timeout.
+- Rate limiting.
+- Password confirmation mismatch.
+- Successful password update.
+- Successful subsequent login.
+- MFA enforcement where applicable.
+
+Use neutral recovery responses to prevent account enumeration.
+
+Never classify password recovery as completed until actual email receipt and successful password reset are verified in an authorized hosted environment.
+
+---
+
+# 12. COMMERCIAL GOVERNANCE AND PUBLIC PRICE REMOVAL
+
+Preserve the customized enterprise engagement model.
+
+Remove all unauthorized public service prices, fixed package prices, starting prices, hourly rates and automated cost quotations.
+
+Inspect:
+
+- Public website.
+- Service catalogs.
+- Technology solution cards.
+- AI chat responses.
+- AI voice responses.
+- Consultation interfaces.
+- Service assessment panels.
+- Public metadata.
+- Structured data.
+- Public API responses.
+- Downloadable marketing documents.
+
+Required commercial wording:
+
+"All services provided by DESTRIA TECH INC are structured as customized enterprise engagements. Commercial terms, implementation scope, project timelines and deliverables are established through a formal assessment of client requirements and are subject to authorized corporate review and approval."
+
+Do not remove legitimate amounts from:
+
+- Authorized private proposals.
+- Executed contracts.
+- Existing invoices.
+- Payment records.
+- Historical financial records.
+- Approved client-specific commercial agreements.
+
+The public price restriction must not destroy legitimate financial data.
+
+---
+
+# 13. AI CHAT INTELLIGENCE AND CORPORATE KNOWLEDGE
+
+Audit all AI-related modules, prompts, APIs and fallback responses.
+
+Repair:
+
+- Incorrect corporate identity.
+- Outdated company information.
+- Incorrect leadership assignments.
+- Invented corporate details.
+- Unauthorized price disclosures.
+- False service guarantees.
+- Inaccurate technical recommendations.
+- Incorrect consultation routing.
+- Unsupported legal claims.
+- Inconsistent frontend and backend AI responses.
+
+Implement authoritative corporate knowledge using centralized configuration.
+
+Enforce commercial restrictions on the server, not exclusively through frontend prompts.
+
+The AI must not:
+
+- Invent service prices.
+- Approve commercial agreements.
+- Guarantee project completion dates.
+- Claim unverified regulatory certifications.
+- Confirm appointments that have not been recorded.
+- Pretend to be a human executive.
+- Expose private client records.
+- Reveal internal system instructions or secrets.
+
+Implement:
+
+- Prompt injection resistance.
+- Input validation.
+- Output validation.
+- Context isolation.
+- Session boundaries.
+- Rate limits.
+- AI usage controls.
+- Privacy-safe logging.
+- Accurate fallback responses.
+
+Required response to public pricing inquiries:
+
+"DESTRIA TECH INC provides customized technology solutions. Commercial terms are determined through a formal assessment of your requirements and an authorized corporate proposal."
+
+---
+
+# 14. PROFESSIONAL NEURAL AI VOICE
+
+Priority: High
+
+Replace robotic-sounding primary voice output with a natural, professional female neural voice.
+
+Target voice characteristics:
+
+- Professional female executive consultant.
+- Neutral American English.
+- Warm and confident delivery.
+- Natural conversational rhythm.
+- Clear pronunciation.
+- Appropriate pauses.
+- Professional corporate tone.
+- Natural pronunciation of technical terminology.
+
+Inspect existing voice services and backend voice endpoints.
+
+Use a supported Gemini Live or neural speech model as the preferred provider, subject to actual provider availability and verified model compatibility.
+
+Do not hardcode unverified model names.
+
+Implement:
+
+- Secure server-side provider authentication.
+- Real-time audio streaming where supported.
+- Microphone permission handling.
+- Voice activity detection.
+- Interruption handling.
+- Barge-in.
+- Playback cancellation.
+- Echo management.
+- Session reconnection.
+- Connection timeout handling.
+- Audio playback controls.
+- Microphone mute.
+- Transcript synchronization.
+- Session termination.
+- Provider usage limits.
+- Cost controls.
+
+Browser speech synthesis may remain as a clearly identified fallback, but must not be represented as the premium neural voice.
+
+Remove simulated microphone and audio activity indicators where real measurements are available.
+
+Clearly disclose that the assistant is AI-powered.
+
+Test actual voice quality through authorized listening tests.
+
+Do not mark professional neural voice as verified solely because an API integration exists.
+
+---
+
+# 15. EXECUTIVE CONSULTATION AND APPOINTMENT SYSTEM
+
+Implement distinct consultation pathways.
+
+## Chief Executive Officer Consultation
+
+Desmond Hines
+
+Applicable areas:
+
+- Corporate strategy.
+- Business development.
+- Strategic partnerships.
+- Enterprise engagements.
+- Executive commercial discussions.
+
+## Chief Technology Officer Consultation
+
+Leodenis Languisan
+
+Applicable areas:
+
+- Technology architecture.
+- Artificial intelligence.
+- Software engineering.
+- Blockchain solutions.
+- Cloud infrastructure.
+- Technical assessments.
+- Digital transformation.
+
+Implement:
+
+- Consultation type selection.
+- Executive selection.
+- Client contact validation.
+- Time-zone handling.
+- Availability verification.
+- Appointment request persistence.
+- Duplicate appointment prevention.
+- Executive routing.
+- Notification dispatch.
+- Appointment status tracking.
+- Rescheduling.
+- Cancellation.
+- Administrative review.
+
+Use accurate appointment states:
+
+```text
+Requested
+Pending Review
+Confirmed
+Rescheduled
+Cancelled
+Completed
+```
+
+Never display a confirmed appointment without authoritative scheduling evidence.
+
+---
+
+# 16. FORMAL PROPOSAL AND COMMERCIAL ENGAGEMENT WORKFLOW
+
+Complete the enterprise commercial lifecycle.
+
+Required workflow:
+
+```text
+Client Inquiry
+        ↓
+Requirements Discovery
+        ↓
+Technical Assessment
+        ↓
+Scope Definition
+        ↓
+Internal Commercial Review
+        ↓
+Formal Proposal Preparation
+        ↓
+Authorized Executive Approval
+        ↓
+Client Proposal Review
+        ↓
+Client Acceptance
+        ↓
+Contractual Engagement
+        ↓
+Project Initiation
+```
+
+Implement:
+
+- Persistent proposal records.
+- Proposal version control.
+- Scope definitions.
+- Authorized commercial terms.
+- Internal approval requirements.
+- Client ownership.
+- Proposal expiration.
+- Acceptance evidence.
+- Status transitions.
+- Revision requests.
+- Audit history.
+
+Prevent unauthorized users from:
+
+- Changing approved commercial terms.
+- Approving their own restricted transactions.
+- Accessing another client's proposals.
+- Bypassing mandatory approvals.
+- Modifying accepted proposal versions without an authorized amendment.
+
+Do not simulate legal execution or digital signatures without a verified signing mechanism.
+
+---
+
+# 17. PROJECT MANAGEMENT AND DELIVERY WORKSPACE
+
+Audit and complete existing project management functions.
+
+Implement durable functionality for:
+
+- Project creation.
+- Project ownership.
+- Project managers.
+- Assigned personnel.
+- Project milestones.
+- Tasks.
+- Dependencies.
+- Progress tracking.
+- Project communications.
+- Deliverable submissions.
+- Client reviews.
+- Change requests.
+- Project approvals.
+- Project closure.
+
+Ensure all status indicators reflect actual stored records.
+
+Do not generate artificial progress percentages.
+
+Implement role-based access and complete audit trails.
+
+---
+
+# 18. PAYMENT INFRASTRUCTURE AND FINANCIAL SECURITY
+
+Inspect existing payment and billing modules.
+
+Repair:
+
+- Incorrect invoice calculations.
+- Duplicate payment requests.
+- Missing transaction persistence.
+- Missing payment reconciliation.
+- Unauthorized financial operations.
+- Incorrect payment status handling.
+- Insecure webhook processing.
+
+Implement:
+
+- Server-authoritative financial amounts.
+- Approved proposal-to-invoice relationships.
+- Idempotency.
+- Currency validation.
+- Accurate decimal handling.
+- Payment provider signature verification.
+- Transaction reconciliation.
+- Financial audit records.
+- Refund authorization.
+- Duplicate-event protection.
+
+Use approved payment providers in sandbox mode until production commissioning is authorized.
+
+Do not collect or store raw payment card information.
+
+Do not activate real financial transactions without provider verification, security acceptance and explicit approval.
+
+---
+
+# 19. FILE STORAGE AND DOCUMENT SECURITY
+
+Audit all upload, download and document-sharing functionality.
+
+Implement:
+
+- Private storage buckets.
+- Client-specific file ownership.
+- Server-side access authorization.
+- File size restrictions.
+- File type validation.
+- MIME and file signature validation.
+- Malware scanning integration.
+- Quarantine handling.
+- Expiring signed download URLs.
+- Secure document metadata.
+- Document versioning.
+- Audit logging.
+- Safe filename handling.
+
+Prevent:
+
+- Unauthorized file downloads.
+- Cross-client document access.
+- Directory traversal.
+- Executable file abuse.
+- Public exposure of confidential documents.
+- Unrestricted file uploads.
+- Permanent public access links.
+
+Where malware scanning is unavailable, keep unverified uploads quarantined rather than reporting them as safe.
+
+---
+
+# 20. ENTERPRISE CYBERSECURITY HARDENING
+
+Perform a comprehensive application security review using relevant OWASP guidance.
+
+Inspect and repair:
+
+- Broken access control.
+- Authentication failures.
+- SQL injection.
+- Cross-site scripting.
+- CSRF vulnerabilities.
+- Server-side request forgery.
+- Insecure direct object references.
+- Path traversal.
+- Unsafe file uploads.
+- Mass assignment.
+- Sensitive data exposure.
+- Improper CORS configuration.
+- Insecure dependencies.
+- Privilege escalation.
+- Weak session management.
+- Unprotected administrative endpoints.
+- Missing rate limits.
+- Insecure logging.
+
+Implement appropriate:
+
+- Content Security Policy.
+- Security response headers.
+- HTTPS enforcement.
+- Restricted CORS origins.
+- Input sanitization.
+- Server-side schema validation.
+- Least-privilege authorization.
+- Tenant isolation.
+- Secret management.
+- Security event logging.
+- Dependency scanning.
+- Credential leak prevention.
+
+Do not claim full cybersecurity certification or regulatory compliance solely from automated scanning.
+
+Require independent security acceptance before production commissioning.
+
+---
+
+# 21. LEGAL AND CORPORATE COMPLIANCE REVIEW
+
+Review all customer-facing wording and legal disclosures.
+
+Maintain professional, precise and legally responsible language.
+
+Inspect:
+
+- Terms of Service.
+- Privacy Policy.
+- Commercial Engagement Policy.
+- AI Usage Disclaimer.
+- Information Security Statement.
+- Confidentiality Policy.
+- NDA governance.
+- Intellectual property provisions.
+- Data processing disclosures.
+- Payment terms.
+- Service limitations.
+- Client responsibilities.
+
+Remove unsupported claims concerning:
+
+- Guaranteed outcomes.
+- Absolute security.
+- Regulatory certification.
+- Government approval.
+- Guaranteed financial performance.
+- Universal legal compliance.
+- Guaranteed service availability.
+
+Distinguish technical implementation from legal certification.
+
+Flag legal documents requiring qualified legal counsel review.
+
+Do not represent generated legal wording as independently approved legal advice.
+
+---
+
+# 22. PERFORMANCE AND ACCESSIBILITY OPTIMIZATION
+
+Inspect application performance and accessibility.
+
+Repair:
+
+- Unnecessary component re-rendering.
+- Duplicate API requests.
+- Unoptimized images.
+- Excessive JavaScript bundles.
+- Memory leaks.
+- Unreleased event listeners.
+- Unreleased microphone streams.
+- Unnecessary animations.
+- Slow route transitions.
+- Layout shifts.
+- Missing loading states.
+- Missing error boundaries.
+
+Implement where appropriate:
+
+- Lazy loading.
+- Code splitting.
+- Asset optimization.
+- Request cancellation.
+- Caching.
+- Pagination.
+- Reduced-motion support.
+- Accessible form labels.
+- Keyboard navigation.
+- Focus management.
+- Accessible dialogs.
+- Appropriate color contrast.
+
+Preserve functionality while improving performance.
+
+---
+
+# 23. CI/CD AND GITHUB WORKFLOW REPAIR
+
+Inspect all GitHub Actions workflows.
+
+Repair confirmed:
+
+- Dependency installation failures.
+- Lockfile inconsistencies.
+- TypeScript errors.
+- Lint errors.
+- Unit-test failures.
+- Integration-test failures.
+- Build failures.
+- Incorrect deployment artifacts.
+- Incorrect base paths.
+- Missing static route files.
+- Backend compilation failures.
+- Environment configuration errors.
+
+Use the actual package scripts defined in the repository.
+
+Run applicable commands, including:
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm audit --audit-level=high
+```
+
+If a command does not exist, inspect the existing scripts and use or implement the appropriate equivalent.
+
+Also execute:
+
+- Backend compilation.
+- Database integration tests.
+- Authentication tests.
+- API contract tests.
+- Route generation tests.
+- Responsive browser tests.
+- Security regression tests.
+- Production artifact validation.
+
+Do not disable existing security or regression tests.
+
+Do not weaken test assertions without documenting the legitimate architectural change and replacing them with equivalent or stronger coverage.
+
+Previous failed GitHub workflow records may remain red. The acceptance requirement is successful validation of the exact latest repair commit.
+
+---
+
+# 24. BACKUP, RESTORATION AND DISASTER RECOVERY
+
+Implement and document operational recovery procedures.
+
+Cover:
+
+- PostgreSQL database backups.
+- Private file backups.
+- Configuration recovery.
+- Application version recovery.
+- Database migration recovery.
+- Deployment rollback.
+- Incident response.
+- Recovery access controls.
+
+Perform restoration testing in an isolated authorized environment.
+
+Verify:
+
+- Database record counts.
+- Data integrity.
+- Record ownership.
+- Authentication compatibility.
+- File accessibility.
+- Audit history.
+- Application functionality after restoration.
+
+Do not overwrite production data during restoration testing.
+
+Do not mark disaster recovery as verified without successful restoration evidence.
+
+---
+
+# 25. MONITORING AND OPERATIONAL OBSERVABILITY
+
+Implement production monitoring readiness for:
+
+- Frontend availability.
+- Backend availability.
+- Database connectivity.
+- API response times.
+- Authentication failures.
+- Email provider failures.
+- AI provider failures.
+- Payment webhook failures.
+- Storage failures.
+- Security events.
+- Application exceptions.
+
+Use structured, privacy-safe logging.
+
+Implement request correlation IDs.
+
+Do not log:
+
+- Passwords.
+- Recovery tokens.
+- API keys.
+- Authentication credentials.
+- Payment card data.
+- Confidential client documents.
+
+Create actionable operational alerts.
+
+Distinguish genuine outages from unconfigured services.
+
+---
+
+# 26. MANDATORY END-TO-END ACCEPTANCE TESTING
+
+Create and execute comprehensive acceptance tests covering:
+
+## Public Website
+
+- Homepage loads.
+- All navigation links function.
+- Corporate identity is accurate.
+- Contact information is accurate.
+- Telephone links function.
+- No unauthorized public service prices appear.
+- No overlapping interface components.
+- No unexpected horizontal scrolling.
+- Responsive design works.
+
+## Client Portal
+
+- Clean URLs function.
+- Direct navigation functions.
+- Browser refresh functions.
+- Registration functions.
+- Email verification functions.
+- Login functions.
+- Logout functions.
+- Password recovery functions.
+- Password reset functions.
+- Protected routes function.
+- Client isolation is enforced.
+
+## Backend and Database
+
+- API endpoints respond correctly.
+- Database reads and writes function.
+- Records persist after restart.
+- Unauthorized access is rejected.
+- Invalid inputs are rejected.
+- Concurrent requests preserve integrity.
+
+## AI Systems
+
+- Corporate information is accurate.
+- Unauthorized prices are not disclosed.
+- Voice quality is acceptable.
+- Microphone controls function.
+- Interruption handling functions.
+- Consultation routing functions.
+
+## Commercial Operations
+
+- Inquiry submission persists.
+- Proposal workflow functions.
+- Approval controls function.
+- Project records persist.
+- Document access is restricted.
+- Payment sandbox tests pass.
+
+## Security
+
+- Cross-client access attempts fail.
+- Privilege escalation attempts fail.
+- Invalid authentication tokens are rejected.
+- Recovery tokens cannot be reused.
+- Sensitive information is not exposed.
+- Dependency vulnerabilities are assessed and addressed.
+
+---
+
+# 27. REQUIRED DEVELOPMENT EXECUTION ORDER
+
+Execute repairs in dependency order.
+
+Stage 01: Source-code reconciliation.
+
+Stage 02: Clean URL architecture.
+
+Stage 03: Responsive interface stabilization.
+
+Stage 04: Dedicated backend configuration readiness.
+
+Stage 05: Durable database persistence.
+
+Stage 06: Authentication security.
+
+Stage 07: Transactional email integration.
+
+Stage 08: Password recovery and verification.
+
+Stage 09: Commercial governance validation.
+
+Stage 10: AI chat intelligence.
+
+Stage 11: Professional neural voice.
+
+Stage 12: Executive consultation workflow.
+
+Stage 13: Formal proposal workflow.
+
+Stage 14: Project management persistence.
+
+Stage 15: Financial infrastructure.
+
+Stage 16: Private document security.
+
+Stage 17: Enterprise security hardening.
+
+Stage 18: Legal wording review.
+
+Stage 19: Performance and accessibility.
+
+Stage 20: Comprehensive regression testing.
+
+Stage 21: Backup and restoration.
+
+Stage 22: Hosted staging acceptance.
+
+Stage 23: Production release readiness assessment.
+
+Do not introduce unrelated new features while critical stabilization defects remain unresolved.
+
+If a stage is blocked by missing credentials, infrastructure, provider access or owner approval, document the blocker and continue other independent repairs.
+
+---
+
+# 28. MANDATORY DEFECT TRACKING
+
+Create or update:
+
+```text
+docs/audit/enterprise-defect-register.md
+docs/audit/source-code-audit.md
+docs/development/repair-execution-plan.md
+docs/development/implementation-evidence.md
+docs/security/security-validation.md
+docs/deployment/environment-configuration.md
+docs/deployment/release-readiness.md
+docs/operations/backup-restoration.md
+```
+
+For every defect, record:
+
+- Unique defect ID.
+- Affected module.
+- Severity.
+- Root cause.
+- Affected source files.
+- Implemented repair.
+- Regression test.
+- Commit reference.
+- Validation result.
+- Remaining dependency.
+- Current status.
+
+Use severity classifications:
+
+```text
+P0 — Critical
+P1 — High
+P2 — Medium
+P3 — Low
+```
+
+Use evidence-based status classifications:
+
+```text
+DETECTED
+IN_PROGRESS
+CODE_REPAIRED
+CI_VALIDATED
+STAGING_VALIDATED
+PRODUCTION_VERIFIED
+BLOCKED
+OWNER_APPROVAL_REQUIRED
+```
+
+Do not confuse code implementation with production verification.
+
+---
+
+# 29. MANDATORY FINAL DEVELOPMENT REPORT
+
+After completing the repair execution, provide a detailed report containing:
+
+1. Executive development summary.
+2. Exact source-code baseline commit.
+3. Total confirmed defects identified.
+4. Total defects repaired.
+5. Total unresolved defects.
+6. Critical and high-severity defect status.
+7. All modified files.
+8. All newly created files.
+9. Database migration changes.
+10. Backend integration changes.
+11. Frontend integration changes.
+12. Authentication improvements.
+13. AI improvements.
+14. Security improvements.
+15. Test execution results.
+16. GitHub workflow results.
+17. Build results.
+18. Hosted acceptance results.
+19. External infrastructure blockers.
+20. Remaining configuration requirements.
+21. Commit references.
+22. Pull request references.
+23. Rollback procedures.
+24. Production release recommendation.
+
+Calculate completion metrics only from actual tracked defects and executed acceptance tests.
+
+Do not invent development completion percentages.
+
+---
+
+# 30. FINAL RELEASE ACCEPTANCE CRITERIA
+
+The application may be recommended for enterprise production release only when:
+
+- All confirmed critical and high-severity defects are resolved.
+- All mandatory regression tests pass.
+- Frontend production build passes.
+- Backend compilation passes.
+- Clean URL behavior is verified.
+- Responsive design is verified.
+- Dedicated backend connectivity is verified.
+- Durable database persistence is verified.
+- Registration email receipt is verified.
+- Password recovery email receipt is verified.
+- Password reset and subsequent login are verified.
+- Client data isolation is verified.
+- AI commercial restrictions are verified.
+- Professional neural voice is verified.
+- Executive consultation workflow is verified.
+- Proposal approval controls are verified.
+- Payment security is verified before live activation.
+- Private document security is verified.
+- Backup restoration is verified.
+- Hosted staging acceptance passes.
+- Independent security and necessary legal reviews are completed.
+- Explicit production release approval is obtained.
+
+---
+
+# FINAL EXECUTION COMMAND
+
+BEGIN COMPREHENSIVE ENTERPRISE STABILIZATION IMMEDIATELY.
+
+Inspect the latest complete source code, reconcile existing repair branches, identify root causes and implement all technically actionable repairs across the entire DESTRIA TECH INC web application.
+
+Do not stop after generating an audit report.
+
+Do not stop after correcting visual defects.
+
+Do not stop after correcting TypeScript errors.
+
+Do not stop after obtaining a successful build.
+
+Continue through functional integration, security validation, database persistence, authentication, email delivery, AI intelligence, professional voice, commercial workflows and operational readiness.
+
+Preserve all existing legitimate functionality, corporate branding and historical records.
+
+Do not fabricate successful test results, provider connectivity, email delivery, database persistence or production readiness.
+
+Where external access or configuration is unavailable, identify the exact blocker, complete all independent development work and provide the required owner actions.
+
+Deliver a stable, maintainable, secure and professionally engineered application with complete implementation evidence.
+
+Keep all production deployment and irreversible infrastructure changes subject to explicit authorization.
+
+END OF MASTER DEVELOPMENT DIRECTIVE.

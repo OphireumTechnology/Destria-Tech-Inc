@@ -21,7 +21,7 @@ function enterpriseCleanRoutesPlugin(): Plugin {
   return {
     name: 'destria-enterprise-clean-routes',
     closeBundle() {
-      const distDir = path.resolve(__dirname, 'dist');
+      const distDir = path.resolve(import.meta.dirname, 'dist');
       generateStaticPagesRoutes(distDir);
     },
   };
@@ -35,7 +35,7 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss(), enterpriseCleanRoutesPlugin()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
     },
     server: {

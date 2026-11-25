@@ -46,7 +46,7 @@ import {
 import path from 'path';
 import { PortalRepository } from './portal/types';
 import { LocalPortalRepository } from './portal/localPortalRepository';
-import { SupabasePortalRepository } from './portal/supabasePortalRepository';
+import { SupabasePortalRepository, UnconfiguredPortalRepository } from './portal/supabasePortalRepository';
 import { createPortalRouter } from './portal/portalRoutes';
 
 export interface AppDependencies {
@@ -205,8 +205,6 @@ export function createApp(deps: AppDependencies = {}): {
     [
       'https://destriatech.com',
       'https://www.destriatech.com',
-      'https://ophireummultimedia.com',
-      'https://www.ophireummultimedia.com',
       'https://ophireumtechnology.github.io',
       'http://localhost:3000',
       'http://127.0.0.1:3000',
@@ -230,6 +228,11 @@ export function createApp(deps: AppDependencies = {}): {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), payment=()');
+    res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
+    if (req.path.startsWith('/api') || req.path === '/health' || req.path === '/healthz' || req.path === '/ready') {
+      res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+    }
     if (process.env.NODE_ENV === 'production') {
       res.setHeader('X-Frame-Options', 'DENY');
       res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -237,7 +240,11 @@ export function createApp(deps: AppDependencies = {}): {
 
     // Explicit CORS Allowlist on API & health routes
     const origin = req.headers.origin;
-    const isCorsTarget = req.path.startsWith('/api') || req.path === '/health';
+    const isCorsTarget =
+      req.path.startsWith('/api') ||
+      req.path === '/health' ||
+      req.path === '/healthz' ||
+      req.path === '/ready';
     if (origin && isCorsTarget) {
       res.setHeader('Vary', 'Origin');
       const cleanOrigin = origin.replace(/\/$/, '');
@@ -309,13 +316,16 @@ export function createApp(deps: AppDependencies = {}): {
     return strictJsonParser(req, res, next);
   });
 
-  // Initialize Portal Repository upfront so /api/health reports accurate persistence mode
+  // Initialize Portal Repository upfront so /api/health and /ready report accurate persistence mode.
+  // In production, never silently fall back to volatile in-memory storage if Supabase is unconfigured.
   const supaUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
   const supaServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   const portalRepo: PortalRepository =
     deps.portalRepo ||
     (supaUrl && supaServiceKey
       ? new SupabasePortalRepository(supaUrl, supaServiceKey)
+      : process.env.NODE_ENV === 'production'
+      ? new UnconfiguredPortalRepository()
       : new LocalPortalRepository({
           persistDir:
             process.env.NODE_ENV === 'test'
@@ -324,11 +334,63 @@ export function createApp(deps: AppDependencies = {}): {
         }));
 
   // -----------------------------------------------------------------------
-  // 2. HEALTH & CATALOG ENDPOINTS
+  // 2. HEALTH, LIVENESS (/healthz), READINESS (/ready) & CATALOG ENDPOINTS
   // -----------------------------------------------------------------------
+  app.get('/healthz', (req: Request & { correlationId?: string }, res: Response) => {
+    res.status(200).json({
+      status: 'healthy',
+      probe: 'liveness',
+      platform: 'DESTRIA TECH INC API Gateway',
+      version: APP_VERSION,
+      uptimeSeconds: Math.floor((Date.now() - APP_STARTED_AT) / 1000),
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId,
+    });
+  });
+
+  app.get('/ready', async (req: Request & { correlationId?: string }, res: Response) => {
+    const dbPing = await db.ping();
+    const portalReady = portalRepo.mode !== 'unconfigured';
+    const isReady = dbPing.ok && portalReady;
+    const status = isReady
+      ? 'healthy'
+      : !dbPing.configured || !portalReady
+      ? 'unconfigured'
+      : 'unavailable';
+
+    res.status(isReady ? 200 : 503).json({
+      status,
+      probe: 'readiness',
+      ready: isReady,
+      platform: 'DESTRIA TECH INC API Gateway',
+      version: APP_VERSION,
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId,
+      dependencies: {
+        database: {
+          configured: dbPing.configured,
+          connected: dbPing.ok,
+          latencyMs: dbPing.latencyMs ?? null,
+          status: dbPing.ok ? 'healthy' : dbPing.configured ? 'unavailable' : 'unconfigured',
+        },
+        portalPersistence: {
+          mode: portalRepo.mode,
+          durable: portalRepo.mode === 'supabase',
+          ready: portalReady,
+        },
+      },
+    });
+  });
+
   const healthHandler = async (req: Request & { correlationId?: string }, res: Response) => {
     const dbPing = await db.ping();
-    const overallStatus = dbPing.ok ? 'healthy' : 'degraded_unconfigured';
+    const portalReady = portalRepo.mode !== 'unconfigured';
+    const overallStatus =
+      dbPing.ok && portalReady
+        ? 'healthy'
+        : !dbPing.configured || !portalReady
+        ? 'unconfigured'
+        : 'degraded';
 
     res.status(200).json({
       status: overallStatus,
@@ -342,22 +404,26 @@ export function createApp(deps: AppDependencies = {}): {
           configured: dbPing.configured,
           connected: dbPing.ok,
           latencyMs: dbPing.latencyMs ?? null,
-          status: dbPing.ok ? 'up' : dbPing.configured ? 'error' : 'unconfigured',
+          status: dbPing.ok ? 'healthy' : dbPing.configured ? 'unavailable' : 'unconfigured',
         },
         portalPersistence: {
           mode: portalRepo.mode,
-          supabaseWritePersistenceImplemented: false,
+          supabaseWritePersistenceImplemented: portalRepo.mode === 'supabase',
+          durable: portalRepo.mode === 'supabase',
         },
         email: {
           configured: emailService.isConfigured(),
+          status: emailService.isConfigured() ? 'configured' : 'unconfigured',
           provider: 'resend',
         },
         calendar: {
           configured: calendarService.isConfigured(),
+          status: calendarService.isConfigured() ? 'configured' : 'unconfigured',
           provider: 'google_calendar',
         },
         gemini: {
           configured: Boolean(ai),
+          status: Boolean(ai) ? 'configured' : 'unconfigured',
         },
         adminAuth: {
           bootstrapConfigured: authService.isBootstrapLoginConfigured(),
@@ -764,7 +830,7 @@ export function createApp(deps: AppDependencies = {}): {
       res.json({
         success: true,
         date: dateStr,
-        timezone: 'Asia/Manila',
+        timezone: 'America/Denver',
         calendarConfigured: calendarService.isConfigured(),
         bookedSlots,
         availableSlots,
@@ -833,6 +899,14 @@ export function createApp(deps: AppDependencies = {}): {
         // Strictly reflect real integration status: never confirm calendar or fabricate Meet links when unconfigured!
         const status: 'confirmed' | 'pending_review' = calResult.synced ? 'confirmed' : 'pending_review';
 
+        // Distinct Executive Consultation Routing (CEO vs. CTO vs. Solutions Architecture Team)
+        const assignedConsultant =
+          data.executivePathway === 'ceo'
+            ? `${corporateIdentity.leadership.ceo.name} — ${corporateIdentity.leadership.ceo.title}`
+            : data.executivePathway === 'cto'
+            ? `${corporateIdentity.leadership.cto.name} — ${corporateIdentity.leadership.cto.title}`
+            : 'DESTRIA TECH INC Solutions Architecture Team';
+
         const { record, created } = await db.createAppointment({
           referenceCode,
           idempotencyKey: data.idempotencyKey,
@@ -841,6 +915,7 @@ export function createApp(deps: AppDependencies = {}): {
           phone: data.phone,
           companyName: data.companyName,
           briefReferenceCode: data.briefReferenceCode,
+          executivePathway: data.executivePathway,
           consultationType: data.consultationType,
           scheduledDate: data.scheduledDate,
           scheduledTimeSlot: data.scheduledTimeSlot,
@@ -848,7 +923,7 @@ export function createApp(deps: AppDependencies = {}): {
           clientTimezone: data.clientTimezone,
           meetingLink: calResult.synced ? calResult.meetingLink : undefined,
           meetingLocation: officeLocation,
-          assignedConsultant: 'Destria Tech Inc Solutions Architecture Team',
+          assignedConsultant,
           status,
           calendarSyncStatus: calResult.calendarSyncStatus,
           calendarEventId: calResult.eventId,
@@ -1427,11 +1502,8 @@ TONE & SPOKEN VOICE RULES:
         model: 'gemini-3.8-flash-lite-tts',
         contents: [
           {
-            parts: [
-              {
-                text: `Speak in a clear, warm, composed, authoritative executive female corporate voice: ${spokenText}`,
-              },
-            ],
+            role: 'user',
+            parts: [{ text: spokenText }],
           },
         ],
         config: {
@@ -1441,14 +1513,18 @@ TONE & SPOKEN VOICE RULES:
               prebuiltVoiceConfig: { voiceName: 'Kore' },
             },
           },
-        },
+          speechMetadata: {
+            style: 'Clear, warm, composed, authoritative executive female corporate consultant speaking neutral American English at a steady natural pace',
+          },
+        } as any,
       });
 
       const response: any = await Promise.race([ttsPromise, timeoutPromise]);
       const inlineData = response?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-      const pcmBase64 = typeof inlineData?.data === 'string' ? inlineData.data : '';
+      const rawAudioBase64 = typeof inlineData?.data === 'string' ? inlineData.data : '';
+      const returnedMime = typeof inlineData?.mimeType === 'string' ? inlineData.mimeType : '';
 
-      if (!pcmBase64) {
+      if (!rawAudioBase64) {
         res.json({
           success: false,
           fallback: 'browser_tts',
@@ -1458,11 +1534,21 @@ TONE & SPOKEN VOICE RULES:
         return;
       }
 
-      const wavBase64 = pcm16ToWavBase64(pcmBase64, 24000, 1);
+      // Detect whether Gemini unary TTS already returned a valid RIFF/WAVE container
+      // to avoid double-wrapping WAV headers and corrupting audio playback.
+      const rawBytes = Buffer.from(rawAudioBase64, 'base64');
+      const isAlreadyWav =
+        rawBytes.length >= 12 &&
+        rawBytes.subarray(0, 4).toString('ascii') === 'RIFF' &&
+        rawBytes.subarray(8, 12).toString('ascii') === 'WAVE';
+      const wavBase64 = isAlreadyWav
+        ? rawAudioBase64
+        : pcm16ToWavBase64(rawAudioBase64, 24000, 1);
+
       res.json({
         success: true,
         audioBase64: wavBase64,
-        mimeType: 'audio/wav',
+        mimeType: isAlreadyWav && returnedMime ? returnedMime : 'audio/wav',
         spokenText,
         voice: 'Kore',
         provider: 'gemini-3.8-flash-lite-tts',
@@ -1539,6 +1625,7 @@ TONE & SPOKEN VOICE RULES:
     createPortalRouter({
       repo: portalRepo,
       signingSecret: deps.sessionSecret,
+      emailService,
     })
   );
 

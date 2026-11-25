@@ -50,6 +50,7 @@ export const ROUTES = {
     PAYMENTS: '/portal/payments',
     FILES: '/portal/files',
     DELIVERABLES: '/portal/deliverables',
+    DOCUMENTS: '/portal/documents',
     SUPPORT: '/portal/support',
     NOTIFICATIONS: '/portal/notifications',
     PROFILE: '/portal/profile',

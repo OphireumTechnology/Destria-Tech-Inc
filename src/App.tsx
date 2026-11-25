@@ -13,6 +13,7 @@ import { NotFoundPage } from './components/NotFoundPage';
 import { AIConsultantWidget } from './components/consultant/AIConsultantWidget';
 import { Footer } from './components/Footer';
 import { BrandLogo } from './components/BrandLogo';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import {
   GOVERNANCE_PATH_TO_SECTION_ID,
   GOVERNANCE_STATIC_ROUTES,
@@ -182,7 +183,7 @@ const PublicCorporateView: React.FC<{
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#111827] text-slate-100 flex flex-col selection:bg-[#00C2C7]/20 selection:text-[#00C2C7]">
+    <div className="min-h-screen bg-[#111827] text-slate-100 flex flex-col overflow-x-clip selection:bg-[#00C2C7]/20 selection:text-[#00C2C7]">
       {/* Sticky Top Bar Contract */}
       <Header
         onOpenPortal={() => handleOpenEnterpriseModal('portal')}
@@ -269,47 +270,49 @@ export default function App() {
   }, [navigate]);
 
   return (
-    <Routes>
-      {/* Public Corporate Website Canonical Clean Routes */}
-      {PUBLIC_STATIC_ROUTES.map((routePath) => (
-        <Route key={routePath} path={routePath} element={<PublicCorporateView />} />
-      ))}
+    <ErrorBoundary>
+      <Routes>
+        {/* Public Corporate Website Canonical Clean Routes */}
+        {PUBLIC_STATIC_ROUTES.map((routePath) => (
+          <Route key={routePath} path={routePath} element={<PublicCorporateView />} />
+        ))}
 
-      {/* Corporate Governance & Policy Canonical Clean Routes */}
-      {GOVERNANCE_STATIC_ROUTES.map((routePath) => (
+        {/* Corporate Governance & Policy Canonical Clean Routes */}
+        {GOVERNANCE_STATIC_ROUTES.map((routePath) => (
+          <Route
+            key={routePath}
+            path={routePath}
+            element={
+              <PublicCorporateView
+                initialGovernanceSectionId={GOVERNANCE_PATH_TO_SECTION_ID[routePath]}
+              />
+            }
+          />
+        ))}
+
+        {/* Client Portal (Clean Nested History Routing) */}
         <Route
-          key={routePath}
-          path={routePath}
+          path={`${ROUTES.PORTAL.ROOT}/*`}
           element={
-            <PublicCorporateView
-              initialGovernanceSectionId={GOVERNANCE_PATH_TO_SECTION_ID[routePath]}
-            />
+            <Suspense fallback={<RouteLoaderFallback label="Loading DESTRIA TECH INC Client Portal..." />}>
+              <ClientPortalApp />
+            </Suspense>
           }
         />
-      ))}
 
-      {/* Client Portal (Clean Nested History Routing) */}
-      <Route
-        path={`${ROUTES.PORTAL.ROOT}/*`}
-        element={
-          <Suspense fallback={<RouteLoaderFallback label="Loading DESTRIA TECH INC Client Portal..." />}>
-            <ClientPortalApp />
-          </Suspense>
-        }
-      />
+        {/* Executive Administration Portal (RBAC-Protected Clean History Routing) */}
+        <Route
+          path={`${ROUTES.ADMIN.ROOT}/*`}
+          element={
+            <Suspense fallback={<RouteLoaderFallback label="Loading DESTRIA TECH INC Executive Console..." />}>
+              <AdminPortalApp />
+            </Suspense>
+          }
+        />
 
-      {/* Executive Administration Portal (RBAC-Protected Clean History Routing) */}
-      <Route
-        path={`${ROUTES.ADMIN.ROOT}/*`}
-        element={
-          <Suspense fallback={<RouteLoaderFallback label="Loading DESTRIA TECH INC Executive Console..." />}>
-            <AdminPortalApp />
-          </Suspense>
-        }
-      />
-
-      {/* Unknown Route Fallback (Zero Blank Screens) */}
-      <Route path="*" element={<NotFoundPage scope="public" />} />
-    </Routes>
+        {/* Unknown Route Fallback (Zero Blank Screens) */}
+        <Route path="*" element={<NotFoundPage scope="public" />} />
+      </Routes>
+    </ErrorBoundary>
   );
 }

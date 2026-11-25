@@ -540,6 +540,284 @@ export class TransactionalEmailService {
   ) {
     return this.enqueueAndSendAppointmentEmails(appointment, correlationId, kind);
   }
+
+  public async dispatchPortalTransactionalEmail(params: {
+    to: string;
+    subject: string;
+    badge: string;
+    heading: string;
+    greetingName: string;
+    bodyParagraphs: string[];
+    ctaLabel?: string;
+    ctaUrl?: string;
+    fallbackCodeLabel?: string;
+    fallbackCodeValue?: string;
+    correlationId?: string;
+    emailType:
+      | 'verification'
+      | 'password_recovery'
+      | 'email_change'
+      | 'security_alert'
+      | 'proposal_notification'
+      | 'project_update'
+      | 'support_update'
+      | 'invoice_notification';
+  }): Promise<{
+    deliveryStatus:
+      | 'request_accepted'
+      | 'queued'
+      | 'provider_accepted'
+      | 'failed'
+      | 'delivery_unverified'
+      | 'unconfigured';
+    provider: string;
+    providerMessageId?: string;
+    error?: string;
+  }> {
+    const safeGreeting = escapeHtml(params.greetingName || 'Valued Client');
+    const paragraphsHtml = params.bodyParagraphs
+      .map((p) => `<p style="margin:0 0 12px 0;font-size:14px;line-height:1.65;color:#CBD5E1;">${escapeHtml(p)}</p>`)
+      .join('');
+
+    const ctaHtml =
+      params.ctaLabel && params.ctaUrl
+        ? `<div style="margin:22px 0;">
+            <a href="${escapeHtml(params.ctaUrl)}" style="display:inline-block;padding:12px 22px;background-color:#00C2C7;color:#0B1220;font-size:13px;font-weight:700;text-decoration:none;border-radius:8px;">
+              ${escapeHtml(params.ctaLabel)}
+            </a>
+          </div>
+          <p style="margin:0 0 12px 0;font-size:12px;color:#94A3B8;word-break:break-all;">
+            If the button above does not open automatically, copy and paste this secure link into your browser:<br />
+            <a href="${escapeHtml(params.ctaUrl)}" style="color:#00C2C7;">${escapeHtml(params.ctaUrl)}</a>
+          </p>`
+        : '';
+
+    const codeHtml =
+      params.fallbackCodeLabel && params.fallbackCodeValue
+        ? `<div style="margin:16px 0;padding:12px 14px;background-color:#0F172A;border:1px solid #1E293B;border-radius:8px;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#94A3B8;margin-bottom:4px;">
+              ${escapeHtml(params.fallbackCodeLabel)}
+            </div>
+            <div style="font-family:monospace;font-size:13px;color:#F8FAFC;word-break:break-all;">
+              ${escapeHtml(params.fallbackCodeValue)}
+            </div>
+          </div>`
+        : '';
+
+    const html = renderEmailShell(
+      params.subject,
+      params.badge,
+      `
+        <h2 style="margin:0 0 14px 0;font-size:20px;color:#FFFFFF;font-weight:700;">${escapeHtml(params.heading)}</h2>
+        <p style="margin:0 0 14px 0;font-size:14px;color:#E2E8F0;">Dear ${safeGreeting},</p>
+        ${paragraphsHtml}
+        ${ctaHtml}
+        ${codeHtml}
+        <p style="margin:18px 0 0 0;font-size:12px;color:#94A3B8;line-height:1.6;">
+          If you did not initiate this request, please contact ${escapeHtml(corporateIdentity.legalName)} immediately at ${escapeHtml(corporateIdentity.contact.email)} or ${escapeHtml(corporateIdentity.contact.telephone.display)}.
+        </p>
+      `
+    );
+
+    const textLines = [
+      `${corporateIdentity.legalName} (${corporateIdentity.networkName})`,
+      params.heading,
+      '',
+      `Dear ${params.greetingName || 'Valued Client'},`,
+      '',
+      ...params.bodyParagraphs,
+      ...(params.ctaUrl ? ['', `${params.ctaLabel || 'Action link'}: ${params.ctaUrl}`] : []),
+      ...(params.fallbackCodeValue
+        ? ['', `${params.fallbackCodeLabel || 'Security Token'}: ${params.fallbackCodeValue}`]
+        : []),
+      '',
+      `Official Support: ${corporateIdentity.contact.email} | ${corporateIdentity.contact.telephone.display}`,
+      corporateIdentity.headquarters.fullAddress,
+    ];
+
+    if (!this.transport.isConfigured) {
+      logStructured('warn', 'portal_email_unconfigured', {
+        correlationId: params.correlationId,
+        emailType: params.emailType,
+        recipientEmail: params.to,
+      });
+      return {
+        deliveryStatus: 'unconfigured',
+        provider: 'resend',
+        error: 'Transactional email provider (RESEND_API_KEY) is not configured on this server.',
+      };
+    }
+
+    const result = await this.transport.send({
+      to: params.to,
+      subject: params.subject,
+      html,
+      text: textLines.join('\n'),
+    });
+
+    if (result.status === 'sent') {
+      logStructured('info', 'portal_email_provider_accepted', {
+        correlationId: params.correlationId,
+        emailType: params.emailType,
+        recipientEmail: params.to,
+        providerReference: result.providerReference,
+      });
+      return {
+        deliveryStatus: 'provider_accepted',
+        provider: 'resend',
+        providerMessageId: result.providerReference,
+      };
+    }
+
+    logStructured('error', 'portal_email_dispatch_failed', {
+      correlationId: params.correlationId,
+      emailType: params.emailType,
+      recipientEmail: params.to,
+      error: result.error,
+    });
+    return {
+      deliveryStatus: result.status === 'unconfigured' ? 'unconfigured' : 'failed',
+      provider: 'resend',
+      error: result.error || 'Email provider rejected or failed to dispatch the message.',
+    };
+  }
+
+  public async sendPortalVerificationEmail(params: {
+    to: string;
+    fullName: string;
+    verificationToken: string;
+    correlationId?: string;
+  }) {
+    const verificationUrl = `${buildCanonicalPublicUrl(ROUTES.PORTAL.VERIFY_EMAIL)}?token=${encodeURIComponent(
+      params.verificationToken
+    )}`;
+    return this.dispatchPortalTransactionalEmail({
+      to: params.to,
+      subject: `Verify your ${corporateIdentity.legalName} Client Portal email`,
+      badge: 'Email Verification',
+      heading: 'Confirm Your Client Portal Email Address',
+      greetingName: params.fullName,
+      bodyParagraphs: [
+        `Thank you for registering with the ${corporateIdentity.legalName} (${corporateIdentity.networkName}) Client Portal.`,
+        'Please confirm ownership of this email address within 24 hours to activate full account security and corporate communications.',
+      ],
+      ctaLabel: 'Verify Email Address',
+      ctaUrl: verificationUrl,
+      fallbackCodeLabel: 'Verification Code (Expires in 24 Hours)',
+      fallbackCodeValue: params.verificationToken,
+      correlationId: params.correlationId,
+      emailType: 'verification',
+    });
+  }
+
+  public async sendPortalPasswordRecoveryEmail(params: {
+    to: string;
+    fullName: string;
+    resetToken: string;
+    correlationId?: string;
+  }) {
+    const resetUrl = `${buildCanonicalPublicUrl(ROUTES.PORTAL.RESET_PASSWORD)}?token=${encodeURIComponent(
+      params.resetToken
+    )}`;
+    return this.dispatchPortalTransactionalEmail({
+      to: params.to,
+      subject: `${corporateIdentity.legalName} Client Portal Password Recovery`,
+      badge: 'Security Recovery',
+      heading: 'Reset Your Client Portal Password',
+      greetingName: params.fullName,
+      bodyParagraphs: [
+        `We received a request to reset the password for your ${corporateIdentity.legalName} Client Portal account.`,
+        'This single-use recovery link expires in 60 minutes. Completing a password reset automatically revokes all prior active portal sessions.',
+      ],
+      ctaLabel: 'Reset Password',
+      ctaUrl: resetUrl,
+      fallbackCodeLabel: 'Single-Use Recovery Token (Expires in 60 Minutes)',
+      fallbackCodeValue: params.resetToken,
+      correlationId: params.correlationId,
+      emailType: 'password_recovery',
+    });
+  }
+
+  public async sendPortalEmailChangeEmail(params: {
+    to: string;
+    fullName: string;
+    confirmationToken: string;
+    correlationId?: string;
+  }) {
+    const confirmUrl = `${buildCanonicalPublicUrl(ROUTES.PORTAL.SECURITY)}?emailChangeToken=${encodeURIComponent(
+      params.confirmationToken
+    )}`;
+    return this.dispatchPortalTransactionalEmail({
+      to: params.to,
+      subject: `Confirm your new ${corporateIdentity.legalName} Client Portal email`,
+      badge: 'Account Security',
+      heading: 'Confirm Email Address Change',
+      greetingName: params.fullName,
+      bodyParagraphs: [
+        'A request was submitted to update the primary login email address on your DESTRIA TECH INC Client Portal account.',
+        'Use the confirmation code or secure link below within 60 minutes to complete this change.',
+      ],
+      ctaLabel: 'Open Security Settings',
+      ctaUrl: confirmUrl,
+      fallbackCodeLabel: 'Email Change Confirmation Code',
+      fallbackCodeValue: params.confirmationToken,
+      correlationId: params.correlationId,
+      emailType: 'email_change',
+    });
+  }
+
+  public async sendPortalSecurityAlertEmail(params: {
+    to: string;
+    fullName: string;
+    eventTitle: string;
+    eventDetails: string;
+    correlationId?: string;
+  }) {
+    return this.dispatchPortalTransactionalEmail({
+      to: params.to,
+      subject: `Security Notice: ${params.eventTitle} — ${corporateIdentity.legalName}`,
+      badge: 'Security Alert',
+      heading: params.eventTitle,
+      greetingName: params.fullName,
+      bodyParagraphs: [
+        params.eventDetails,
+        'You can review active sessions and security settings inside your Client Portal at any time.',
+      ],
+      ctaLabel: 'Review Security Settings',
+      ctaUrl: buildCanonicalPublicUrl(ROUTES.PORTAL.SECURITY),
+      correlationId: params.correlationId,
+      emailType: 'security_alert',
+    });
+  }
+
+  public async sendPortalLifecycleNotificationEmail(params: {
+    to: string;
+    fullName: string;
+    subject: string;
+    heading: string;
+    message: string;
+    actionLabel?: string;
+    actionPath?: string;
+    emailType:
+      | 'proposal_notification'
+      | 'project_update'
+      | 'support_update'
+      | 'invoice_notification';
+    correlationId?: string;
+  }) {
+    return this.dispatchPortalTransactionalEmail({
+      to: params.to,
+      subject: params.subject,
+      badge: 'Client Portal Update',
+      heading: params.heading,
+      greetingName: params.fullName,
+      bodyParagraphs: [params.message],
+      ctaLabel: params.actionLabel || 'Open Client Portal',
+      ctaUrl: buildCanonicalPublicUrl(params.actionPath || ROUTES.PORTAL.DASHBOARD),
+      correlationId: params.correlationId,
+      emailType: params.emailType,
+    });
+  }
 }
 
 export const NotificationEmailService = TransactionalEmailService;

@@ -265,6 +265,14 @@ const PortalRouteSwitch: React.FC = () => {
         }
       />
       <Route
+        path="documents"
+        element={
+          <ProtectedPortalRoute>
+            <PortalFilesPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
         path="support"
         element={
           <ProtectedPortalRoute>
