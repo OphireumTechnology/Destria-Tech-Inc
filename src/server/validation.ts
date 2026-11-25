@@ -170,13 +170,18 @@ function sanitizeEngagementScope(raw: unknown): string | undefined {
 export function sanitizeChatInput(raw: unknown):
   | {
       ok: true;
+      sessionId?: string;
       userMessage: string;
       language: string;
       history: Array<{ sender: 'user' | 'ai'; text: string }>;
       stateContext: {
         category?: string;
+        selectedService?: string;
         businessProblem?: string;
         currentStage?: string;
+        executivePreference?: 'ceo' | 'cto' | 'advisory';
+        presentedOptions?: string[];
+        keyFeatures?: string[];
       };
     }
   | { ok: false; error: string } {
@@ -189,6 +194,7 @@ export function sanitizeChatInput(raw: unknown):
     return { ok: false, error: 'userMessage is required and must be a non-empty string.' };
   }
 
+  const sessionId = sanitizeText(body.sessionId, 80) || undefined;
   const language = sanitizeText(body.language, 16) || 'en-US';
   const rawHistory = Array.isArray(body.conversationHistory) ? body.conversationHistory : [];
   const history: Array<{ sender: 'user' | 'ai'; text: string }> = [];
@@ -207,15 +213,40 @@ export function sanitizeChatInput(raw: unknown):
       ? (body.stateContext as Record<string, unknown>)
       : {};
 
+  const rawExecPref = sanitizeText(rawState.executivePreference, 24).toLowerCase();
+  const executivePreference =
+    rawExecPref === 'ceo' || rawExecPref === 'cto' || rawExecPref === 'advisory'
+      ? rawExecPref
+      : undefined;
+
+  const presentedOptions = Array.isArray(rawState.presentedOptions)
+    ? rawState.presentedOptions
+        .map((item) => sanitizeText(item, 80))
+        .filter(Boolean)
+        .slice(0, 6)
+    : undefined;
+
+  const keyFeatures = Array.isArray(rawState.keyFeatures)
+    ? rawState.keyFeatures
+        .map((item) => sanitizeText(item, 120))
+        .filter(Boolean)
+        .slice(0, 10)
+    : undefined;
+
   return {
     ok: true,
+    sessionId,
     userMessage,
     language,
     history,
     stateContext: {
       category: sanitizeText(rawState.category, 120) || undefined,
+      selectedService: sanitizeText(rawState.selectedService, 120) || undefined,
       businessProblem: sanitizeText(rawState.businessProblem, 500) || undefined,
       currentStage: sanitizeText(rawState.currentStage, 60) || undefined,
+      executivePreference,
+      presentedOptions,
+      keyFeatures,
     },
   };
 }

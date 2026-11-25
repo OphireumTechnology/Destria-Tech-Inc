@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { createApp } from './src/server/app';
 import { logStructured } from './src/server/logger';
+import { attachVoiceLiveBridge } from './src/server/voiceLiveBridge';
 
 dotenv.config();
 
@@ -39,7 +40,7 @@ function resolveDistDirectory(): string | null {
 }
 
 async function startServer() {
-  const { app, db, emailService } = createApp();
+  const { app, db, emailService, ai } = createApp();
   const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
   if (process.env.NODE_ENV !== 'production') {
@@ -102,6 +103,8 @@ async function startServer() {
     });
   });
 
+  const voiceLiveBridge = attachVoiceLiveBridge(server, ai);
+
   // Harden HTTP server socket & header timeouts against slowloris / hung upstream connections
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
@@ -112,6 +115,7 @@ async function startServer() {
     if (isShuttingDown) return;
     isShuttingDown = true;
     logStructured('info', 'server_shutdown_initiated', { signal, workerId });
+    voiceLiveBridge.close();
     if (retryTimer) {
       clearInterval(retryTimer);
       retryTimer = null;

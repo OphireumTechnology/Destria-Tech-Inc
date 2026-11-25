@@ -19,7 +19,11 @@ import {
   ConsultationAppointment,
   ConsultationSourceChannel,
 } from '../../services/supabaseService';
-import { aiVoiceService, VoiceState, VoiceLanguage } from '../../services/aiVoiceService';
+import {
+  aiVoiceService,
+  VoiceSessionState,
+  VoiceLanguage,
+} from '../../services/aiVoiceService';
 import { SERVICE_CATALOG, formatCatalogEngagement } from '../../data/serviceCatalog';
 import { ProjectBriefModal } from './ProjectBriefModal';
 import { AppointmentBookingModal } from './AppointmentBookingModal';
@@ -43,15 +47,19 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
   const [isEscalationModalOpen, setIsEscalationModalOpen] = useState(false);
 
   // Voice State
-  const [voiceStatus, setVoiceStatus] = useState<VoiceState>('disconnected');
+  const [voiceStatus, setVoiceStatus] = useState<VoiceSessionState>('disconnected');
+  const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [audioVolume, setAudioVolume] = useState(0);
+  const [audioBands, setAudioBands] = useState<number[]>(() => new Array(16).fill(0));
   const [voiceLanguage, setVoiceLanguage] = useState<VoiceLanguage>('en-US');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
-  const isVoiceActive = voiceStatus !== 'disconnected' && voiceStatus !== 'error';
+  const isVoiceActive =
+    isVoiceSessionActive ||
+    (voiceStatus !== 'disconnected' && voiceStatus !== 'error' && voiceStatus !== 'stopping');
 
   // Conversation State (v2 keys; purges legacy cached conversations that may hold retired pricing)
   const [state, setState] = useState<ConsultationState>(() => {
@@ -93,20 +101,51 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastProcessedNonceRef = useRef<number>(0);
+  const stateRef = useRef<ConsultationState>(state);
+  const messagesRef = useRef<ChatMessage[]>(messages);
 
-  // Setup Voice Service Callbacks
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Keep voice engine synchronized with chat history and discovery state
+  useEffect(() => {
+    aiVoiceService.syncConversationContext(
+      messages.map((m) => ({ sender: m.sender, text: m.text })),
+      {
+        category: state.requirements.category || undefined,
+        selectedService: state.requirements.category || undefined,
+        businessProblem: state.requirements.businessProblem || undefined,
+        currentStage: state.currentStage,
+        keyFeatures: state.requirements.keyFeatures,
+      }
+    );
+  }, [messages, state]);
+
+  // Setup Voice Service Callbacks (uses refs to avoid stale React closures)
   useEffect(() => {
     aiVoiceService.setCallbacks({
       onStatusChange: (status) => {
         setVoiceStatus(status);
-        if (status === 'disconnected') {
+        if (status === 'disconnected' || status === 'processing' || status === 'ai_speaking') {
           setLiveTranscript('');
         }
       },
+      onSessionActiveChange: (active) => {
+        setIsVoiceSessionActive(active);
+      },
       onTranscript: (text, isFinal) => {
-        setLiveTranscript(text);
-        if (isFinal && text.trim()) {
-          const userMsgId = `voice-usr-${Date.now()}`;
+        if (!isFinal) {
+          setLiveTranscript(text);
+          return;
+        }
+        setLiveTranscript('');
+        if (text.trim()) {
+          const userMsgId = `voice-usr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
           const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setMessages((prev) => [
             ...prev,
@@ -120,7 +159,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
         }
       },
       onAiResponse: (text, intent) => {
-        const aiMsgId = `voice-ai-${Date.now()}`;
+        const aiMsgId = `voice-ai-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         setMessages((prev) => [
@@ -130,16 +169,36 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
             sender: 'ai',
             text,
             timestamp: now,
-            suggestedAction: intent?.isBookingIntent || intent?.isBookingConfirmed
-              ? 'schedule_meeting'
-              : intent?.isHumanEscalation
-              ? 'talk_to_human'
-              : undefined,
-            quickReplies: intent?.isBookingIntent
-              ? ['Schedule Consultation', 'Review Project Brief']
-              : ['Review Project Brief', 'Schedule Consultation'],
+            recommendedServiceIds: intent?.recommendedServiceIds,
+            suggestedAction:
+              intent?.isBookingIntent || intent?.isBookingConfirmed
+                ? 'schedule_meeting'
+                : intent?.isHumanEscalation
+                ? 'talk_to_human'
+                : intent?.isBriefIntent
+                ? 'review_brief'
+                : undefined,
+            quickReplies:
+              intent?.quickReplies && intent.quickReplies.length > 0
+                ? intent.quickReplies
+                : intent?.isBookingIntent
+                ? ['Schedule Consultation', 'Review Project Brief']
+                : ['Review Project Brief', 'Schedule Consultation'],
           },
         ]);
+
+        if (intent?.updatedContext) {
+          const updatedCtx = intent.updatedContext;
+          setState((prev) => ({
+            ...prev,
+            currentStage: (updatedCtx.currentStage as ConsultationState['currentStage']) || prev.currentStage,
+            requirements: {
+              ...prev.requirements,
+              category: updatedCtx.selectedService || updatedCtx.category || prev.requirements.category,
+              businessProblem: updatedCtx.businessProblem || prev.requirements.businessProblem,
+            },
+          }));
+        }
 
         if (intent?.isBookingConfirmed && intent?.appointment) {
           setState((prev) => ({
@@ -149,8 +208,13 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
           }));
         }
       },
-      onVolumeChange: (vol) => {
+      onVolumeChange: (vol, bands) => {
         setAudioVolume(vol);
+        if (Array.isArray(bands) && bands.length === 16) {
+          setAudioBands(bands);
+        } else {
+          setAudioBands(new Array(16).fill(0));
+        }
       },
       onAppointmentBooked: (appointment) => {
         setState((prev) => ({
@@ -163,9 +227,23 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
         setActiveRequestSource('AI Voice');
         setIsBookingModalOpen(true);
       },
+      onBriefRequested: () => {
+        setActiveRequestSource('AI Voice');
+        const current = stateRef.current;
+        if (current.generatedBrief) {
+          setCurrentBrief(current.generatedBrief);
+        } else {
+          const draft = supabaseService.generateDefaultBrief(
+            current.requirements.category || 'Customized Enterprise Solution',
+            current.client
+          );
+          setCurrentBrief(draft);
+        }
+        setIsBriefModalOpen(true);
+      },
       onError: (err) => {
         setVoiceError(err);
-        setTimeout(() => setVoiceError(null), 7000);
+        setTimeout(() => setVoiceError(null), 8000);
       },
     });
 
@@ -212,14 +290,26 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
   // Handle Voice Toggle
   const handleToggleVoice = async () => {
-    if (isVoiceActive) {
+    if (isVoiceActive || voiceStatus === 'connecting' || voiceStatus === 'reconnecting') {
       aiVoiceService.stopSession();
       setVoiceStatus('disconnected');
+      setIsVoiceSessionActive(false);
     } else {
       setVoiceError(null);
+      aiVoiceService.syncConversationContext(
+        messagesRef.current.map((m) => ({ sender: m.sender, text: m.text })),
+        {
+          category: stateRef.current.requirements.category || undefined,
+          selectedService: stateRef.current.requirements.category || undefined,
+          businessProblem: stateRef.current.requirements.businessProblem || undefined,
+          currentStage: stateRef.current.currentStage,
+          keyFeatures: stateRef.current.requirements.keyFeatures,
+        }
+      );
       const success = await aiVoiceService.startSession();
       if (!success) {
         setVoiceStatus('disconnected');
+        setIsVoiceSessionActive(false);
       }
     }
   };
@@ -383,9 +473,10 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
   };
 
   const handleResetConversation = () => {
-    if (isVoiceActive) {
-      aiVoiceService.stopSession();
-    }
+    aiVoiceService.stopSession();
+    aiVoiceService.resetConversationContext();
+    setVoiceStatus('disconnected');
+    setIsVoiceSessionActive(false);
     try {
       localStorage.removeItem('opm_consultant_messages');
       localStorage.removeItem('opm_consultant_state');
@@ -499,7 +590,13 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
               <div className="relative shrink-0">
                 <BrandLogo variant="emblem" size="sm" ring="brand" decorative />
                 <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#111827] ${
-                  isVoiceActive ? 'bg-[#00C2C7] animate-pulse' : 'bg-emerald-400'
+                  voiceStatus === 'error'
+                    ? 'bg-rose-500'
+                    : voiceStatus === 'reconnecting' || voiceStatus === 'connecting'
+                    ? 'bg-amber-400 animate-pulse'
+                    : isVoiceActive
+                    ? 'bg-[#00C2C7] animate-pulse'
+                    : 'bg-emerald-400'
                 }`} />
               </div>
 
@@ -507,11 +604,25 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                 <div className="flex items-center gap-1.5">
                   <h3 className="text-xs font-bold text-white tracking-wide">DESTRIA AI Solutions</h3>
                   <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
-                    isVoiceActive 
-                      ? 'text-[#00C2C7] bg-[#00C2C7]/15 border-[#00C2C7]/40 font-bold' 
+                    voiceStatus === 'error'
+                      ? 'text-rose-300 bg-rose-950/60 border-rose-500/40 font-bold'
+                      : voiceStatus === 'reconnecting'
+                      ? 'text-amber-300 bg-amber-950/60 border-amber-500/40 font-bold'
+                      : voiceStatus === 'connecting'
+                      ? 'text-amber-300 bg-amber-950/60 border-amber-500/40 font-bold'
+                      : isVoiceActive
+                      ? 'text-[#00C2C7] bg-[#00C2C7]/15 border-[#00C2C7]/40 font-bold'
                       : 'text-slate-400 bg-slate-800 border-slate-700'
                   }`}>
-                    {isVoiceActive ? 'VOICE ACTIVE' : 'ONLINE'}
+                    {voiceStatus === 'error'
+                      ? 'CONNECTION ERROR'
+                      : voiceStatus === 'reconnecting'
+                      ? 'RECONNECTING...'
+                      : voiceStatus === 'connecting'
+                      ? 'CONNECTING...'
+                      : isVoiceActive
+                      ? 'VOICE ACTIVE'
+                      : 'ONLINE'}
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-400">Executive Discovery & Scope Architect</p>
@@ -551,7 +662,9 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
               <button
                 onClick={() => {
-                  if (isVoiceActive) aiVoiceService.stopSession();
+                  aiVoiceService.stopSession();
+                  setVoiceStatus('disconnected');
+                  setIsVoiceSessionActive(false);
                   setIsOpen(false);
                 }}
                 className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
@@ -774,52 +887,81 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
               {/* =========================================================================
                   REAL-TIME VOICE CONTROL & WAVEFORM CENTER
                   ========================================================================= */}
-              {isVoiceActive ? (
+              {isVoiceActive || voiceStatus === 'error' ? (
                 <div className="px-4 py-3 bg-[#111827] border-t border-cyan-500/30 flex flex-col gap-2.5">
                   {/* Status & Live Audio Waveform Strip */}
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      {voiceStatus === 'listening' && (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-emerald-400">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                          <span>LISTENING</span>
-                        </span>
-                      )}
-                      {voiceStatus === 'thinking' && (
+                    <div className="flex items-center gap-2 min-w-0">
+                      {voiceStatus === 'connecting' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
                           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                          <span>ARCHITECTING</span>
+                          <span>Connecting...</span>
                         </span>
                       )}
-                      {voiceStatus === 'speaking' && (
+                      {voiceStatus === 'reconnecting' && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                          <span>Reconnecting...</span>
+                        </span>
+                      )}
+                      {voiceStatus === 'error' && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-rose-400">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>Connection Error</span>
+                        </span>
+                      )}
+                      {voiceStatus !== 'connecting' &&
+                        voiceStatus !== 'reconnecting' &&
+                        voiceStatus !== 'error' &&
+                        isMicMuted && (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-rose-300">
+                            <MicOff className="w-3.5 h-3.5" />
+                            <span>Microphone Muted</span>
+                          </span>
+                        )}
+                      {!isMicMuted && voiceStatus === 'listening' && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-emerald-400">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                          <span>Listening...</span>
+                        </span>
+                      )}
+                      {!isMicMuted && (voiceStatus === 'user_speaking' || voiceStatus === 'interrupted') && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-emerald-300">
+                          <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
+                          <span>You're Speaking...</span>
+                        </span>
+                      )}
+                      {!isMicMuted && voiceStatus === 'processing' && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                          <span>Thinking...</span>
+                        </span>
+                      )}
+                      {!isMicMuted && voiceStatus === 'ai_speaking' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-[#00C2C7]">
                           <Volume2 className="w-3.5 h-3.5 animate-bounce" />
-                          <span>SPEAKING</span>
-                        </span>
-                      )}
-                      {voiceStatus === 'idle' && (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-mono text-slate-400">
-                          <span className="w-2 h-2 rounded-full bg-slate-500" />
-                          <span>VOICE READY</span>
+                          <span>AI Speaking...</span>
                         </span>
                       )}
                     </div>
 
-                    {/* Animated Waveform Visualization (16 Bars) */}
-                    <div className="flex items-center gap-1 h-6">
-                      {[...Array(16)].map((_, i) => {
+                    {/* Real AnalyserNode Waveform Visualization (16 Frequency Bands) */}
+                    <div className="flex items-center gap-1 h-6" aria-label={`Audio level ${audioVolume}%`}>
+                      {audioBands.map((bandLevel, i) => {
                         const heightPercent = isVoiceActive
-                          ? Math.max(15, Math.min(100, (audioVolume * (0.6 + Math.sin(i * 0.7) * 0.4))))
-                          : 15;
+                          ? Math.max(12, Math.min(100, bandLevel))
+                          : 12;
                         return (
                           <div
                             key={i}
                             style={{ height: `${heightPercent}%` }}
                             className={`w-1 rounded-full transition-all duration-75 ${
-                              voiceStatus === 'speaking'
+                              voiceStatus === 'ai_speaking'
                                 ? 'bg-[#00C2C7]'
-                                : voiceStatus === 'listening'
+                                : voiceStatus === 'listening' || voiceStatus === 'user_speaking'
                                 ? 'bg-emerald-400'
+                                : voiceStatus === 'reconnecting' || voiceStatus === 'processing'
+                                ? 'bg-amber-400/70'
                                 : 'bg-slate-700'
                             }`}
                           />
@@ -829,7 +971,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
                     {/* Voice Controls: Mic Mute, Speaker Mute, Interrupt, End */}
                     <div className="flex items-center gap-1">
-                      {voiceStatus === 'speaking' && (
+                      {voiceStatus === 'ai_speaking' && (
                         <button
                           onClick={handleInterruptAi}
                           className="px-2 py-1 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-600/50 text-amber-300 text-[10px] font-mono flex items-center gap-1 cursor-pointer transition-colors"
