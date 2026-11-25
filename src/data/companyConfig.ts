@@ -14,7 +14,7 @@ export const corporateIdentity = {
   abbreviation: 'DTI',
   leadership: {
     ceo: {
-      name: 'Desmond Hines',
+      name: 'Desmond Hinds',
       title: 'Founder & Chief Executive Officer',
     },
     cto: {
