@@ -94,7 +94,9 @@ export const ResourcesPage: React.FC = () => {
     <div className="min-h-screen bg-[#111827] text-[#F3F4F6] flex flex-col overflow-x-clip selection:bg-[#00C2C7]/20 selection:text-[#00C2C7]">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(structuredData).replace(/</g, '\\u003c'),
+        }}
       />
 
       <Header

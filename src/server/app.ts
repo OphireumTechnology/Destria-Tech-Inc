@@ -156,11 +156,9 @@ class SlidingWindowRateLimiter {
 }
 
 function getClientIp(req: Request): string {
-  const fwd = req.headers['x-forwarded-for'];
-  if (typeof fwd === 'string' && fwd.trim()) {
-    return fwd.split(',')[0].trim();
-  }
-  return req.ip || 'unknown';
+  // Rely on Express's configured `trust proxy: 1` (req.ip) rather than raw
+  // leftmost X-Forwarded-For headers, which an untrusted client can spoof.
+  return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
 function parsePagination(req: Request): { limit: number; offset: number } {
@@ -2296,9 +2294,9 @@ CONSULTATION & AUTHORIZED TOOL BEHAVIOR:
     }
 
     const toolName =
-      kind === 'consultation_request'
+      kind === 'consultation_request' || kind === 'consultation'
         ? 'submit_consultation_request'
-        : kind === 'service_inquiry'
+        : kind === 'service_inquiry' || kind === 'inquiry'
         ? 'submit_service_inquiry'
         : '';
     if (!toolName) {
@@ -2318,7 +2316,7 @@ CONSULTATION & AUTHORIZED TOOL BEHAVIOR:
       return;
     }
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
       toolName,
       ...outcome.data,

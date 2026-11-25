@@ -1,0 +1,1442 @@
+# MASTER DEVELOPMENT INSTRUCTION
+## DESTRIA TECH INC — Comprehensive Application Repair, Regression Stabilization, Security Hardening and Release Validation
+
+### 1. PRIMARY DEVELOPMENT OBJECTIVE
+
+Execute a comprehensive, systematic and dependency-ordered repair of the entire DESTRIA TECH INC web application.
+
+Repository:
+
+https://github.com/OphireumTechnology/Destria-Tech-Inc
+
+GitHub Actions:
+
+https://github.com/OphireumTechnology/Destria-Tech-Inc/actions
+
+Existing Gemini Live repair:
+
+https://github.com/OphireumTechnology/Destria-Tech-Inc/pull/11
+
+Do not limit the development to superficial error corrections. Investigate the underlying root causes of every detected failure and repair all affected components, integrations, dependencies, application workflows and architectural inconsistencies.
+
+The objective is to achieve:
+
+- Zero unresolved compilation errors.
+- Zero TypeScript errors.
+- Zero lint errors.
+- Zero failing regression tests.
+- Zero broken application routes.
+- Zero unresolved critical or high-severity security vulnerabilities.
+- Zero unauthorized commercial information disclosures.
+- Zero duplicated application initialization processes.
+- Zero unhandled application exceptions.
+- Zero false-success notifications.
+- Fully validated frontend and backend integration.
+- Fully validated AI voice and chat functionality.
+- Fully validated administrative functions.
+- Production release readiness supported by actual evidence.
+
+Do not declare any component fully operational unless its functionality has been independently validated.
+
+---
+
+## 2. MANDATORY DEVELOPMENT AND ARCHITECTURAL PRESERVATION RULES
+
+Preserve the existing enterprise application architecture, corporate identity, functionality, approved business rules and database records.
+
+Strictly preserve the official corporate color palette:
+
+- Graphite: #111827
+- Deep Navy: #0B1F3B
+- Technology Cyan: #00C2C7
+- Metallic Gold: #D4AF37
+- Silver Gray: #F3F4F6
+- Technology Blue: #0EA5E9
+- Emerald Teal: #10B981
+- White: #FFFFFF
+
+Retain the existing:
+
+- Advanced animated technology backgrounds.
+- Moving blockchain and artificial intelligence visual elements.
+- Corporate branding.
+- Minimalist enterprise website design.
+- Corporate logo.
+- Responsive layouts.
+- Corporate resource documents.
+- Enterprise technology service catalog.
+- AI Corporate Solutions Consultant.
+- AI voice consultation system.
+- Consultation scheduling system.
+- Service inquiry system.
+- Administrative Command Center.
+- Existing database architecture and security controls.
+
+Do not unnecessarily redesign working components.
+
+Do not restore outdated corporate information or previously removed public pricing.
+
+Do not overwrite newer corporate modernization changes while integrating older repair branches.
+
+---
+
+## 3. PHASE 01 — COMPLETE REPOSITORY AND FAILURE BASELINE AUDIT
+
+Before modifying source code:
+
+1. Retrieve the latest main branch.
+2. Inspect all active development and repair branches.
+3. Inspect PR #11 and related pull requests.
+4. Identify the latest successful and unsuccessful GitHub Actions runs.
+5. Retrieve the complete failed job logs.
+6. Identify every failing test and affected source file.
+7. Compare the latest main branch with the repair branch.
+8. Identify duplicated, conflicting or superseded changes.
+9. Inspect the complete application dependency tree.
+10. Record the exact starting commit SHA.
+
+Previously inspected main commit:
+
+`d805cbd7f029cc42ce1cf43e1f021e7de09abe35`
+
+Previously inspected repair commit:
+
+`622b1b6adaa30aa8083701b31a3dc0352a29ea5f`
+
+These commits are historical audit references. Verify the latest repository state before development.
+
+Investigate the following historical failed runs:
+
+- 45714982443
+- 45714982473
+- 45715912278
+- 45715840564
+- 45715620657
+- 45715614742
+- 45715603785
+- 45715582971
+
+Also verify the final results of:
+
+- 45716341444
+- 45716341478
+
+Create a complete defect register containing:
+
+- Defect identification number.
+- Severity.
+- Affected module.
+- Source file.
+- Source line.
+- Failed test.
+- Expected behavior.
+- Actual behavior.
+- Root cause.
+- Proposed repair.
+- Dependencies.
+- Validation requirements.
+- Repair status.
+- Supporting evidence.
+
+Do not assume that historical failures remain unresolved. Reproduce them against the latest source code.
+
+---
+
+## 4. PHASE 02 — REPAIR SPEECH NORMALIZATION AND VOICE INTENT RECOGNITION
+
+Priority: P0
+
+Investigate and repair the speech normalization and intent recognition system.
+
+Affected regression file:
+
+`tests/gemini-live-upgrade.test.ts`
+
+Previously detected failure:
+
+Input:
+
+`Destrea Tech and Oferium`
+
+Expected normalization:
+
+`DESTRIA TECH and Ophireum`
+
+The normalization function failed to produce the expected canonical company names.
+
+Locate and repair:
+
+- normalizeSpokenUtterance()
+- isUnclearOrNoisyTranscript()
+- Voice intent classification.
+- Corporate entity recognition.
+- Phonetic correction.
+- Technical terminology normalization.
+- Multilingual speech processing.
+
+Support controlled recognition of relevant variations, including:
+
+- Destria Tech.
+- Destrea Tech.
+- Destriya Tech.
+- DESTRIA TECH INC.
+- Ophireum.
+- Oferium.
+- Ophirium.
+
+Use bounded, context-aware normalization rules.
+
+Do not incorrectly replace unrelated words, personal names or legitimate technical terminology.
+
+Repair speech interpretation involving:
+
+- English.
+- Filipino-accented English.
+- Taglish.
+- International English accents.
+- Technical enterprise terminology.
+- Multi-clause instructions.
+- Incomplete sentences.
+- Client corrections.
+- Explicit appointment requests.
+- Requests for human assistance.
+- Unclear audio.
+- Noise-only transcripts.
+- Symbol-only transcripts.
+- Repeated transcripts.
+
+Previously observed speech intent benchmark:
+
+- Passed: 25 of 28 cases.
+- Accuracy: 89.3%.
+- Required benchmark: At least 95%.
+
+Repair all three historically failing categories:
+
+1. Long multi-clause instructions.
+2. Explicit booking triggers.
+3. Noisy symbol fragments.
+
+Target 28/28 passing deterministic benchmark cases without weakening existing expectations.
+
+Expand the test suite to cover additional realistic enterprise consultation scenarios.
+
+Do not represent text-based regression benchmarks as proof of actual microphone or speech-recognition accuracy. Conduct separate audio-based acceptance testing.
+
+---
+
+## 5. PHASE 03 — REPAIR AI CONTEXTUAL INTELLIGENCE AND CONVERSATION MEMORY
+
+Priority: P0
+
+Investigate the contextual follow-up benchmark and repair conversation-state handling.
+
+Previously observed result:
+
+- Passed: 18 of 20 cases.
+- Accuracy: 90%.
+- Required accuracy: At least 95%.
+
+Confirmed historical failures include:
+
+- Client name extraction.
+- Company information retention.
+- Human escalation follow-up.
+- Incorrect service classification.
+
+Implement reliable extraction and retention of:
+
+- Client full name.
+- Company name.
+- Email address.
+- Telephone number.
+- Industry.
+- Business requirements.
+- Selected service.
+- Existing technology systems.
+- Project objectives.
+- Project timeline.
+- Consultation preferences.
+- Previously confirmed information.
+
+Example:
+
+"My name is Carlos Mendoza from Pacific Logistics Group, email carlos@pacificlogistics.example."
+
+Expected behavior:
+
+- Extract Carlos Mendoza as the client name.
+- Extract Pacific Logistics Group as the company.
+- Extract the supplied email.
+- Preserve existing project requirements.
+- Do not incorrectly classify the introduction as a technology service request.
+
+Repair conversational references such as:
+
+- The first option.
+- The second solution.
+- That service.
+- The previous recommendation.
+- Change my selection.
+- I meant blockchain.
+- I want to book a consultation.
+- Connect me with your solutions team.
+- I want to speak with a human.
+
+Implement deterministic intent precedence so that explicit booking, human assistance, client corrections and contact-information updates are not overridden by generic catalog keyword matching.
+
+Target 20/20 passing contextual regression cases.
+
+Maintain strict isolation between different client sessions.
+
+---
+
+## 6. PHASE 04 — REPAIR ALL 12 AUTHORIZED AI TOOLS
+
+Priority: P0
+
+Primary affected source:
+
+`src/server/aiToolsEngine.ts`
+
+Audit, repair and validate all 12 authorized Gemini tools:
+
+1. get_corporate_information
+2. get_corporate_profile
+3. search_technology_solutions
+4. recommend_technology_solutions
+5. collect_project_requirements
+6. validate_client_information
+7. check_appointment_availability
+8. prepare_consultation_request
+9. submit_consultation_request
+10. prepare_service_inquiry
+11. submit_service_inquiry
+12. request_human_assistance
+
+### 6.1 Service Inquiry Preparation Failure
+
+Investigate the failing `prepare_service_inquiry` regression around line 607 of:
+
+`tests/gemini-live-upgrade.test.ts`
+
+Previously observed result:
+
+`ok: false`
+
+Expected result:
+
+`ok: true`
+
+Trace the complete execution path through:
+
+- Gemini function declarations.
+- Tool argument parsing.
+- Required-field validation.
+- Contact-number validation.
+- Email validation.
+- Service catalog resolution.
+- Project description validation.
+- Inquiry payload construction.
+- Confirmation-token generation.
+- UI event generation.
+
+Determine whether the failure originates from application validation, a mismatched test fixture or an inconsistent interface contract.
+
+Repair the actual root cause.
+
+Do not disable validation simply to make the test pass.
+
+### 6.2 Service Catalog Mapping
+
+Investigate the historical failure where the expected service title:
+
+`AI Solutions & AI Agents`
+
+Was returned as:
+
+`undefined`
+
+Repair inconsistencies involving:
+
+- Service IDs.
+- Category IDs.
+- Service titles.
+- Division names.
+- Catalog aliases.
+- Search results.
+- Recommendation results.
+- Conversation-state mapping.
+- Inquiry payload construction.
+
+Establish a consistent canonical service catalog contract.
+
+### 6.3 Confirmation and Submission Security
+
+Preserve the mandatory two-stage submission architecture:
+
+Stage 1: Prepare and validate.
+
+Stage 2: Obtain explicit client confirmation and submit.
+
+Enforce:
+
+- No database record creation before confirmation.
+- No consultation booking before confirmation.
+- No notification dispatch before confirmation.
+- Session-bound confirmation tokens.
+- Token expiration.
+- Replay protection.
+- Cross-session isolation.
+- Duplicate submission prevention.
+- Server-side validation.
+- Idempotent submission handling.
+
+Do not rely solely on the AI model asserting `clientConfirmed: true`. Verify that the application has captured an authorized client confirmation associated with the prepared request.
+
+Validate successful and unsuccessful execution of every authorized tool.
+
+---
+
+## 7. PHASE 05 — REPAIR GEMINI LIVE WEBSOCKET ARCHITECTURE
+
+Priority: P0
+
+Primary affected files:
+
+- `src/server/voiceLiveBridge.ts`
+- `src/server/aiRuntimeConfig.ts`
+- `tests/gemini-live-upgrade.test.ts`
+
+### 7.1 Session ID Contract
+
+Previously detected mismatch:
+
+Test session ID:
+
+`live-e2e-session-01`
+
+Server validation:
+
+`^dti-[a-zA-Z0-9_-]{6,64}$`
+
+The server rejects the supplied test ID and generates a replacement ID, causing the active-session assertion to fail.
+
+Repair the test and client/server contract using a valid canonical session ID, for example:
+
+`dti-live-e2e-session-01`
+
+Verify the actual production frontend session ID format before implementing changes.
+
+Ensure that:
+
+- The accepted session ID is returned in the ready event.
+- The frontend stores the authoritative session ID.
+- The runtime registry uses the same session ID.
+- Tool execution uses the same authorized session.
+- Session termination removes the correct registry entry.
+- Invalid session IDs are safely rejected or replaced according to the documented protocol.
+
+Do not weaken the existing session validation pattern merely to satisfy an outdated test.
+
+### 7.2 WebSocket Initialization
+
+Repair and validate the complete connection lifecycle:
+
+- WebSocket connection.
+- Origin validation.
+- Client initialization.
+- Runtime quota validation.
+- Gemini SDK connection.
+- Session registration.
+- Ready event.
+- Audio streaming.
+- Transcription.
+- Tool execution.
+- Interruption.
+- Session resumption.
+- Session termination.
+- Resource cleanup.
+
+Ensure readiness is emitted only when the underlying SDK connection is usable.
+
+Handle SDK adapters that resolve connect() without invoking onopen.
+
+Prevent duplicate readiness events.
+
+Prevent repeated init messages from creating multiple provider connections or duplicate registry entries.
+
+Handle connection failure and disconnect-during-initialization races.
+
+### 7.3 WebSocket Security
+
+Preserve and strengthen:
+
+- Authorized-origin validation.
+- Connection rate limiting.
+- Maximum payload limits.
+- Session quotas.
+- Session expiration.
+- Idle timeouts.
+- Input validation.
+- Session ownership.
+- Administrator termination authorization.
+- Server-side API key protection.
+
+Review forwarded IP header handling against the actual trusted proxy configuration.
+
+Do not trust arbitrary client-supplied proxy headers.
+
+Ensure malformed, oversized or unauthorized messages cannot crash the application.
+
+---
+
+## 8. PHASE 06 — ELIMINATE FIVE-MINUTE REGRESSION TEST HANGS
+
+Priority: P0
+
+Previously detected Live Bridge regression duration:
+
+Approximately 300 seconds.
+
+The production WebSocket idle timer is configured for five minutes. Failed assertions may leave connections, timers or HTTP servers active.
+
+Repair deterministic resource cleanup.
+
+Ensure every relevant test uses reliable try/finally or equivalent teardown mechanisms.
+
+Always release:
+
+- WebSocket clients.
+- WebSocket servers.
+- HTTP servers.
+- Gemini SDK mock sessions.
+- Event listeners.
+- Pending asynchronous operations.
+- Idle timers.
+- Session TTL timers.
+- Runtime registry entries.
+- Mock resources.
+
+Add bounded test-specific timeouts.
+
+Ensure failed tests terminate promptly and produce actionable diagnostics.
+
+Do not reduce legitimate production session limits merely to accelerate automated testing.
+
+Add regression cases covering:
+
+- Failed initialization.
+- Assertion failure.
+- Unauthorized origin.
+- Provider connection rejection.
+- Client disconnect.
+- Administrator termination.
+- Repeated initialization.
+- Connection closure during asynchronous tool execution.
+
+Verify that no test leaves unresolved handles or timers.
+
+---
+
+## 9. PHASE 07 — REPAIR ADMINISTRATIVE AI COMMAND CENTER
+
+Priority: P1
+
+Investigate the historical regression:
+
+Expected HTTP status: 200
+
+Actual HTTP status: 201
+
+Affected test:
+
+`tests/gemini-live-upgrade.test.ts`, around line 964.
+
+Determine the intended endpoint contract before making changes.
+
+Use:
+
+- HTTP 200 for successful retrieval or operations whose contract requires 200.
+- HTTP 201 for successful resource creation.
+- HTTP 400 for invalid requests.
+- HTTP 401 for unauthenticated requests.
+- HTTP 403 for unauthorized requests.
+- HTTP 409 for applicable resource conflicts.
+- HTTP 429 for rate-limited requests.
+- HTTP 500 for unexpected internal failures.
+
+Repair inconsistent frontend, backend and test expectations.
+
+Audit the Administrative AI Command Center for:
+
+- Administrator authentication.
+- Role-based access control.
+- Session management.
+- AI runtime settings.
+- Model configuration.
+- Voice configuration.
+- Language configuration.
+- Session quotas.
+- Active session monitoring.
+- AI usage telemetry.
+- Operational diagnostics.
+- Session termination.
+- Audit logging.
+- Secret protection.
+
+Ensure unauthorized users cannot read or modify protected administrative settings.
+
+Never expose raw Gemini API keys, Supabase service-role credentials or other secrets.
+
+---
+
+## 10. PHASE 08 — CORPORATE IDENTITY AND KNOWLEDGE REPOSITORY RECONCILIATION
+
+Priority: P1
+
+Audit all corporate information throughout the application.
+
+Correct executive name:
+
+`Desmond Hinds`
+
+Incorrect historical spelling:
+
+`Desmond Hines`
+
+Ensure consistent approved corporate information across:
+
+- Homepage.
+- About page.
+- Leadership page.
+- Corporate profile.
+- Corporate resources.
+- AI chatbot.
+- AI voice consultant.
+- Corporate knowledge repository.
+- System instructions.
+- Service descriptions.
+- Metadata.
+- Structured SEO data.
+- Administrative records.
+- Email templates.
+- Automated tests.
+- Downloadable corporate documents.
+
+Inspect:
+
+- `src/data/companyConfig.ts`
+- `src/data/corporateKnowledgeBase.ts`
+- `src/config/corporateProfile.ts`
+- `src/data/corporateResources.ts`
+- `src/services/aiConsultantService.ts`
+
+Establish canonical corporate identity records and eliminate unnecessary duplication.
+
+Preserve historical audit records where appropriate.
+
+Do not invent executive roles, corporate addresses, contact information, legal registrations or certifications.
+
+Verify all corporate facts against the latest approved records.
+
+---
+
+## 11. PHASE 09 — AI MODEL CONFIGURATION AND PROVIDER COMPATIBILITY
+
+Priority: P0
+
+Inspect:
+
+`src/server/aiRuntimeConfig.ts`
+
+The inspected source contains model identifiers including:
+
+- gemini-3.8-live
+- gemini-3.8-live-extended-thinking
+- gemini-4-hydrogen
+- gemini-3.8-flash-lite-tts
+
+Do not assume these identifiers are valid or available merely because they appear in the source code or pass mocked tests.
+
+Verify each model against:
+
+- Current official Google Gemini API documentation.
+- Installed Google GenAI SDK compatibility.
+- Actual authorized account model availability.
+- Live API support.
+- Audio input/output support.
+- Function-calling support.
+- Text-to-speech support.
+- Supported voice configuration.
+- Thinking configuration.
+- Session resumption compatibility.
+
+Replace unsupported identifiers only with verified, compatible alternatives.
+
+Centralize model configuration.
+
+Avoid hardcoded model names scattered across the application.
+
+Implement graceful handling of:
+
+- Invalid model configuration.
+- Provider authentication failure.
+- Provider rate limiting.
+- Provider quota exhaustion.
+- Provider timeout.
+- Network interruption.
+- Unsupported API capabilities.
+- Temporary provider outages.
+
+Never report that Gemini Live is operational when the provider is unavailable or unconfigured.
+
+Keep server-side API credentials protected.
+
+---
+
+## 12. PHASE 10 — DATABASE, SUPABASE AND DATA INTEGRITY AUDIT
+
+Priority: P0
+
+Audit the entire database integration architecture.
+
+Inspect:
+
+- Database repository interfaces.
+- Supabase adapters.
+- SQL migrations.
+- Table definitions.
+- Row-level security policies.
+- Database constraints.
+- Indexes.
+- Authentication integration.
+- Storage permissions.
+- Transaction handling.
+- Audit records.
+- Notification outbox records.
+
+Validate the database workflows supporting:
+
+- Client information.
+- Service inquiries.
+- Consultation appointments.
+- AI-generated project requirements.
+- Administrative operations.
+- Notification records.
+- Audit logs.
+
+Implement or repair where necessary:
+
+- Required-field constraints.
+- Foreign-key integrity.
+- Unique reference codes.
+- Duplicate submission prevention.
+- Atomic booking operations.
+- Concurrent appointment conflict prevention.
+- Transaction consistency.
+- Safe database error handling.
+- Appropriate data access restrictions.
+
+Verify that a newly booked appointment immediately becomes unavailable to subsequent booking requests.
+
+Test concurrent booking attempts.
+
+Do not reset, truncate, delete or overwrite production data.
+
+Do not apply production migrations without explicit approval.
+
+Use isolated staging or disposable test environments for destructive migration testing.
+
+---
+
+## 13. PHASE 11 — EMAIL AND NOTIFICATION DELIVERY REPAIR
+
+Priority: P0
+
+Audit the complete consultation and service inquiry notification pipeline.
+
+Inspect:
+
+- Transactional email service.
+- Notification outbox.
+- Email provider configuration.
+- Recipient resolution.
+- Email templates.
+- Retry mechanisms.
+- Delivery status tracking.
+- Failure diagnostics.
+
+The inspected AI tool source and regression tests reference the following executive notification recipients:
+
+- artaxsvcs@gmail.com
+- dhenze.languisan@gmail.com
+
+Verify these against the latest approved corporate recipient configuration before making changes.
+
+Do not change the public corporate contact details or authorized notification recipients without approval.
+
+Validate:
+
+- Notification creation.
+- Outbox persistence.
+- Dispatch processing.
+- Provider acceptance.
+- Retry handling.
+- Duplicate prevention.
+- Failure reporting.
+- Delivery confirmation where supported.
+
+Distinguish clearly between:
+
+- Request accepted.
+- Database record created.
+- Notification queued.
+- Provider accepted.
+- Email delivered.
+- Email failed.
+
+Never display a successful email-delivery message when delivery has not been verified.
+
+Never expose internal notification recipients to unauthorized clients.
+
+Use mocked providers for automated tests and approved test mailboxes for hosted acceptance.
+
+---
+
+## 14. PHASE 12 — COMMERCIAL POLICY AND AI GOVERNANCE
+
+Priority: P0
+
+Preserve the approved customized enterprise engagement policy.
+
+Ensure the AI chatbot, voice consultant, fallback system and tool responses do not disclose unauthorized:
+
+- Standardized public pricing.
+- Automated project quotations.
+- Unapproved discounts.
+- Promotional pricing.
+- Historical service packages.
+- Fabricated project costs.
+- Internal financial information.
+
+Inspect:
+
+`src/server/aiCommercialPolicy.ts`
+
+Validate commercial policy enforcement across:
+
+- AI chat output.
+- Voice output.
+- Streaming audio.
+- Partial transcripts.
+- Final transcripts.
+- Tool responses.
+- Resource links.
+- Offline fallback responses.
+- Consultation recommendations.
+
+Ensure prohibited content is blocked before delivery where technically possible.
+
+Do not claim that blocking a final transcript guarantees previously streamed audio was not heard.
+
+Test adversarial prompts attempting to override commercial rules.
+
+Preserve transparent identification of the AI consultant as artificial intelligence rather than a human executive.
+
+---
+
+## 15. PHASE 13 — COMPLETE FRONTEND REPAIR AND RESPONSIVE VALIDATION
+
+Priority: P1
+
+Audit every public and administrative page.
+
+Identify and repair:
+
+- Broken routes.
+- Blank pages.
+- Broken navigation.
+- Missing components.
+- Broken links.
+- Invalid resource URLs.
+- Missing images.
+- Broken PDF links.
+- Incorrect asset paths.
+- Browser console errors.
+- React rendering errors.
+- Duplicate components.
+- Unnecessary component re-renders.
+- Mobile overflow.
+- Incorrect text alignment.
+- Broken forms.
+- Unresponsive buttons.
+- Loading-state defects.
+- Error-state defects.
+- Accessibility violations.
+
+Maintain the approved minimalist enterprise technology design.
+
+Preserve existing animated technology backgrounds and moving elements.
+
+Optimize animation performance without removing the visual identity.
+
+Validate:
+
+- Desktop.
+- Laptop.
+- Tablet.
+- Mobile.
+- Touch navigation.
+- Keyboard navigation.
+- Screen-reader accessibility.
+- Reduced-motion preferences.
+- Slow network conditions.
+
+Ensure every interactive element performs its intended function.
+
+Do not replace functional pages with decorative placeholders.
+
+---
+
+## 16. PHASE 14 — BACKEND API AND APPLICATION INTEGRATION REPAIR
+
+Priority: P0
+
+Audit all Express backend routes and frontend API callers.
+
+Generate a complete API route inventory containing:
+
+- HTTP method.
+- Endpoint.
+- Authentication requirement.
+- Request schema.
+- Response schema.
+- Database dependency.
+- Provider dependency.
+- Frontend caller.
+- Validation status.
+- Test coverage.
+
+Repair:
+
+- Incorrect API URLs.
+- Frontend/backend schema mismatches.
+- CORS configuration errors.
+- Missing request validation.
+- Unhandled asynchronous errors.
+- Incorrect HTTP status codes.
+- Inconsistent response formats.
+- Incorrect environment variable handling.
+- Missing request timeouts.
+- Incorrect retry behavior.
+- Duplicate API submissions.
+- Inadequate error reporting.
+
+Validate health and readiness endpoints.
+
+Health endpoints must not expose sensitive configuration.
+
+Readiness must accurately reflect essential service dependencies.
+
+Ensure static frontend hosting does not incorrectly attempt to execute backend-only operations.
+
+---
+
+## 17. PHASE 15 — DEPENDENCY AND SOURCE CODE QUALITY REPAIR
+
+Priority: P1
+
+Audit:
+
+- package.json
+- package-lock.json
+- TypeScript configuration.
+- Vite configuration.
+- Server bundling configuration.
+- Node.js runtime compatibility.
+- GitHub Actions configuration.
+
+The inspected package.json currently maps both lint and typecheck to:
+
+`tsc --noEmit`
+
+This does not provide independent lint validation.
+
+Implement a genuine lint configuration compatible with the existing TypeScript and React architecture.
+
+Maintain separate commands for:
+
+- Type checking.
+- Linting.
+- Unit testing.
+- Integration testing.
+- Security testing.
+- Frontend compilation.
+- Backend compilation.
+- End-to-end testing.
+
+Review whether existing test aliases execute identical suites unnecessarily.
+
+Repair:
+
+- Unused imports.
+- Dead code.
+- Unsafe type assertions.
+- Excessive use of any.
+- Unhandled promises.
+- Circular dependencies.
+- Duplicate utilities.
+- Deprecated APIs.
+- Incompatible package versions.
+- Unnecessary dependencies.
+
+Do not perform uncontrolled major dependency upgrades.
+
+Validate dependency changes against the existing lockfile and runtime compatibility.
+
+Investigate the GitHub Actions Node.js 20 deprecation warning associated with checkout and setup-node actions.
+
+Upgrade workflow actions to verified supported versions where appropriate.
+
+---
+
+## 18. PHASE 16 — SECURITY HARDENING AND VULNERABILITY REMEDIATION
+
+Priority: P0
+
+Conduct a comprehensive application security audit.
+
+Inspect for:
+
+- Broken authentication.
+- Broken access control.
+- Cross-site scripting.
+- SQL injection.
+- Cross-site request forgery.
+- Server-side request forgery.
+- Insecure direct object references.
+- Secret exposure.
+- Unsafe file handling.
+- Insecure CORS.
+- WebSocket abuse.
+- Session hijacking.
+- Confirmation-token replay.
+- Prompt injection.
+- Unauthorized AI tool execution.
+- Sensitive logging.
+- Dependency vulnerabilities.
+- Denial-of-service risks.
+
+Implement necessary repairs without weakening existing security boundaries.
+
+Verify:
+
+- Server-side authorization.
+- Secure session lifecycle.
+- Input sanitization.
+- Request size limits.
+- Rate limiting.
+- Secret isolation.
+- Privacy-safe diagnostics.
+- Database access restrictions.
+- Audit trail integrity.
+
+Do not expose real credentials in source code, test fixtures, screenshots, build artifacts or logs.
+
+Do not report security certification or compliance merely because automated tests pass.
+
+---
+
+## 19. PHASE 17 — GITHUB ACTIONS AND DEPLOYMENT PIPELINE REPAIR
+
+Priority: P0
+
+Audit all workflows under:
+
+`.github/workflows/`
+
+Repair the CI Security & Stabilization Checks workflow and the GitHub Pages deployment workflow.
+
+Implement a dependency-ordered validation pipeline:
+
+1. Repository checkout.
+2. Runtime setup.
+3. Deterministic dependency installation.
+4. Source validation.
+5. TypeScript validation.
+6. Independent lint validation.
+7. Unit tests.
+8. Integration tests.
+9. Regression tests.
+10. Security tests.
+11. Frontend production build.
+12. Backend production build.
+13. Routing validation.
+14. Compiled asset validation.
+15. SEO validation.
+16. Secret leakage screening.
+17. SQL migration validation.
+18. Artifact generation.
+19. Release readiness evaluation.
+20. Explicit deployment approval.
+
+Ensure every required validation failure prevents release.
+
+Do not use continue-on-error, disabled assertions, ignored exit codes or skipped tests to manufacture successful CI results.
+
+Prevent unnecessary duplicate workflow executions where safe.
+
+Configure appropriate job timeouts and concurrency controls.
+
+Preserve logs and validation artifacts for failed workflows.
+
+Do not automatically deploy a repair branch to production.
+
+---
+
+## 20. PHASE 18 — COMPLETE AUTOMATED TEST RECONCILIATION
+
+Priority: P0
+
+The historical audit identified:
+
+Earlier main branch:
+
+- 84 passing tests.
+- 5 failing tests.
+
+Gemini Live repair branch:
+
+- 86 passing tests.
+- 3 failing tests.
+
+These figures are historical evidence, not the current test baseline.
+
+Retrieve the latest test count and repair every reproducible failure.
+
+Required validation commands, where supported by the repository:
+
+```bash
+npm ci
+npm run typecheck
+npm run lint
+npm run verify:routing
+npm run test
+npm run build
+npm run build:pages-routes
+npm run verify:routing:dist
+npm run build:server
+npm run test:security
+```
+
+Add and execute separate integration and end-to-end commands where missing.
+
+Validate all critical scenarios:
+
+- AI speech normalization.
+- AI contextual memory.
+- All 12 AI tools.
+- Consultation preparation.
+- Consultation confirmation.
+- Inquiry preparation.
+- Inquiry confirmation.
+- Duplicate submission prevention.
+- Appointment availability.
+- WebSocket origin rejection.
+- WebSocket initialization.
+- Audio streaming.
+- Partial and final transcription.
+- AI tool execution.
+- Commercial policy enforcement.
+- Administrator authentication.
+- Administrator authorization.
+- Runtime configuration.
+- Session termination.
+- Notification outbox.
+- Database integration.
+- Corporate resource downloads.
+- Public website navigation.
+- Mobile responsiveness.
+
+Do not remove existing valid tests.
+
+Do not lower accuracy thresholds to conceal failures.
+
+Only update outdated test expectations when the intended application contract has been verified and documented.
+
+Require zero failing mandatory tests.
+
+---
+
+## 21. PHASE 19 — HOSTED STAGING ACCEPTANCE
+
+After successful local and CI validation, prepare an isolated staging acceptance plan.
+
+Validate the actual hosted environment, including:
+
+- Frontend deployment.
+- Backend deployment.
+- Supabase connectivity.
+- Database migrations.
+- Authentication.
+- Administrator access.
+- Gemini provider connectivity.
+- Actual supported AI model availability.
+- Microphone permissions.
+- Audio capture.
+- Audio playback.
+- Real-time transcription.
+- AI tool execution.
+- Consultation scheduling.
+- Inquiry submission.
+- Email provider integration.
+- Corporate PDF resources.
+- Mobile browser functionality.
+- Security controls.
+- Monitoring.
+- Backup and restore procedures.
+- Rollback procedures.
+
+Clearly distinguish:
+
+- Source code implemented.
+- Locally tested.
+- CI validated.
+- Staging deployed.
+- Staging accepted.
+- Production approved.
+- Production deployed.
+- Production independently verified.
+
+Do not classify mocked integration tests as live provider acceptance.
+
+Do not classify successful frontend compilation as full application readiness.
+
+---
+
+## 22. PHASE 20 — PERFORMANCE AND OPERATIONAL STABILIZATION
+
+Audit application performance and operational resilience.
+
+Measure and improve where necessary:
+
+- Initial page load.
+- JavaScript bundle size.
+- Image loading.
+- Animation performance.
+- API response latency.
+- Database query latency.
+- WebSocket connection initialization.
+- AI response latency.
+- Memory consumption.
+- Resource cleanup.
+- Concurrent session behavior.
+
+Implement appropriate:
+
+- Lazy loading.
+- Code splitting.
+- Resource caching.
+- Request cancellation.
+- Bounded retries.
+- Error boundaries.
+- Provider fallback.
+- Structured operational logging.
+
+Do not sacrifice functionality, accessibility, security or corporate branding to achieve performance targets.
+
+---
+
+## 23. DEVELOPMENT EXECUTION AND RELEASE GOVERNANCE
+
+Perform the repairs in a dedicated integration branch based on the latest authorized main commit.
+
+Suggested branch:
+
+`repair/enterprise-stabilization-master`
+
+Before creating the branch, reconcile existing PR #11 and related changes to prevent duplicate or conflicting repairs.
+
+Keep changes organized into logical, reviewable commits.
+
+Do not repeatedly push speculative fixes simply to discover errors through GitHub Actions.
+
+Validate locally first wherever execution capabilities permit.
+
+Do not:
+
+- Force-push main.
+- Merge pull requests without approval.
+- Modify production credentials.
+- Change production environment variables without approval.
+- Delete database records.
+- Apply destructive production migrations.
+- Disable security checks.
+- Bypass required CI gates.
+- Automatically deploy to production.
+- Fabricate validation evidence.
+
+If Google AI Studio cannot access a required repository, runtime, provider, test environment or external service, identify the exact blocker and provide the necessary manual validation steps.
+
+Do not claim execution of commands that were not actually executed.
+
+---
+
+## 24. REQUIRED DEVELOPMENT EVIDENCE AND DOCUMENTATION
+
+Create and maintain the following engineering documentation, adapting paths to the existing repository conventions:
+
+- `docs/engineering/MASTER_DEFECT_REGISTER.md`
+- `docs/engineering/ROOT_CAUSE_ANALYSIS.md`
+- `docs/engineering/REPAIR_IMPLEMENTATION_REPORT.md`
+- `docs/engineering/API_ROUTE_INVENTORY.md`
+- `docs/engineering/AI_TOOL_VALIDATION_MATRIX.md`
+- `docs/engineering/SECURITY_VALIDATION_REPORT.md`
+- `docs/engineering/DATABASE_VALIDATION_REPORT.md`
+- `docs/engineering/REGRESSION_TEST_REPORT.md`
+- `docs/engineering/STAGING_ACCEPTANCE_CHECKLIST.md`
+- `docs/engineering/RELEASE_READINESS_REPORT.md`
+- `docs/engineering/ROLLBACK_PLAN.md`
+
+For every repaired defect, provide:
+
+- Defect ID.
+- Root cause.
+- Affected files.
+- Previous behavior.
+- Corrected behavior.
+- Implementation summary.
+- Test coverage.
+- Actual test result.
+- Commit SHA.
+- Remaining limitations.
+
+Ensure documentation reflects the actual source code and test evidence.
+
+---
+
+## 25. FINAL ACCEPTANCE REQUIREMENTS
+
+The repair may be classified as CODE_READY only when:
+
+- All confirmed source defects are resolved.
+- TypeScript validation passes.
+- Independent lint validation passes.
+- Frontend production build passes.
+- Backend compilation passes.
+- All mandatory regression tests pass.
+- Routing validation passes.
+- Security tests pass.
+- Secret screening passes.
+- SQL migration source validation passes.
+- No unresolved critical or high-severity defects remain within the validated scope.
+
+The application may be classified as STAGING_ACCEPTED only when hosted staging functionality has been independently verified.
+
+The application may be classified as PRODUCTION_READY only when:
+
+- All mandatory staging acceptance checks pass.
+- Required provider integrations are verified.
+- Database security and integrity are verified.
+- Backup and rollback procedures are validated.
+- Operational monitoring is configured and tested.
+- No critical release blockers remain.
+- Explicit production release approval has been obtained.
+
+Production deployment and production acceptance must remain separate release stages.
+
+---
+
+## 26. MANDATORY FINAL DEVELOPMENT REPORT
+
+Upon completion, provide a detailed report containing:
+
+### A. Executive Development Summary
+
+- Starting commit.
+- Final candidate commit.
+- Development branch.
+- Total defects identified.
+- Total defects repaired.
+- Total unresolved defects.
+- Critical and high-severity blockers.
+- Current release classification.
+
+### B. Test Results
+
+- Total tests.
+- Passed tests.
+- Failed tests.
+- Skipped tests.
+- TypeScript result.
+- Lint result.
+- Frontend build result.
+- Backend build result.
+- Security validation result.
+- Integration test result.
+- End-to-end test result.
+
+### C. Module Readiness Matrix
+
+Provide separate status and supporting evidence for:
+
+- Corporate website.
+- Corporate branding.
+- Corporate resources.
+- AI chatbot.
+- AI voice consultant.
+- Speech recognition.
+- Contextual memory.
+- All 12 AI tools.
+- Consultation scheduling.
+- Service inquiries.
+- Administrative Command Center.
+- Authentication.
+- Database.
+- Email notifications.
+- API integration.
+- Security.
+- Performance.
+- CI/CD.
+- Hosted staging.
+- Production readiness.
+
+### D. Remaining Development Requirements
+
+Identify every unresolved dependency, external service requirement, configuration blocker and owner decision.
+
+### E. Evidence
+
+Provide actual links to:
+
+- Commits.
+- Pull requests.
+- GitHub Actions runs.
+- Test results.
+- Validation reports.
+- Changed files.
+
+Do not fabricate links or evidence.
+
+---
+
+## FINAL EXECUTION DIRECTIVE
+
+Begin the comprehensive repair immediately within the authorized development environment.
+
+Execute the phases in dependency order, prioritizing confirmed regression failures, AI functionality, security, data integrity and deployment stabilization.
+
+Investigate every root cause before modifying the associated source code.
+
+Continue repairing confirmed defects until all mandatory source-level validation gates pass or a genuine external blocker requires owner intervention.
+
+Preserve all existing approved enterprise features and corporate branding.
+
+Deliver a stable, secure, maintainable and fully validated DESTRIA TECH INC enterprise application release candidate.
+
+Do not stop after superficial visual changes or isolated test corrections.
+
+Do not declare 100% completion without supporting evidence.
+
+Do not merge or deploy to production without explicit approval.

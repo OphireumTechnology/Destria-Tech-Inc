@@ -6,15 +6,23 @@ on:
   pull_request:
     branches: [main, 'repair/**', 'fix/**']
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -24,7 +32,10 @@ jobs:
       - name: Verify clean URL routing architecture (source regression gate)
         run: npm run verify:routing
 
-      - name: TypeScript typecheck & lint
+      - name: TypeScript strict typecheck
+        run: npm run typecheck
+
+      - name: Independent static & security lint
         run: npm run lint
 
       - name: Build production frontend bundle
@@ -33,13 +44,13 @@ jobs:
       - name: Verify compiled clean URL static routes, 404.html, CNAME, and SEO artifacts
         run: npm run verify:routing:dist
 
-      - name: Verify zero secret or internal notification email leakage in dist/ bundle
+      - name: Verify zero secret, internal email, or outdated identity leakage in dist/ bundle
         run: |
-          if grep -rnE "artaxsvcs@gmail\.com|dhenze\.languisan@gmail\.com|SUPABASE_SERVICE_ROLE_KEY|RESEND_API_KEY|ADMIN_BOOTSTRAP_PASSWORD|ADMIN_SESSION_SECRET" dist/; then
-            echo "ERROR: Forbidden secret or internal notification email leaked into dist/ bundle!"
+          if grep -rnE "artaxsvcs@gmail\.com|dhenze\.languisan@gmail\.com|SUPABASE_SERVICE_ROLE_KEY|RESEND_API_KEY|GEMINI_API_KEY|ADMIN_BOOTSTRAP_PASSWORD|ADMIN_SESSION_SECRET|PORTAL_SIGNING_SECRET|api\.ophireummultimedia\.com|Desmond Hines" dist/; then
+            echo "ERROR: Forbidden secret, legacy domain, outdated identity, or internal notification email leaked into dist/ bundle!"
             exit 1
           fi
-          echo "PASS: Zero forbidden secrets or internal notification emails in dist/."
+          echo "PASS: Zero forbidden secrets, legacy URLs, outdated identities, or internal notification emails in dist/."
 
       - name: Verify SQL migration hygiene (additive, idempotent, RLS enabled)
         run: |
@@ -50,10 +61,17 @@ jobs:
           grep -q "claim_retryable_notifications" supabase/migrations/005_enterprise_production_readiness.sql
           grep -q "notification_webhook_events" supabase/migrations/005_enterprise_production_readiness.sql
           grep -q "portal_payment_refunds" supabase/migrations/005_enterprise_production_readiness.sql
-          echo "PASS: SQL migrations present and verified."
+          grep -q "Desmond Hinds" supabase/migrations/006_ceo_identity_correction.sql
+          echo "PASS: SQL migrations 001-006 present and verified."
 
-      - name: Run unit, integration, routing & security regression suite
-        run: npm test
+      - name: Run unit test suite
+        run: npm run test:unit
+
+      - name: Run integration test suite
+        run: npm run test:integration
+
+      - name: Run security regression test suite
+        run: npm run test:security
 
       - name: Verify server bundle compilation
         run: npm run build:server

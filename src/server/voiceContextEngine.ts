@@ -162,12 +162,16 @@ export class VoiceSessionStore {
 
 /**
  * Normalizes conversational speech transcripts (strips filler words, Taglish particles,
- * and spoken punctuation hesitation artifacts while preserving technical terms).
+ * spoken punctuation hesitation artifacts, and bounded phonetic brand variants while
+ * preserving technical terms and unrelated words).
  */
 export function normalizeSpokenUtterance(raw: string): string {
   return raw
     .replace(/\s+/g, ' ')
     .replace(/^(?:uh+|um+|hmm+|ah+|er+|like,?\s+|so,?\s+|well,?\s+|ano,?\s+|kasi,?\s+)+/gi, '')
+    // Bounded phonetic brand normalization for DESTRIA TECH & Ophireum
+    .replace(/\bdestr(?:ea|iya|ia)\s+tech\b/gi, 'DESTRIA TECH')
+    .replace(/\b(?:oferium|ophirium|ophyrium|ophireum)\b/gi, 'Ophireum')
     .trim();
 }
 
@@ -178,8 +182,12 @@ export function isUnclearOrNoisyTranscript(raw: string): boolean {
   const trimmed = raw.trim().toLowerCase();
   if (!trimmed) return true;
   if (/^[.\s,?!\-_*~]+$/.test(trimmed)) return true;
-  // Pure filler / background noise tokens
-  if (/^(uh+|um+|hmm+|ah+|mm+|eh+|oh+|static|noise|inaudible|unintelligible|cough|sigh|\.\.\.)+[.?!\s]*$/i.test(trimmed)) {
+  // Pure filler / background noise tokens (including multi-token fragments like "hmm mm ??")
+  if (
+    /^(?:(?:uh+|um+|hmm+|hm+|ah+|mm+|eh+|oh+|er+|static|noise|inaudible|unintelligible|cough|sigh|\.\.\.)[\s.?!,\-_*~]*)+$/i.test(
+      trimmed
+    )
+  ) {
     return true;
   }
   const alnum = trimmed.replace(/[^a-z0-9]/g, '');
@@ -194,6 +202,22 @@ export function isUnclearOrNoisyTranscript(raw: string): boolean {
 function isFilipinoPricingQuery(text: string): boolean {
   return /\b(magkano|presyo|halaga|bayad|singil|gastos|pinakamura|mura|diskwento|tawad)\b/i.test(
     text
+  );
+}
+
+/**
+ * Detects whether the user is requesting direct human / solutions team contact
+ * (without hijacking executive CEO/CTO consultation preference turns).
+ */
+function detectHumanEscalationIntent(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  return (
+    /\b(speak|talk|connect|call|reach)\s+(directly\s+)?(with|to)?\s*(a\s+|an\s+|your\s+|the\s+)?(human(?:\s+solutions\s+architect|\s+representative|\s+engineer)?|real\s+person|live\s+engineer|solutions\s+(?:team|architect|specialist)|representative)\b/i.test(
+      normalized
+    ) ||
+    /\b(real\s+person|call\s+executive|direct\s+contact|live\s+engineer|human\s+representative|solutions\s+team\s+directly|makausap\s+ang\s+tao)\b/i.test(
+      normalized
+    )
   );
 }
 
@@ -215,11 +239,13 @@ function extractClientContextFromUtterance(text: string, ctx: VoiceDiscoveryCont
   const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
   if (emailMatch) ctx.clientEmail = emailMatch[0].toLowerCase();
 
-  const nameMatch = text.match(/(?:my\s+name\s+is|i\s+am|this\s+is|ako\s+si)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/);
+  const nameMatch = text.match(
+    /(?:[Mm]y\s+name\s+is|[Ii](?:'m|\s+am)|[Tt]his\s+is|[Aa]ko\s+si)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/
+  );
   if (nameMatch) ctx.clientName = nameMatch[1].trim();
 
   const companyMatch = text.match(
-    /(?:from|at|company\s+is|organization\s+is|we\s+are|representing)\s+([A-Z][A-Za-z0-9&.\-\s]{2,45}?)(?=\s+(?:in|with|and|we|looking|need|want)\b|[,.!?]|$)/
+    /(?:from|at|company\s+is|organization\s+is|we\s+are|representing)\s+([A-Z][A-Za-z0-9&.\-\s]{2,45}?)(?=\s+(?:in|with|and|we|looking|need|want|email)\b|[,.!?]|$)/
   );
   if (companyMatch && !companyMatch[1].includes('@')) {
     const candidate = companyMatch[1].trim();
@@ -229,10 +255,26 @@ function extractClientContextFromUtterance(text: string, ctx: VoiceDiscoveryCont
   }
 
   const timelineMatch = text.match(
-    /\b(within\s+\d+\s+(?:weeks?|months?)|in\s+\d+\s+(?:weeks?|months?)|q[1-4]\s*20\d{2}|next\s+(?:month|quarter|year)|asap|urgent)\b/i
+    /\b(within\s+\d+\s+(?:weeks?|months?)|in\s+\d+\s+(?:weeks?|months?)|(?:by\s+)?q[1-4](?:\s*20\d{2})?|next\s+(?:month|quarter|year)|asap|urgent)\b/i
   );
   if (timelineMatch) {
     ctx.targetTimeline = timelineMatch[0].trim();
+  }
+
+  // Extract explicit enterprise capability phrases from multi-clause instructions
+  const featurePatterns: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\bweb\s+portal\b/i, label: 'unified web portal' },
+    { pattern: /\brole[\s-]based\s+access\b/i, label: 'role-based access control' },
+    { pattern: /\banalytics\s+dashboards?\b/i, label: 'real-time analytics dashboards' },
+    { pattern: /\bautomated\s+api\s+alerts?\b/i, label: 'automated API alerts' },
+    { pattern: /\bworkflow\s+automation\b/i, label: 'workflow automation' },
+  ];
+  const existingFeatures = new Set((ctx.keyFeatures || []).map((f) => f.toLowerCase()));
+  for (const fp of featurePatterns) {
+    if (fp.pattern.test(text) && !existingFeatures.has(fp.label.toLowerCase())) {
+      ctx.keyFeatures = [...(ctx.keyFeatures || []), fp.label].slice(0, 10);
+      existingFeatures.add(fp.label.toLowerCase());
+    }
   }
 }
 
@@ -394,7 +436,9 @@ export function detectAffirmativeBookingIntent(
   }
 
   const explicitSchedule =
-    /\b(open|show|start|launch)\s+(the\s+)?(booking|scheduling|appointment|calendar)\b/i.test(normalized) ||
+    /\b(open|show|start|launch)\s+(the\s+)?((?:executive|ceo|cto|technical|initial|verified)\s+)?(?:consultation\s+)?(booking|scheduling|appointment|calendar)(\s+form|\s+modal|\s+widget)?\b/i.test(
+      normalized
+    ) ||
     /\b(book|schedule|set\s+up|arrange|magpa-?schedule|pa-?schedule|mag-?book)\s+(a|an|my|the|ng)?\s*(executive\s+|ceo\s+|cto\s+|technical\s+)?(consultation|appointment|meeting|call|slot)\s*(now|today|please|po)?\b/i.test(
       normalized
     );
@@ -498,10 +542,7 @@ export function generateContextualFallbackReply(params: {
   const isBriefIntent = /\b(project\s+brief|review\s+brief|generate\s+brief|proposal\s+summary|scope\s+document|service\s+inquiry|submit\s+inquiry)\b/i.test(
     normalized
   );
-  const isHumanEscalation =
-    /\b(speak\s+to\s+(a\s+)?human|talk\s+to\s+(a\s+)?human|real\s+person|call\s+executive|direct\s+contact|live\s+engineer|representative|makausap\s+ang\s+tao)\b/i.test(
-      normalized
-    );
+  const isHumanEscalation = detectHumanEscalationIntent(cleanedUtterance);
 
   // 1. Human escalation intent
   if (isHumanEscalation) {
@@ -899,6 +940,36 @@ export function generateContextualFallbackReply(params: {
     };
   }
 
+  // 10b. Client self-introduction / contact capture turn (avoid misclassifying company names as new service requests)
+  const isContactIntroTurn =
+    /(?:my\s+name\s+is|i\s+am|i'm|this\s+is|ako\s+si)\s+/i.test(cleanedUtterance) &&
+    Boolean(nextContext.clientName || nextContext.clientEmail) &&
+    !/\b(need|want|build|develop|looking\s+for|migrate|automate)\b/i.test(normalized);
+  if (isContactIntroTurn) {
+    const identitySummary = [
+      nextContext.clientName,
+      nextContext.clientCompany ? `from ${nextContext.clientCompany}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const emailSummary = nextContext.clientEmail ? ` (${nextContext.clientEmail})` : '';
+    return {
+      replyText: isFilipino
+        ? `Salamat po, ${identitySummary || 'sir/ma\'am'}. Naitala ko na ang inyong contact details${emailSummary} upang hindi na kailangang ulitin. Paano ko po matutulungan ang inyong organisasyon ngayon?`
+        : `Thank you, ${identitySummary || 'and welcome'}. I have noted your contact details${emailSummary} so you will not need to repeat them. What enterprise technology initiative or requirement would you like to discuss today?`,
+      updatedContext: nextContext,
+      recommendedServiceIds: [],
+      quickReplies: ['AI Solutions & Automation', 'Custom Enterprise Software', 'Schedule Consultation'],
+      isBookingIntent: false,
+      requiresBookingConfirmation: false,
+      isBriefIntent: false,
+      isHumanEscalation: false,
+      isCorrection,
+      isClarificationNeeded: false,
+      recognizedIntentCategory: 'client_context_capture',
+    };
+  }
+
   // 11. Catalog-matched specific domain answer (supports multi-clause & Taglish instructions!)
   const matched = matchCatalogServices(`${cleanedUtterance} ${nextContext.selectedService || ''}`, 3);
   if (matched.length > 0) {
@@ -909,13 +980,17 @@ export function generateContextualFallbackReply(params: {
       nextContext.businessProblem = cleanedUtterance;
     }
     nextContext.currentStage = nextContext.currentStage === 'welcome' ? 'problem' : 'features';
+    const capturedFeaturesNote =
+      nextContext.keyFeatures && nextContext.keyFeatures.length > 0
+        ? ` covering ${nextContext.keyFeatures.slice(0, 4).join(', ')}`
+        : '';
     const memoryNote = nextContext.targetTimeline
-      ? ` I have also noted your target timeline of ${nextContext.targetTimeline}.`
+      ? ` I have also noted your target timeline (${nextContext.targetTimeline}) for our technical assessment.`
       : '';
     return {
       replyText: isFilipino
-        ? `Para sa inyong pangangailangan, ang ${primary.title} ng ${corporateIdentity.legalName} ay maaaring i-customize ayon sa inyong workflow at security standards.${memoryNote} Ano po ang pangunahing functionality o kasalukuyang system integration na nais ninyong unahin para dito?`
-        : `For that requirement, ${corporateIdentity.legalName} can architect a customized ${primary.title} solution tailored to your workflows and security standards.${memoryNote} What primary capabilities or existing system integrations are most important for your team to launch first?`,
+        ? `Para sa inyong pangangailangan${capturedFeaturesNote}, ang ${primary.title} ng ${corporateIdentity.legalName} ay maaaring i-customize ayon sa inyong workflow at security standards.${memoryNote} Ano po ang pangunahing functionality o kasalukuyang system integration na nais ninyong unahin para dito?`
+        : `For those requirements${capturedFeaturesNote}, ${corporateIdentity.legalName} can architect a customized ${primary.title} solution tailored to your workflows and security standards.${memoryNote} What primary capabilities or existing system integrations are most important for your team to launch first?`,
       updatedContext: nextContext,
       recommendedServiceIds: matched.map((m) => m.id),
       quickReplies: ['How does it work?', 'Discuss integrations', 'Schedule CTO Consultation'],
@@ -1017,8 +1092,9 @@ export async function processVoiceConversationTurn(params: {
     }
   }
 
-  extractClientContextFromUtterance(userMessage, session.context);
-  const execPref = detectExecutivePreference(userMessage);
+  const normalizedUtterance = normalizeSpokenUtterance(userMessage);
+  extractClientContextFromUtterance(normalizedUtterance, session.context);
+  const execPref = detectExecutivePreference(normalizedUtterance);
   if (execPref) {
     session.context.executivePreference = execPref;
   }
@@ -1068,9 +1144,9 @@ export async function processVoiceConversationTurn(params: {
   }
 
   // 1. Authoritative Commercial Policy & Corporate Identity Guardrail Check (English + Filipino/Taglish)
-  const policyCheckInput = isFilipinoPricingQuery(userMessage)
-    ? `${userMessage} pricing cost`
-    : userMessage;
+  const policyCheckInput = isFilipinoPricingQuery(normalizedUtterance)
+    ? `${normalizedUtterance} pricing cost`
+    : normalizedUtterance;
   const policyDecision = classifyCommercialPolicyIntent(policyCheckInput);
   if (policyDecision.approvedResponse) {
     if (policyDecision.isPricingRestricted && onPolicyAudit) {
@@ -1094,7 +1170,7 @@ export async function processVoiceConversationTurn(params: {
       policyEnforced: policyDecision.isPricingRestricted,
     });
 
-    const bookingCheck = detectAffirmativeBookingIntent(userMessage, lastAiMessage);
+    const bookingCheck = detectAffirmativeBookingIntent(normalizedUtterance, lastAiMessage);
     return {
       sessionId: session.sessionId,
       replyText,
@@ -1104,12 +1180,10 @@ export async function processVoiceConversationTurn(params: {
         isBookingIntent:
           bookingCheck.isBookingIntent || policyDecision.trigger === 'consultation',
         requiresBookingConfirmation: bookingCheck.requiresBookingConfirmation,
-        isBriefIntent: /\b(brief|proposal|scope|requirements)\b/i.test(userMessage),
+        isBriefIntent: /\b(brief|proposal|scope|requirements)\b/i.test(normalizedUtterance),
         isHumanEscalation:
           policyDecision.suggestedAction === 'talk_to_human' ||
-          /\b(speak\s+to\s+(a\s+)?human|call\s+(the\s+)?executive|solutions\s+architect|phone|telephone)\b/i.test(
-            userMessage
-          ),
+          detectHumanEscalationIntent(normalizedUtterance),
         executivePreference: session.context.executivePreference,
         recognizedIntentCategory: `policy_${policyDecision.trigger}`,
       },
@@ -1293,10 +1367,7 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
             isBookingIntent: bookingCheck.isBookingIntent,
             requiresBookingConfirmation: bookingCheck.requiresBookingConfirmation,
             isBriefIntent: /\b(project\s+brief|review\s+brief|proposal\s+summary)\b/i.test(userMessage),
-            isHumanEscalation:
-              /\b(speak\s+to\s+(a\s+)?human|call\s+(the\s+)?executive|solutions\s+architect|phone|telephone)\b/i.test(
-                userMessage
-              ),
+            isHumanEscalation: detectHumanEscalationIntent(normalizedUtterance),
             isCorrection,
             executivePreference: session.context.executivePreference,
             recognizedIntentCategory: 'gemini_contextual_reasoning',

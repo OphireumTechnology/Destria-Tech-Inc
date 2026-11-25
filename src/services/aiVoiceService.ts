@@ -2158,6 +2158,9 @@ export class AIVoiceService {
           }
 
           if (msg.type === 'ready') {
+            if (typeof msg.sessionId === 'string' && msg.sessionId.trim()) {
+              this.sessionId = msg.sessionId.trim();
+            }
             this.liveModelName = typeof msg.model === 'string' ? msg.model : undefined;
             this.liveVoiceName = typeof msg.voice === 'string' ? msg.voice : undefined;
             this.liveReconnectAttempts = 0;
@@ -2199,7 +2202,10 @@ export class AIVoiceService {
               payload: (msg.payload && typeof msg.payload === 'object' ? msg.payload : {}) as Record<string, unknown>,
             };
             this.callbacks.onToolEvent?.(toolEvent);
-            if (toolEvent.type === 'human_assistance_requested') {
+            if (
+              toolEvent.type === 'human_assistance' ||
+              toolEvent.type === 'human_assistance_requested'
+            ) {
               this.callbacks.onAiResponse?.(
                 'You may reach our official executive desk at +1 (307) 419-4277 or info@destriatech.com.',
                 { isHumanEscalation: true }

@@ -65,9 +65,22 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 
 function getUpgradeClientIp(req: IncomingMessage): string {
-  const fwd = req.headers['x-forwarded-for'];
-  if (typeof fwd === 'string' && fwd.trim()) {
-    return fwd.split(',')[0].trim();
+  const trustProxy =
+    process.env.TRUST_PROXY === 'true' ||
+    process.env.TRUST_PROXY === '1' ||
+    Boolean(process.env.RAILWAY_ENVIRONMENT);
+  if (trustProxy) {
+    const fwd = req.headers['x-forwarded-for'];
+    if (typeof fwd === 'string' && fwd.trim()) {
+      const hops = fwd
+        .split(',')
+        .map((h) => h.trim())
+        .filter(Boolean);
+      // Rightmost hop added by the trusted reverse proxy resists client spoofing
+      if (hops.length > 0) {
+        return hops[hops.length - 1];
+      }
+    }
   }
   return req.socket?.remoteAddress || 'unknown';
 }
@@ -169,6 +182,7 @@ export function attachVoiceLiveBridge(
     noServer: true,
     maxPayload: 2 * 1024 * 1024, // 2MB max frame guard
   });
+  const activeCleanups = new Set<() => void>();
 
   const checkUpgradeRateLimit = (ip: string): boolean => {
     const now = Date.now();
@@ -228,6 +242,8 @@ export function attachVoiceLiveBridge(
 
     let liveSession: any = null;
     let isClosing = false;
+    let initStarted = false;
+    let readyEmitted = false;
     let sessionId = `dti-live-${crypto.randomUUID().slice(0, 12)}`;
     let sessionRegistered = false;
     let accumulatedInputTranscript = '';
@@ -245,6 +261,7 @@ export function attachVoiceLiveBridge(
     const cleanup = () => {
       if (isClosing) return;
       isClosing = true;
+      activeCleanups.delete(cleanup);
       if (sessionTtlTimer) {
         clearTimeout(sessionTtlTimer);
         sessionTtlTimer = null;
@@ -266,6 +283,7 @@ export function attachVoiceLiveBridge(
         liveSession = null;
       }
     };
+    activeCleanups.add(cleanup);
 
     const resetIdleTimer = () => {
       if (idleTimeoutTimer) clearTimeout(idleTimeoutTimer);
@@ -281,6 +299,7 @@ export function attachVoiceLiveBridge(
           // Ignore
         }
       }, 5 * 60 * 1000);
+      idleTimeoutTimer.unref?.();
     };
 
     const flushPendingInputTranscript = () => {
@@ -316,9 +335,30 @@ export function attachVoiceLiveBridge(
       resetIdleTimer();
 
       if (parsed.type === 'init') {
+        if (initStarted) {
+          // Idempotent guard against duplicate init frames on the same socket
+          if (readyEmitted) {
+            const currentSettings = runtimeConfig.getSettings();
+            sendJsonSafe(clientWs, {
+              type: 'ready',
+              sessionId,
+              model: activeModel,
+              voice: activeVoice,
+              language: activeLanguage,
+              bargeInEnabled: currentSettings.bargeInEnabled,
+              transcriptionEnabled: currentSettings.transcriptionEnabled,
+              inputSampleRate: 16000,
+              outputSampleRate: 24000,
+            });
+          }
+          return;
+        }
+        initStarted = true;
+
         const settings = runtimeConfig.getSettings();
         const quotaCheck = runtimeConfig.canAcceptLiveSession();
         if (!ai || !quotaCheck.allowed) {
+          initStarted = false;
           runtimeConfig.recordFailure(
             'live_unavailable',
             'gemini_live',
@@ -332,6 +372,7 @@ export function attachVoiceLiveBridge(
               quotaCheck.reason ||
               'Gemini Live streaming requires server-side GEMINI_API_KEY configuration. Falling back to continuous turn-based voice mode.',
           });
+          cleanup();
           clientWs.close(1000, 'Gemini Live unavailable');
           return;
         }
@@ -350,6 +391,61 @@ export function attachVoiceLiveBridge(
         const functionDeclarations = toolsExecutor
           ? getGeminiFunctionDeclarations({ nonBlocking: isExtendedThinking })
           : [];
+
+        const emitReadyOnce = () => {
+          if (isClosing || readyEmitted) return;
+          readyEmitted = true;
+          if (!sessionRegistered) {
+            runtimeConfig.registerSession({
+              sessionId,
+              channel: 'gemini_live',
+              model: activeModel,
+              voiceName: activeVoice,
+              language: activeLanguage,
+              onTerminate: () => {
+                sendJsonSafe(clientWs, {
+                  type: 'session_terminated',
+                  reason: 'Session terminated by administrator.',
+                });
+                cleanup();
+                try {
+                  clientWs.close(1000, 'Terminated by administrator');
+                } catch {
+                  // Ignore
+                }
+              },
+            });
+            sessionRegistered = true;
+          }
+
+          if (!sessionTtlTimer) {
+            sessionTtlTimer = setTimeout(() => {
+              sendJsonSafe(clientWs, {
+                type: 'session_expired',
+                reason: `Maximum session duration (${settings.sessionTtlMinutes} minutes) reached.`,
+              });
+              cleanup();
+              try {
+                clientWs.close(1000, 'Session TTL reached');
+              } catch {
+                // Ignore
+              }
+            }, settings.sessionTtlMinutes * 60 * 1000);
+            sessionTtlTimer.unref?.();
+          }
+
+          sendJsonSafe(clientWs, {
+            type: 'ready',
+            sessionId,
+            model: activeModel,
+            voice: activeVoice,
+            language: activeLanguage,
+            bargeInEnabled: settings.bargeInEnabled,
+            transcriptionEnabled: settings.transcriptionEnabled,
+            inputSampleRate: 16000,
+            outputSampleRate: 24000,
+          });
+        };
 
         try {
           const liveConfig: Record<string, unknown> = {
@@ -381,56 +477,12 @@ export function attachVoiceLiveBridge(
               : {}),
           };
 
-          liveSession = await ai.live.connect({
+          const connectedSession = await ai.live.connect({
             model: activeModel,
             config: liveConfig as any,
             callbacks: {
               onopen: () => {
-                runtimeConfig.registerSession({
-                  sessionId,
-                  channel: 'gemini_live',
-                  model: activeModel,
-                  voiceName: activeVoice,
-                  language: activeLanguage,
-                  onTerminate: () => {
-                    sendJsonSafe(clientWs, {
-                      type: 'session_terminated',
-                      reason: 'Session terminated by administrator.',
-                    });
-                    cleanup();
-                    try {
-                      clientWs.close(1000, 'Terminated by administrator');
-                    } catch {
-                      // Ignore
-                    }
-                  },
-                });
-                sessionRegistered = true;
-
-                sessionTtlTimer = setTimeout(() => {
-                  sendJsonSafe(clientWs, {
-                    type: 'session_expired',
-                    reason: `Maximum session duration (${settings.sessionTtlMinutes} minutes) reached.`,
-                  });
-                  cleanup();
-                  try {
-                    clientWs.close(1000, 'Session TTL reached');
-                  } catch {
-                    // Ignore
-                  }
-                }, settings.sessionTtlMinutes * 60 * 1000);
-
-                sendJsonSafe(clientWs, {
-                  type: 'ready',
-                  sessionId,
-                  model: activeModel,
-                  voice: activeVoice,
-                  language: activeLanguage,
-                  bargeInEnabled: settings.bargeInEnabled,
-                  transcriptionEnabled: settings.transcriptionEnabled,
-                  inputSampleRate: 16000,
-                  outputSampleRate: 24000,
-                });
+                emitReadyOnce();
               },
               onmessage: async (message: LiveServerMessage) => {
                 if (isClosing) return;
@@ -482,6 +534,8 @@ export function attachVoiceLiveBridge(
                       sendJsonSafe(clientWs, {
                         type: 'tool_event',
                         toolName,
+                        eventType: outcome.uiEvent.type,
+                        payload: outcome.uiEvent.payload,
                         event: outcome.uiEvent,
                       });
                     }
@@ -645,6 +699,21 @@ export function attachVoiceLiveBridge(
               },
             },
           });
+
+          // Handle disconnect-during-init race cleanly so no zombie provider session remains open
+          if (isClosing || clientWs.readyState !== WebSocket.OPEN) {
+            try {
+              connectedSession?.close?.();
+            } catch {
+              // Ignore
+            }
+            cleanup();
+            return;
+          }
+
+          liveSession = connectedSession;
+          // Ensure ready & session registration always occur even if SDK resolves connect() without firing onopen
+          emitReadyOnce();
         } catch (err: any) {
           logStructured('warn', 'voice_live_connect_failed', {
             sessionId,
@@ -749,6 +818,20 @@ export function attachVoiceLiveBridge(
     wss,
     close: () => {
       httpServer.off('upgrade', handleUpgrade);
+      for (const cleanupFn of Array.from(activeCleanups)) {
+        try {
+          cleanupFn();
+        } catch {
+          // Ignore cleanup errors during shutdown
+        }
+      }
+      for (const client of wss.clients) {
+        try {
+          client.terminate();
+        } catch {
+          // Ignore terminate errors during shutdown
+        }
+      }
       wss.close();
     },
   };

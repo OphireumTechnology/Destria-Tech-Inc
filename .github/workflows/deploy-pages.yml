@@ -17,12 +17,13 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -32,10 +33,13 @@ jobs:
       - name: Verify clean URL routing architecture (source gate)
         run: npm run verify:routing
 
-      - name: Typecheck & lint
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Independent static & security lint
         run: npm run lint
 
-      - name: Run regression & security test suite
+      - name: Run full regression & security test suite
         run: npm test
 
       - name: Verify server build
@@ -44,12 +48,13 @@ jobs:
   build:
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -58,15 +63,15 @@ jobs:
 
       - name: Build website
         env:
-          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://api.ophireummultimedia.com' }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://api.destriatech.com' }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
-      - name: Verify no server secrets leaked into frontend bundle
+      - name: Verify no server secrets, legacy domains, or internal emails leaked into frontend bundle
         run: |
-          if grep -rnE "SUPABASE_SERVICE_ROLE_KEY|ADMIN_BOOTSTRAP_PASSWORD|ADMIN_SESSION_SECRET|PORTAL_SIGNING_SECRET|RESEND_API_KEY|GOOGLE_SERVICE_ACCOUNT|XENDIT_SECRET_KEY|PAYMONGO_SECRET_KEY|MAYA_SECRET_KEY|PAYPAL_CLIENT_SECRET|GOTYME_API_SECRET|CARD_GATEWAY_SECRET_KEY" dist/; then
-            echo "ERROR: Server secret identifier detected in built frontend bundle!"
+          if grep -rnE "artaxsvcs@gmail\.com|dhenze\.languisan@gmail\.com|SUPABASE_SERVICE_ROLE_KEY|ADMIN_BOOTSTRAP_PASSWORD|ADMIN_SESSION_SECRET|PORTAL_SIGNING_SECRET|RESEND_API_KEY|GEMINI_API_KEY|GOOGLE_SERVICE_ACCOUNT|XENDIT_SECRET_KEY|PAYMONGO_SECRET_KEY|MAYA_SECRET_KEY|PAYPAL_CLIENT_SECRET|GOTYME_API_SECRET|CARD_GATEWAY_SECRET_KEY|api\.ophireummultimedia\.com|Desmond Hines" dist/; then
+            echo "ERROR: Forbidden secret, legacy domain, outdated identity, or internal email detected in built frontend bundle!"
             exit 1
           fi
 
@@ -98,6 +103,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build
     steps:
       - name: Deploy to GitHub Pages

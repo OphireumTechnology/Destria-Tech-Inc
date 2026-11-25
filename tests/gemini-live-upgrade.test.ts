@@ -657,6 +657,21 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
       );
       // Verify response itself NEVER leaks internal recipient addresses
       assert.doesNotMatch(JSON.stringify(confirmBody), /artaxsvcs|dhenze\.languisan/i);
+
+      // Replay of the already-consumed confirmation token MUST be rejected with 400
+      const replayRes = await fetch(`${localUrl}/api/consultant/confirm-tool`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          confirmationToken: inquiryToken,
+          kind: 'inquiry',
+          clientConfirmed: true,
+          sourceChannel: 'AI Chat',
+        }),
+      });
+      assert.equal(replayRes.status, 400, 'Replayed confirmation token must be rejected');
+      assert.equal(inquiries.length, 1, 'Replayed confirmation must NOT create duplicate inquiry');
     } finally {
       server.closeAllConnections?.();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -747,96 +762,119 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
       // 4b. Authorized Origin connects, receives ready, streams partial->final transcript, executes toolCall, blocks pricing audio
       const received: any[] = [];
       const ws = new WsClient(wsUrl, { origin: 'https://destriatech.com' });
-      await new Promise<void>((resolve, reject) => {
-        ws.on('open', () => resolve());
-        ws.on('error', reject);
-      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          ws.on('open', () => resolve());
+          ws.on('error', reject);
+        });
 
-      ws.on('message', (raw) => {
-        received.push(JSON.parse(raw.toString()));
-      });
+        ws.on('message', (raw) => {
+          received.push(JSON.parse(raw.toString()));
+        });
 
-      ws.send(
-        JSON.stringify({
-          type: 'init',
-          sessionId: 'live-e2e-session-01',
-          language: 'en-US',
-          history: [],
-        })
-      );
+        ws.send(
+          JSON.stringify({
+            type: 'init',
+            sessionId: 'dti-live-e2e-session-01',
+            language: 'en-US',
+            history: [],
+          })
+        );
 
-      // Wait for ready
-      const waitUntil = async (fn: () => boolean) => {
-        const start = Date.now();
-        while (!fn()) {
-          if (Date.now() - start > 2500) throw new Error('Timed out waiting for WS event');
-          await new Promise((r) => setTimeout(r, 15));
+        // Wait for ready
+        const waitUntil = async (fn: () => boolean) => {
+          const start = Date.now();
+          while (!fn()) {
+            if (Date.now() - start > 2500) throw new Error('Timed out waiting for WS event');
+            await new Promise((r) => setTimeout(r, 15));
+          }
+        };
+
+        await waitUntil(() => received.some((m) => m.type === 'ready'));
+        const readyMsg = received.find((m) => m.type === 'ready');
+        assert.equal(readyMsg.model, 'gemini-3.8-live');
+        assert.equal(readyMsg.voice, 'Kore');
+        assert.equal(readyMsg.sessionId, 'dti-live-e2e-session-01');
+        assert.ok(runtimeConfig.listActiveSessions().some((s) => s.sessionId === 'dti-live-e2e-session-01'));
+
+        // Duplicate init frame must NOT register a duplicate session or fail
+        ws.send(
+          JSON.stringify({
+            type: 'init',
+            sessionId: 'dti-live-e2e-session-01',
+            language: 'en-US',
+            history: [],
+          })
+        );
+        await new Promise((r) => setTimeout(r, 40));
+        assert.equal(
+          runtimeConfig.listActiveSessions().filter((s) => s.sessionId === 'dti-live-e2e-session-01').length,
+          1,
+          'Duplicate init must not create duplicate active session entries'
+        );
+
+        // Ping/pong health check
+        ws.send(JSON.stringify({ type: 'ping' }));
+        await waitUntil(() => received.some((m) => m.type === 'pong'));
+
+        // Client audio frame -> forwarded as audio/pcm;rate=16000
+        ws.send(JSON.stringify({ type: 'audio', data: Buffer.alloc(64).toString('base64') }));
+        await waitUntil(() => sentRealtimeInputs.length >= 1);
+        assert.equal(sentRealtimeInputs[0].audio?.mimeType, 'audio/pcm;rate=16000');
+
+        // Streaming inputTranscription chunks -> partials emitted with isFinal: false, finalized ONCE on output
+        capturedCallbacks.onmessage({
+          serverContent: { inputTranscription: { text: 'Where can I get' } },
+        });
+        capturedCallbacks.onmessage({
+          serverContent: { inputTranscription: { text: ' your corporate profile?' } },
+        });
+        // Tool call triggers input transcript finalization + server-side tool execution
+        capturedCallbacks.onmessage({
+          toolCall: {
+            functionCalls: [
+              {
+                id: 'fc-1',
+                name: 'get_corporate_profile',
+                args: { includeServicesBrochure: true },
+              },
+            ],
+          },
+        });
+
+        await waitUntil(() => sentToolResponses.length === 1);
+        assert.equal(sentToolResponses[0].functionResponses[0].name, 'get_corporate_profile');
+        assert.ok(received.some((m) => m.type === 'tool_event' && m.eventType === 'resource_links'));
+        const finalInputTranscripts = received.filter(
+          (m) => m.type === 'input_transcript' && m.isFinal === true
+        );
+        assert.equal(finalInputTranscripts.length, 1, 'Streaming input transcription must finalize exactly ONCE');
+        assert.match(finalInputTranscripts[0].text, /corporate profile/i);
+
+        // Commercial policy audio block: if model attempts to output dollar pricing, bridge MUST send policy_override
+        capturedCallbacks.onmessage({
+          serverContent: {
+            outputTranscription: { text: 'Our starter package costs $2,500 per month.' },
+            turnComplete: true,
+          },
+        });
+        await waitUntil(() => received.some((m) => m.type === 'policy_override'));
+        const overrideMsg = received.find((m) => m.type === 'policy_override');
+        assert.doesNotMatch(overrideMsg.text, /\$2,500/);
+        assert.match(overrideMsg.text, /customized|formal proposal|consultation/i);
+
+        // Admin force-terminates active session -> client receives session_terminated & live session closes
+        const terminated = runtimeConfig.terminateSession('dti-live-e2e-session-01');
+        assert.equal(terminated, true);
+        await waitUntil(() => received.some((m) => m.type === 'session_terminated'));
+        assert.ok(liveClosedCount >= 1);
+      } finally {
+        try {
+          ws.close();
+        } catch {
+          // Ignore
         }
-      };
-
-      await waitUntil(() => received.some((m) => m.type === 'ready'));
-      const readyMsg = received.find((m) => m.type === 'ready');
-      assert.equal(readyMsg.model, 'gemini-3.8-live');
-      assert.equal(readyMsg.voice, 'Kore');
-      assert.ok(runtimeConfig.listActiveSessions().some((s) => s.sessionId === 'live-e2e-session-01'));
-
-      // Ping/pong health check
-      ws.send(JSON.stringify({ type: 'ping' }));
-      await waitUntil(() => received.some((m) => m.type === 'pong'));
-
-      // Client audio frame -> forwarded as audio/pcm;rate=16000
-      ws.send(JSON.stringify({ type: 'audio', data: Buffer.alloc(64).toString('base64') }));
-      await waitUntil(() => sentRealtimeInputs.length >= 1);
-      assert.equal(sentRealtimeInputs[0].audio?.mimeType, 'audio/pcm;rate=16000');
-
-      // Streaming inputTranscription chunks -> partials emitted with isFinal: false, finalized ONCE on output
-      capturedCallbacks.onmessage({
-        serverContent: { inputTranscription: { text: 'Where can I get' } },
-      });
-      capturedCallbacks.onmessage({
-        serverContent: { inputTranscription: { text: ' your corporate profile?' } },
-      });
-      // Tool call triggers input transcript finalization + server-side tool execution
-      capturedCallbacks.onmessage({
-        toolCall: {
-          functionCalls: [
-            {
-              id: 'fc-1',
-              name: 'get_corporate_profile',
-              args: { includeServicesBrochure: true },
-            },
-          ],
-        },
-      });
-
-      await waitUntil(() => sentToolResponses.length === 1);
-      assert.equal(sentToolResponses[0].functionResponses[0].name, 'get_corporate_profile');
-      assert.ok(received.some((m) => m.type === 'tool_event' && m.eventType === 'resource_links'));
-      const finalInputTranscripts = received.filter(
-        (m) => m.type === 'input_transcript' && m.isFinal === true
-      );
-      assert.equal(finalInputTranscripts.length, 1, 'Streaming input transcription must finalize exactly ONCE');
-      assert.match(finalInputTranscripts[0].text, /corporate profile/i);
-
-      // Commercial policy audio block: if model attempts to output dollar pricing, bridge MUST send policy_override
-      capturedCallbacks.onmessage({
-        serverContent: {
-          outputTranscription: { text: 'Our starter package costs $2,500 per month.' },
-          turnComplete: true,
-        },
-      });
-      await waitUntil(() => received.some((m) => m.type === 'policy_override'));
-      const overrideMsg = received.find((m) => m.type === 'policy_override');
-      assert.doesNotMatch(overrideMsg.text, /\$2,500/);
-      assert.match(overrideMsg.text, /customized|formal proposal|consultation/i);
-
-      // Admin force-terminates active session -> client receives session_terminated & live session closes
-      const terminated = runtimeConfig.terminateSession('live-e2e-session-01');
-      assert.equal(terminated, true);
-      await waitUntil(() => received.some((m) => m.type === 'session_terminated'));
-      assert.ok(liveClosedCount >= 1);
-
-      ws.close();
+      }
     } finally {
       bridge.close();
       server.closeAllConnections?.();
@@ -950,18 +988,18 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
       assert.equal(patched.config.geminiVoiceName, 'Aoede');
       assert.equal(patched.config.dailyEstimatedBudgetUsd, 50);
 
-      // Public transcription feedback endpoint records correction visible in Admin overview
+      // Public transcription feedback endpoint creates a new report (201 Created) visible in Admin overview
       const fbRes = await fetch(`${baseUrl}/api/voice/transcription-feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId: 'sess-fb-1',
+          sessionId: 'dti-sess-fb-01',
           originalTranscript: 'We want Oferium 3D',
           correctedTranscript: 'We want Ophireum 3D multimedia production',
           language: 'en-US',
         }),
       });
-      assert.equal(fbRes.status, 200);
+      assert.equal(fbRes.status, 201);
 
       const overviewAfter = await (
         await fetch(`${baseUrl}/api/admin/ai/overview`, {

@@ -645,7 +645,10 @@ export class AIToolsExecutor {
     sessionId: string,
     args: Record<string, unknown>
   ): ToolExecutionOutcome {
-    const objective = sanitizePlainText(args.businessObjective, 500);
+    const objective = sanitizePlainText(
+      args.businessObjective ?? args.businessObjectives,
+      500
+    );
     const industry = sanitizePlainText(args.industry, 120);
     const existingSystems = sanitizePlainText(args.existingSystems, 240);
     const preferredDivision = sanitizePlainText(args.preferredDivision, 120);
@@ -705,19 +708,22 @@ export class AIToolsExecutor {
       state.keyFeatures = merged;
     }
 
+    const capturedRequirements = {
+      category: state.category || null,
+      businessProblem: state.businessProblem || null,
+      targetUsers: state.targetUsers || null,
+      keyFeatures: state.keyFeatures,
+      existingSystems: state.existingSystems || null,
+      targetTimeline: state.targetTimeline || null,
+      industry: state.industry || null,
+    };
+
     return {
       ok: true,
       toolName: 'collect_project_requirements',
       data: {
-        capturedRequirements: {
-          category: state.category || null,
-          businessProblem: state.businessProblem || null,
-          targetUsers: state.targetUsers || null,
-          keyFeatures: state.keyFeatures,
-          existingSystems: state.existingSystems || null,
-          targetTimeline: state.targetTimeline || null,
-          industry: state.industry || null,
-        },
+        requirements: capturedRequirements,
+        capturedRequirements,
         note: 'Requirements recorded in active session context.',
       },
     };
@@ -976,6 +982,9 @@ export class AIToolsExecutor {
       };
     }
 
+    // Consume single-use confirmation token immediately prior to persistence to prevent replay races
+    this.pendingConfirmations.delete(confirmationToken);
+
     const data = validated.data;
     const referenceCode = `OPM-APT-${new Date().getFullYear()}-${crypto
       .randomBytes(3)
@@ -1145,14 +1154,39 @@ export class AIToolsExecutor {
       sanitizePlainText(args.serviceTitle, 160) ||
       state.category ||
       'Customized Enterprise Technology Solution';
-    const selectedServiceIds = Array.isArray(args.selectedServiceIds)
+    let selectedServiceIds = Array.isArray(args.selectedServiceIds)
       ? args.selectedServiceIds
           .map((id) => sanitizePlainText(id, 80))
           .filter((id) => SERVICE_CATALOG.some((s) => s.id === id))
       : [];
 
+    // Resolve canonical catalog service IDs when caller provides serviceTitle/category without explicit IDs
+    if (selectedServiceIds.length === 0 && serviceTitle) {
+      const normalizedTitle = serviceTitle.toLowerCase();
+      const matchedCategory = CATALOG_CATEGORIES.find(
+        (cat) =>
+          cat.id !== 'all' &&
+          (cat.label.toLowerCase().includes(normalizedTitle) ||
+            normalizedTitle.includes(cat.label.toLowerCase()) ||
+            normalizedTitle.includes(cat.id.toLowerCase()))
+      );
+      const matchedService =
+        SERVICE_CATALOG.find(
+          (svc) =>
+            svc.id.toLowerCase() === normalizedTitle ||
+            svc.title.toLowerCase().includes(normalizedTitle) ||
+            normalizedTitle.includes(svc.title.toLowerCase())
+        ) ||
+        (matchedCategory
+          ? SERVICE_CATALOG.find((svc) => svc.categoryId === matchedCategory.id)
+          : undefined);
+      if (matchedService) {
+        selectedServiceIds = [matchedService.id];
+      }
+    }
+
     const candidatePayload = {
-      type: 'service_inquiry',
+      type: selectedServiceIds.length > 0 ? 'solution_builder' : 'contact_inquiry',
       fullName: sanitizePlainText(args.fullName, 120) || state.client.fullName || '',
       email: (sanitizePlainText(args.email, 180) || state.client.email || '').toLowerCase(),
       contactNumber: sanitizePlainText(args.contactNumber, 40) || state.client.phone || '',
@@ -1272,6 +1306,9 @@ export class AIToolsExecutor {
         data: { error: validated.error },
       };
     }
+
+    // Consume single-use confirmation token immediately prior to persistence to prevent replay races
+    this.pendingConfirmations.delete(confirmationToken);
 
     const data = validated.data;
     const referenceCode = `OPM-INQ-${new Date().getFullYear()}-${crypto
