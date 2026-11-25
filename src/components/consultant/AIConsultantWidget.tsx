@@ -4,7 +4,8 @@ import {
   Bot, X, Send, Calendar, FileText, Phone, Minimize2, 
   Maximize2, RotateCcw, Shield, Building,
   MapPin, Mic, MicOff, Volume2, VolumeX, PhoneOff, Globe,
-  Square, AlertCircle, Sparkles, CheckCircle2, Download, ExternalLink
+  Square, AlertCircle, Sparkles, CheckCircle2, Download, ExternalLink,
+  Pencil, Radio
 } from 'lucide-react';
 import { COMPANY_CONFIG, corporateIdentity, LEGAL_GOVERNANCE_STATEMENTS } from '../../data/companyConfig';
 import { ROUTES } from '../../config/routes';
@@ -12,6 +13,7 @@ import { BrandLogo } from '../BrandLogo';
 import { 
   aiConsultantService, 
   ChatMessage, 
+  ChatToolEvent,
   ConsultationState, 
   INITIAL_CONSULTATION_STATE 
 } from '../../services/aiConsultantService';
@@ -25,6 +27,7 @@ import {
   aiVoiceService,
   VoiceSessionState,
   VoiceLanguage,
+  VoiceToolEvent,
 } from '../../services/aiVoiceService';
 import { SERVICE_CATALOG, formatCatalogEngagement } from '../../data/serviceCatalog';
 import { ProjectBriefModal } from './ProjectBriefModal';
@@ -53,15 +56,34 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
   const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
+  const [speakerVolume, setSpeakerVolume] = useState<number>(1);
+  const [isPushToTalkMode, setIsPushToTalkMode] = useState(false);
+  const [isPushToTalkHeld, setIsPushToTalkHeld] = useState(false);
   const [audioVolume, setAudioVolume] = useState(0);
   const [audioBands, setAudioBands] = useState<number[]>(() => new Array(16).fill(0));
   const [voiceLanguage, setVoiceLanguage] = useState<VoiceLanguage>('en-US');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
+  // Transcript correction & explicit server-validated tool confirmation state
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState('');
+  const [pendingToolConfirmation, setPendingToolConfirmation] = useState<{
+    kind: 'consultation' | 'inquiry';
+    confirmationToken: string;
+    sessionId: string;
+    sourceChannel: 'AI Chat' | 'AI Voice';
+    summary: Record<string, unknown>;
+  } | null>(null);
+  const [isSubmittingConfirmation, setIsSubmittingConfirmation] = useState(false);
+
   const isVoiceActive =
     isVoiceSessionActive ||
-    (voiceStatus !== 'disconnected' && voiceStatus !== 'error' && voiceStatus !== 'stopping');
+    (voiceStatus !== 'disconnected' &&
+      voiceStatus !== 'error' &&
+      voiceStatus !== 'microphone_unavailable' &&
+      voiceStatus !== 'service_unavailable' &&
+      voiceStatus !== 'stopping');
 
   // Conversation State (v2 keys; purges legacy cached conversations that may hold retired pricing)
   const [state, setState] = useState<ConsultationState>(() => {
@@ -246,6 +268,24 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
         }
         setIsBriefModalOpen(true);
       },
+      onToolEvent: (event: VoiceToolEvent) => {
+        const payload = event.payload || {};
+        if (
+          (event.type === 'prepared_consultation' || event.type === 'prepared_inquiry') &&
+          typeof payload.confirmationToken === 'string'
+        ) {
+          setPendingToolConfirmation({
+            kind: event.type === 'prepared_consultation' ? 'consultation' : 'inquiry',
+            confirmationToken: payload.confirmationToken,
+            sessionId:
+              typeof payload.sessionId === 'string' && payload.sessionId
+                ? payload.sessionId
+                : aiVoiceService.getSessionId(),
+            sourceChannel: 'AI Voice',
+            summary: (payload.summary as Record<string, unknown>) || payload,
+          });
+        }
+      },
       onError: (err) => {
         setVoiceError(err);
         setTimeout(() => setVoiceError(null), 8000);
@@ -331,6 +371,76 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
     aiVoiceService.setSpeakerMuted(next);
   };
 
+  const handleSpeakerVolumeChange = (nextVolume: number) => {
+    const clamped = Math.max(0, Math.min(1, nextVolume));
+    setSpeakerVolume(clamped);
+    if (clamped > 0 && isSpeakerMuted) {
+      setIsSpeakerMuted(false);
+      aiVoiceService.setSpeakerMuted(false);
+    }
+    aiVoiceService.setSpeakerVolume(clamped);
+  };
+
+  const handleTogglePushToTalk = () => {
+    const next = !isPushToTalkMode;
+    setIsPushToTalkMode(next);
+    setIsPushToTalkHeld(false);
+    aiVoiceService.setPushToTalkMode(next);
+  };
+
+  const handleStartTranscriptEdit = (msg: ChatMessage) => {
+    const cleanText = msg.text.replace(/^\[Voice Consultation\]:\s*"?|"?$/g, '').trim();
+    setEditingMsgId(msg.id);
+    setEditingDraft(cleanText);
+  };
+
+  const handleSubmitTranscriptCorrection = async (msg: ChatMessage) => {
+    const original = msg.text.replace(/^\[Voice Consultation\]:\s*"?|"?$/g, '').trim();
+    const corrected = editingDraft.trim();
+    setEditingMsgId(null);
+    setEditingDraft('');
+    if (!corrected || corrected === original) return;
+    await aiVoiceService.submitTranscriptCorrection(original, corrected);
+  };
+
+  const handleConfirmPendingTool = async () => {
+    if (!pendingToolConfirmation || isSubmittingConfirmation) return;
+    setIsSubmittingConfirmation(true);
+    try {
+      const result = await aiConsultantService.confirmPreparedToolAction({
+        sessionId: pendingToolConfirmation.sessionId,
+        confirmationToken: pendingToolConfirmation.confirmationToken,
+        kind: pendingToolConfirmation.kind,
+        sourceChannel: pendingToolConfirmation.sourceChannel,
+      });
+
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (result.success) {
+        const successText =
+          result.message ||
+          `Your ${pendingToolConfirmation.kind === 'consultation' ? 'consultation request' : 'service inquiry'} has been confirmed and registered (Reference: ${result.referenceCode || 'Verified'}).`;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `tool-confirm-${Date.now()}`,
+            sender: 'ai',
+            text: successText,
+            timestamp: now,
+            quickReplies: ['Direct Solutions Contact'],
+          },
+        ]);
+        if (isVoiceActive && !isSpeakerMuted) {
+          void aiVoiceService.speakText(successText);
+        }
+        setPendingToolConfirmation(null);
+      } else {
+        setVoiceError(result.error || 'Could not confirm request. Please review details and try again.');
+      }
+    } finally {
+      setIsSubmittingConfirmation(false);
+    }
+  };
+
   const handleLanguageChange = (lang: VoiceLanguage) => {
     setVoiceLanguage(lang);
     aiVoiceService.setLanguage(lang);
@@ -413,7 +523,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       }
 
       // Live consultative pipeline grounded in the full 10-category service catalog
-      const { aiMessage, updatedState } = await aiConsultantService.processUserMessage(
+      const { aiMessage, updatedState, toolEvents, sessionId } = await aiConsultantService.processUserMessage(
         text,
         state,
         messages,
@@ -425,6 +535,25 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       setState(updatedState);
       if (updatedState.generatedBrief) {
         setCurrentBrief(updatedState.generatedBrief);
+      }
+      if (Array.isArray(toolEvents) && toolEvents.length > 0) {
+        const prepared = toolEvents.find(
+          (ev: ChatToolEvent) =>
+            (ev.type === 'prepared_consultation' || ev.type === 'prepared_inquiry') &&
+            typeof ev.payload?.confirmationToken === 'string'
+        );
+        if (prepared) {
+          setPendingToolConfirmation({
+            kind: prepared.type === 'prepared_consultation' ? 'consultation' : 'inquiry',
+            confirmationToken: String(prepared.payload.confirmationToken),
+            sessionId:
+              typeof prepared.payload.sessionId === 'string' && prepared.payload.sessionId
+                ? prepared.payload.sessionId
+                : sessionId,
+            sourceChannel: isVoiceActive ? 'AI Voice' : 'AI Chat',
+            summary: (prepared.payload.summary as Record<string, unknown>) || prepared.payload,
+          });
+        }
       }
       if (isVoiceActive && !isSpeakerMuted) {
         aiVoiceService.speakText(aiMessage.text);
@@ -480,8 +609,12 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
   const handleResetConversation = () => {
     aiVoiceService.stopSession();
     aiVoiceService.resetConversationContext();
+    aiConsultantService.resetSession();
     setVoiceStatus('disconnected');
     setIsVoiceSessionActive(false);
+    setPendingToolConfirmation(null);
+    setEditingMsgId(null);
+    setEditingDraft('');
     try {
       localStorage.removeItem('opm_consultant_messages');
       localStorage.removeItem('opm_consultant_state');
@@ -609,17 +742,21 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                 <div className="flex items-center gap-1.5">
                   <h3 className="text-xs font-bold text-white tracking-wide">DESTRIA AI Solutions</h3>
                   <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
-                    voiceStatus === 'error'
+                    voiceStatus === 'error' ||
+                    voiceStatus === 'microphone_unavailable' ||
+                    voiceStatus === 'service_unavailable'
                       ? 'text-rose-300 bg-rose-950/60 border-rose-500/40 font-bold'
-                      : voiceStatus === 'reconnecting'
-                      ? 'text-amber-300 bg-amber-950/60 border-amber-500/40 font-bold'
-                      : voiceStatus === 'connecting'
+                      : voiceStatus === 'reconnecting' || voiceStatus === 'connecting'
                       ? 'text-amber-300 bg-amber-950/60 border-amber-500/40 font-bold'
                       : isVoiceActive
                       ? 'text-[#00C2C7] bg-[#00C2C7]/15 border-[#00C2C7]/40 font-bold'
                       : 'text-slate-400 bg-slate-800 border-slate-700'
                   }`}>
-                    {voiceStatus === 'error'
+                    {voiceStatus === 'microphone_unavailable'
+                      ? 'MIC UNAVAILABLE'
+                      : voiceStatus === 'service_unavailable'
+                      ? 'AI UNAVAILABLE'
+                      : voiceStatus === 'error'
                       ? 'CONNECTION ERROR'
                       : voiceStatus === 'reconnecting'
                       ? 'RECONNECTING...'
@@ -761,11 +898,60 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                           >
                             {isVoiceMsg ? (
                               <div className="space-y-1">
-                                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-[#0B1220] opacity-80 uppercase font-bold">
-                                  <Mic className="w-3 h-3" />
-                                  <span>Voice Input</span>
-                                </span>
-                                <div>{msg.text.replace('[Voice Consultation]: ', '')}</div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-[#0B1220] opacity-80 uppercase font-bold">
+                                    <Mic className="w-3 h-3" />
+                                    <span>Voice Input</span>
+                                  </span>
+                                  {editingMsgId !== msg.id && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartTranscriptEdit(msg)}
+                                      className="inline-flex items-center gap-1 text-[10px] font-mono text-[#0B1220]/80 hover:text-[#0B1220] underline cursor-pointer"
+                                      title="Edit or correct speech transcript"
+                                    >
+                                      <Pencil className="w-2.5 h-2.5" />
+                                      <span>Edit</span>
+                                    </button>
+                                  )}
+                                </div>
+                                {editingMsgId === msg.id ? (
+                                  <form
+                                    onSubmit={(e) => {
+                                      e.preventDefault();
+                                      void handleSubmitTranscriptCorrection(msg);
+                                    }}
+                                    className="space-y-1.5 pt-1"
+                                  >
+                                    <input
+                                      type="text"
+                                      value={editingDraft}
+                                      onChange={(e) => setEditingDraft(e.target.value)}
+                                      className="w-full px-2 py-1 rounded-lg bg-[#0B1220] text-white text-xs border border-[#0B1220]/40 focus:outline-none"
+                                      aria-label="Correct speech transcript"
+                                    />
+                                    <div className="flex items-center gap-1.5 justify-end">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingMsgId(null);
+                                          setEditingDraft('');
+                                        }}
+                                        className="px-2 py-0.5 rounded bg-[#0B1220]/20 text-[#0B1220] text-[10px] font-bold cursor-pointer"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="submit"
+                                        className="px-2 py-0.5 rounded bg-[#0B1220] text-[#00C2C7] text-[10px] font-bold cursor-pointer"
+                                      >
+                                        Send Correction
+                                      </button>
+                                    </div>
+                                  </form>
+                                ) : (
+                                  <div>{msg.text.replace('[Voice Consultation]: ', '')}</div>
+                                )}
                               </div>
                             ) : (
                               msg.text
@@ -933,13 +1119,76 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                   </div>
                 )}
 
+                {/* Explicit Client Confirmation Card for Server-Prepared Consultations / Inquiries */}
+                {pendingToolConfirmation && (
+                  <div className="p-3.5 rounded-xl bg-slate-900 border border-[#D4AF37]/50 space-y-2.5 shadow-lg">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-[#D4AF37] font-bold">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>
+                          {pendingToolConfirmation.kind === 'consultation'
+                            ? 'Confirm Executive Consultation Request'
+                            : 'Confirm Service Inquiry Submission'}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPendingToolConfirmation(null)}
+                        className="text-slate-400 hover:text-white cursor-pointer"
+                        aria-label="Dismiss confirmation"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-slate-300 space-y-1 bg-[#0B1220] p-2.5 rounded-lg border border-slate-800">
+                      {Object.entries(pendingToolConfirmation.summary)
+                        .filter(([, val]) => val !== undefined && val !== null && String(val).trim() !== '')
+                        .slice(0, 7)
+                        .map(([key, val]) => (
+                          <div key={key} className="flex justify-between gap-2">
+                            <span className="text-slate-500 font-mono capitalize">
+                              {key.replace(/([A-Z])/g, ' $1').trim()}:
+                            </span>
+                            <span className="text-slate-200 text-right truncate max-w-[220px]">
+                              {Array.isArray(val) ? val.join(', ') : String(val)}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      Nothing is submitted until you confirm. Confirming registers this request and notifies our executive solutions team.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isSubmittingConfirmation}
+                        onClick={() => void handleConfirmPendingTool()}
+                        className="flex-1 py-2 px-3 rounded-lg bg-[#00C2C7] hover:bg-[#00d8de] disabled:opacity-50 text-[#0B1220] text-xs font-bold cursor-pointer transition-colors"
+                      >
+                        {isSubmittingConfirmation ? 'Submitting...' : 'Confirm & Submit'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSubmittingConfirmation}
+                        onClick={() => setPendingToolConfirmation(null)}
+                        className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div ref={messagesEndRef} />
               </div>
 
               {/* =========================================================================
                   REAL-TIME VOICE CONTROL & WAVEFORM CENTER
                   ========================================================================= */}
-              {isVoiceActive || voiceStatus === 'error' ? (
+              {isVoiceActive ||
+              voiceStatus === 'error' ||
+              voiceStatus === 'microphone_unavailable' ||
+              voiceStatus === 'service_unavailable' ? (
                 <div className="px-4 py-3 bg-[#111827] border-t border-cyan-500/30 flex flex-col gap-2.5">
                   {/* Status & Live Audio Waveform Strip */}
                   <div className="flex items-center justify-between gap-3">
@@ -950,10 +1199,28 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                           <span>Connecting...</span>
                         </span>
                       )}
+                      {voiceStatus === 'connected' && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-emerald-400">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                          <span>Connected</span>
+                        </span>
+                      )}
                       {voiceStatus === 'reconnecting' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
                           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                           <span>Reconnecting...</span>
+                        </span>
+                      )}
+                      {voiceStatus === 'microphone_unavailable' && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-rose-400">
+                          <MicOff className="w-3.5 h-3.5" />
+                          <span>Microphone Unavailable</span>
+                        </span>
+                      )}
+                      {voiceStatus === 'service_unavailable' && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-rose-400">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>AI Service Unavailable</span>
                         </span>
                       )}
                       {voiceStatus === 'error' && (
@@ -965,6 +1232,8 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                       {voiceStatus !== 'connecting' &&
                         voiceStatus !== 'reconnecting' &&
                         voiceStatus !== 'error' &&
+                        voiceStatus !== 'microphone_unavailable' &&
+                        voiceStatus !== 'service_unavailable' &&
                         isMicMuted && (
                           <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-rose-300">
                             <MicOff className="w-3.5 h-3.5" />
@@ -974,25 +1243,37 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                       {!isMicMuted && voiceStatus === 'listening' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-emerald-400">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                          <span>Listening...</span>
+                          <span>{isPushToTalkMode ? 'Ready (Push-to-Talk)' : 'Listening...'}</span>
                         </span>
                       )}
-                      {!isMicMuted && (voiceStatus === 'user_speaking' || voiceStatus === 'interrupted') && (
+                      {!isMicMuted && voiceStatus === 'user_speaking' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-emerald-300">
                           <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
                           <span>You're Speaking...</span>
                         </span>
                       )}
+                      {!isMicMuted && voiceStatus === 'interrupted' && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-amber-300">
+                          <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />
+                          <span>Interrupted</span>
+                        </span>
+                      )}
+                      {!isMicMuted && voiceStatus === 'understanding' && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-sky-400">
+                          <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                          <span>Understanding...</span>
+                        </span>
+                      )}
                       {!isMicMuted && voiceStatus === 'processing' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
                           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                          <span>Thinking...</span>
+                          <span>Processing...</span>
                         </span>
                       )}
                       {!isMicMuted && voiceStatus === 'ai_speaking' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-[#00C2C7]">
                           <Volume2 className="w-3.5 h-3.5 animate-bounce" />
-                          <span>AI Speaking...</span>
+                          <span>Speaking...</span>
                         </span>
                       )}
                     </div>
@@ -1012,6 +1293,8 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                                 ? 'bg-[#00C2C7]'
                                 : voiceStatus === 'listening' || voiceStatus === 'user_speaking'
                                 ? 'bg-emerald-400'
+                                : voiceStatus === 'understanding'
+                                ? 'bg-sky-400'
                                 : voiceStatus === 'reconnecting' || voiceStatus === 'processing'
                                 ? 'bg-amber-400/70'
                                 : 'bg-slate-700'
@@ -1066,6 +1349,66 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                         <PhoneOff className="w-3 h-3" />
                         <span className="hidden sm:inline">End Voice</span>
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Secondary Audio Controls: Speaker Volume & Push-to-Talk */}
+                  <div className="flex items-center justify-between gap-2 text-[10px] font-mono text-slate-400">
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="destria-voice-volume" className="text-slate-400">
+                        Vol
+                      </label>
+                      <input
+                        id="destria-voice-volume"
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={isSpeakerMuted ? 0 : Math.round(speakerVolume * 100)}
+                        onChange={(e) => handleSpeakerVolumeChange(Number(e.target.value) / 100)}
+                        className="w-20 accent-[#00C2C7] cursor-pointer"
+                        aria-label="Speaker volume"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleTogglePushToTalk}
+                        className={`px-2 py-0.5 rounded border text-[10px] font-mono flex items-center gap-1 cursor-pointer transition-colors ${
+                          isPushToTalkMode
+                            ? 'bg-[#00C2C7]/20 border-[#00C2C7]/60 text-[#00C2C7]'
+                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                        }`}
+                        title="Toggle Push-to-Talk Mode"
+                      >
+                        <Radio className="w-2.5 h-2.5" />
+                        <span>{isPushToTalkMode ? 'PTT ON' : 'PTT'}</span>
+                      </button>
+                      {isPushToTalkMode && (
+                        <button
+                          type="button"
+                          onPointerDown={() => {
+                            setIsPushToTalkHeld(true);
+                            aiVoiceService.startPushToTalk();
+                          }}
+                          onPointerUp={() => {
+                            setIsPushToTalkHeld(false);
+                            aiVoiceService.endPushToTalk();
+                          }}
+                          onPointerLeave={() => {
+                            if (isPushToTalkHeld) {
+                              setIsPushToTalkHeld(false);
+                              aiVoiceService.endPushToTalk();
+                            }
+                          }}
+                          className={`px-2.5 py-0.5 rounded border text-[10px] font-bold cursor-pointer select-none transition-colors ${
+                            isPushToTalkHeld
+                              ? 'bg-[#00C2C7] text-[#0B1220] border-[#00C2C7]'
+                              : 'bg-slate-800 text-slate-200 border-slate-600 hover:border-[#00C2C7]'
+                          }`}
+                        >
+                          {isPushToTalkHeld ? 'Speaking...' : 'Hold to Speak'}
+                        </button>
+                      )}
                     </div>
                   </div>
 

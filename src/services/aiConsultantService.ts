@@ -21,6 +21,12 @@ export interface ChatResourceLink {
   pageCount: number;
 }
 
+export interface ChatToolEvent {
+  toolName?: string;
+  type: string;
+  payload: Record<string, unknown>;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'ai' | 'user';
@@ -227,13 +233,64 @@ const synthesizeBriefFromState = (state: ConsultationState, recommendedIds: stri
   };
 };
 
+let activeChatSessionId = `dti-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 export const aiConsultantService = {
+  getSessionId(): string {
+    return activeChatSessionId;
+  },
+
+  resetSession(): string {
+    activeChatSessionId = `dti-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return activeChatSessionId;
+  },
+
+  async confirmPreparedToolAction(input: {
+    sessionId?: string;
+    confirmationToken: string;
+    kind: 'consultation' | 'inquiry';
+    sourceChannel?: 'AI Chat' | 'AI Voice';
+  }): Promise<{
+    success: boolean;
+    referenceCode?: string;
+    message?: string;
+    error?: string;
+    appointment?: Record<string, unknown>;
+    inquiry?: Record<string, unknown>;
+  }> {
+    const res = await fetch(apiUrl('/api/consultant/confirm-tool'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: input.sessionId || activeChatSessionId,
+        confirmationToken: input.confirmationToken,
+        kind: input.kind,
+        clientConfirmed: true,
+        sourceChannel: input.sourceChannel || 'AI Chat',
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || 'Unable to confirm and submit request at this time.',
+      };
+    }
+    return {
+      success: true,
+      referenceCode: data.referenceCode,
+      message: data.message,
+      appointment: data.appointment,
+      inquiry: data.inquiry,
+    };
+  },
+
   async processUserMessage(
     userMessage: string,
     state: ConsultationState,
     conversationHistory: ChatMessage[],
     language: 'en-US' | 'fil-PH' = 'en-US'
-  ): Promise<{ aiMessage: ChatMessage; updatedState: ConsultationState }> {
+  ): Promise<{ aiMessage: ChatMessage; updatedState: ConsultationState; toolEvents?: ChatToolEvent[]; sessionId: string }> {
     const trimmed = userMessage.trim();
     const updatedState: ConsultationState = {
       ...state,
@@ -288,6 +345,7 @@ export const aiConsultantService = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          sessionId: activeChatSessionId,
           userMessage: trimmed.slice(0, 1500),
           stateContext: {
             category: updatedState.requirements.category,
@@ -304,9 +362,13 @@ export const aiConsultantService = {
 
       if (response.ok) {
         const data = await response.json();
+        if (typeof data.sessionId === 'string' && data.sessionId.trim()) {
+          activeChatSessionId = data.sessionId.trim();
+        }
         const recommendedIds: string[] = Array.isArray(data.recommendedServiceIds)
           ? data.recommendedServiceIds
           : [];
+        const toolEvents: ChatToolEvent[] = Array.isArray(data.toolEvents) ? data.toolEvents : [];
 
         if (
           updatedState.currentStage === 'brief_ready' ||
@@ -330,6 +392,8 @@ export const aiConsultantService = {
               : ['Review Project Brief', 'Request an Enterprise Consultation'],
           },
           updatedState,
+          toolEvents,
+          sessionId: activeChatSessionId,
         };
       }
     } catch (err) {
@@ -354,6 +418,7 @@ export const aiConsultantService = {
             : ['Request an Enterprise Consultation', 'Direct Solutions Contact'],
         },
         updatedState,
+        sessionId: activeChatSessionId,
       };
     }
 
@@ -379,6 +444,7 @@ export const aiConsultantService = {
           quickReplies: ['Review Project Brief', 'Request an Enterprise Consultation', 'Direct Solutions Contact'],
         },
         updatedState,
+        sessionId: activeChatSessionId,
       };
     }
 
@@ -404,6 +470,7 @@ export const aiConsultantService = {
         ],
       },
       updatedState,
+      sessionId: activeChatSessionId,
     };
   },
 };

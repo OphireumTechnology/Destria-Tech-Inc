@@ -40,7 +40,7 @@ function resolveDistDirectory(): string | null {
 }
 
 async function startServer() {
-  const { app, db, emailService, ai } = createApp();
+  const { app, db, emailService, ai, aiRuntimeConfig, aiToolsExecutor, allowedOrigins } = createApp();
   const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
   if (process.env.NODE_ENV !== 'production') {
@@ -49,6 +49,7 @@ async function startServer() {
     app.use('/resources', express.static(path.join(publicDir, 'resources'), staticAssetOpts));
     app.use('/documents', express.static(path.join(publicDir, 'documents'), staticAssetOpts));
     app.use('/branding', express.static(path.join(publicDir, 'branding'), staticAssetOpts));
+    app.use('/worklets', express.static(path.join(publicDir, 'worklets'), staticAssetOpts));
 
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -109,7 +110,12 @@ async function startServer() {
     });
   });
 
-  const voiceLiveBridge = attachVoiceLiveBridge(server, ai);
+  const voiceLiveBridge = attachVoiceLiveBridge(server, {
+    ai,
+    runtimeConfig: aiRuntimeConfig,
+    toolsExecutor: aiToolsExecutor,
+    allowedOrigins,
+  });
 
   // Harden HTTP server socket & header timeouts against slowloris / hung upstream connections
   server.requestTimeout = 30_000;

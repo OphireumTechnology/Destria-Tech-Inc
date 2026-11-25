@@ -13,6 +13,10 @@ import {
   LogOut,
   RefreshCw,
   RotateCcw,
+  Bot,
+  Sliders,
+  ShieldCheck,
+  Power,
 } from 'lucide-react';
 import { BrandLogo } from '../components/BrandLogo';
 import { NotFoundPage } from '../components/NotFoundPage';
@@ -57,7 +61,12 @@ export const AdminPortalApp: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [systemHealth, setSystemHealth] = useState<any | null>(null);
-  const [dashboardSubTab, setDashboardSubTab] = useState<'requests' | 'notifications' | 'health'>('requests');
+  const [aiOverview, setAiOverview] = useState<any | null>(null);
+  const [aiConfigDraft, setAiConfigDraft] = useState<any | null>(null);
+  const [isSavingAiConfig, setIsSavingAiConfig] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
+  const [terminatingSessionId, setTerminatingSessionId] = useState<string | null>(null);
+  const [dashboardSubTab, setDashboardSubTab] = useState<'requests' | 'notifications' | 'health' | 'ai'>('requests');
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [retryFeedback, setRetryFeedback] = useState<string | null>(null);
   const [adminDataError, setAdminDataError] = useState<string | null>(null);
@@ -90,12 +99,13 @@ export const AdminPortalApp: React.FC = () => {
       const sessionJson = await sessionRes.json();
       setAdminProfile(sessionJson.admin || null);
 
-      const [reqRes, aptRes, auditRes, notifRes, healthRes] = await Promise.all([
+      const [reqRes, aptRes, auditRes, notifRes, healthRes, aiRes] = await Promise.all([
         fetch(apiUrl('/api/admin/solution-requests?limit=25&offset=0'), { headers }),
         fetch(apiUrl('/api/admin/appointments?limit=25&offset=0'), { headers }),
         fetch(apiUrl('/api/admin/audit-logs?limit=25&offset=0'), { headers }),
         fetch(apiUrl('/api/admin/notifications?limit=50&offset=0'), { headers }),
         fetch(apiUrl('/api/admin/system-health'), { headers }),
+        fetch(apiUrl('/api/admin/ai/overview'), { headers }),
       ]);
 
       const reqJson = await reqRes.json().catch(() => ({}));
@@ -103,6 +113,12 @@ export const AdminPortalApp: React.FC = () => {
       const auditJson = await auditRes.json().catch(() => ({}));
       const notifJson = await notifRes.json().catch(() => ({}));
       const healthJson = await healthRes.json().catch(() => ({}));
+      const aiJson = await aiRes.json().catch(() => ({}));
+
+      if (aiRes.ok && aiJson.success) {
+        setAiOverview(aiJson);
+        setAiConfigDraft(aiJson.config ? { ...aiJson.config } : null);
+      }
 
       if (!reqRes.ok || !aptRes.ok) {
         setAdminDataError(
@@ -126,6 +142,75 @@ export const AdminPortalApp: React.FC = () => {
       setCheckingSession(false);
     }
   }, []);
+
+  const handleSaveAiConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminToken || !aiConfigDraft || isSavingAiConfig) return;
+    setIsSavingAiConfig(true);
+    setAiFeedback(null);
+    try {
+      const res = await fetch(apiUrl('/api/admin/ai/config'), {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          geminiLiveEnabled: Boolean(aiConfigDraft.geminiLiveEnabled),
+          geminiLiveModel: aiConfigDraft.geminiLiveModel,
+          geminiVoiceName: aiConfigDraft.geminiVoiceName,
+          defaultLanguage: aiConfigDraft.defaultLanguage,
+          multilingualEnabled: Boolean(aiConfigDraft.multilingualEnabled),
+          transcriptionEnabled: Boolean(aiConfigDraft.transcriptionEnabled),
+          bargeInEnabled: Boolean(aiConfigDraft.bargeInEnabled),
+          browserFallbackEnabled: Boolean(aiConfigDraft.browserFallbackEnabled),
+          maxConcurrentLiveSessions: Number(aiConfigDraft.maxConcurrentLiveSessions),
+          sessionTtlMinutes: Number(aiConfigDraft.sessionTtlMinutes),
+          dailyEstimatedBudgetUsd: Number(aiConfigDraft.dailyEstimatedBudgetUsd),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setAiFeedback(data.error || 'Unable to update AI configuration.');
+      } else {
+        setAiFeedback('AI runtime configuration updated and audited.');
+        await loadAuthorizedAdminData(adminToken);
+      }
+    } catch {
+      setAiFeedback('Network error while saving AI configuration.');
+    } finally {
+      setIsSavingAiConfig(false);
+    }
+  };
+
+  const handleTerminateAiSession = async (sessionId: string) => {
+    if (!adminToken || terminatingSessionId) return;
+    setTerminatingSessionId(sessionId);
+    setAiFeedback(null);
+    try {
+      const res = await fetch(
+        apiUrl(`/api/admin/ai/sessions/${encodeURIComponent(sessionId)}/terminate`),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setAiFeedback(data.error || 'Could not terminate voice session.');
+      } else {
+        setAiFeedback(`Session ${sessionId} terminated.`);
+        await loadAuthorizedAdminData(adminToken);
+      }
+    } catch {
+      setAiFeedback('Network error while terminating session.');
+    } finally {
+      setTerminatingSessionId(null);
+    }
+  };
 
   const handleRetryNotification = async (outboxId: string) => {
     if (!adminToken || retryingId) return;
@@ -207,6 +292,9 @@ export const AdminPortalApp: React.FC = () => {
     setAuditLogs([]);
     setNotifications([]);
     setSystemHealth(null);
+    setAiOverview(null);
+    setAiConfigDraft(null);
+    setAiFeedback(null);
     setRetryFeedback(null);
     setAdminDataError(null);
     try {
@@ -472,6 +560,18 @@ export const AdminPortalApp: React.FC = () => {
                     <Activity className="w-3.5 h-3.5" />
                     <span>System Health</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setDashboardSubTab('ai')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono cursor-pointer flex items-center gap-1.5 ${
+                      dashboardSubTab === 'ai'
+                        ? 'bg-slate-800 text-[#00C2C7] border border-[#00C2C7]/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Bot className="w-3.5 h-3.5" />
+                    <span>AI Command Center</span>
+                  </button>
                 </div>
 
                 {retryFeedback && (
@@ -605,6 +705,392 @@ export const AdminPortalApp: React.FC = () => {
                           )}
                         </div>
                       ))}
+                    </div>
+                  ))}
+
+                {dashboardSubTab === 'ai' &&
+                  (!aiOverview ? (
+                    <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
+                      AI Command Center diagnostics are loading or unavailable.
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {aiFeedback && (
+                        <div className="p-3 rounded-lg bg-slate-900 border border-[#00C2C7]/40 text-xs text-slate-200 font-mono">
+                          {aiFeedback}
+                        </div>
+                      )}
+
+                      {/* Security & Service Health Summary Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-slate-400 uppercase">AI Service Health</span>
+                            <span
+                              className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+                                aiOverview.serviceHealth?.state === 'HEALTHY'
+                                  ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/40'
+                                  : aiOverview.serviceHealth?.state === 'DEGRADED'
+                                  ? 'bg-amber-950/70 text-amber-300 border border-amber-500/40'
+                                  : 'bg-rose-950/70 text-rose-300 border border-rose-500/40'
+                              }`}
+                            >
+                              {aiOverview.serviceHealth?.state || 'UNKNOWN'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-white font-semibold">
+                            Provider: {(aiOverview.serviceHealth?.provider || 'gemini').toUpperCase()}
+                          </p>
+                          <p className="text-[11px] font-mono text-slate-400">
+                            Server Secret:{' '}
+                            <span
+                              className={
+                                aiOverview.serviceHealth?.geminiApiKeyConfigured
+                                  ? 'text-emerald-400'
+                                  : 'text-amber-400'
+                              }
+                            >
+                              {aiOverview.serviceHealth?.geminiApiKeyConfigured
+                                ? 'Configured (Env)'
+                                : 'Not Configured'}
+                            </span>
+                          </p>
+                          <p className="text-[10px] font-mono text-slate-500">
+                            Raw Audio Retention: Disabled
+                          </p>
+                        </div>
+
+                        <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                          <span className="text-[10px] font-mono text-slate-400 uppercase">Response Latency</span>
+                          <p className="text-lg font-mono font-bold text-[#00C2C7]">
+                            {aiOverview.metrics?.latency?.avgMs ?? 0}ms avg
+                          </p>
+                          <p className="text-[11px] font-mono text-slate-400">
+                            P50: {aiOverview.metrics?.latency?.p50Ms ?? 0}ms · P95:{' '}
+                            {aiOverview.metrics?.latency?.p95Ms ?? 0}ms
+                          </p>
+                          <p className="text-[10px] font-mono text-slate-500">
+                            Samples: {aiOverview.metrics?.latency?.sampleCount ?? 0}
+                          </p>
+                        </div>
+
+                        <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                          <span className="text-[10px] font-mono text-slate-400 uppercase">Tokens &amp; Guardrail</span>
+                          <p className="text-lg font-mono font-bold text-white">
+                            {(aiOverview.metrics?.tokens?.totalTokens ?? 0).toLocaleString()} tok
+                          </p>
+                          <p className="text-[11px] font-mono text-slate-400">
+                            Est: ${(aiOverview.metrics?.cost?.estimatedCostUsd ?? 0).toFixed(4)} / $
+                            {aiOverview.metrics?.cost?.dailyBudgetUsd ?? 25}
+                          </p>
+                          <p className="text-[10px] font-mono text-[#D4AF37]">
+                            Utilization: {aiOverview.metrics?.cost?.budgetUtilizationPct ?? 0}%
+                          </p>
+                        </div>
+
+                        <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                          <span className="text-[10px] font-mono text-slate-400 uppercase">Governance &amp; Reliability</span>
+                          <p className="text-lg font-mono font-bold text-emerald-400">
+                            {aiOverview.metrics?.totalToolCalls ?? 0} tool calls
+                          </p>
+                          <p className="text-[11px] font-mono text-slate-400">
+                            Policy Enforcements: {aiOverview.metrics?.totalPolicyEnforcements ?? 0}
+                          </p>
+                          <p className="text-[10px] font-mono text-slate-500">
+                            API Failures: {aiOverview.metrics?.failures?.total ?? 0} · Active Sessions:{' '}
+                            {(aiOverview.activeSessions || []).length}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Zero-Key-Exposure Security Notice */}
+                      <div className="p-3 rounded-lg bg-[#0B1F3B]/60 border border-[#00C2C7]/30 flex items-start gap-2.5 text-xs text-slate-300">
+                        <ShieldCheck className="w-4 h-4 text-[#00C2C7] shrink-0 mt-0.5" />
+                        <span>
+                          API credentials are isolated exclusively in server-side environment secrets and are never exposed or editable through the browser console.
+                        </span>
+                      </div>
+
+                      {/* Live Runtime Configuration Controls */}
+                      {aiConfigDraft && (
+                        <form
+                          onSubmit={handleSaveAiConfig}
+                          className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-4"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Sliders className="w-4 h-4 text-[#00C2C7]" />
+                              <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                                Runtime AI Configuration
+                              </h3>
+                            </div>
+                            <button
+                              type="submit"
+                              disabled={isSavingAiConfig}
+                              className="px-3.5 py-1.5 rounded-lg bg-[#00C2C7] hover:bg-[#00d8de] disabled:opacity-50 text-[#0B1220] text-xs font-bold cursor-pointer"
+                            >
+                              {isSavingAiConfig ? 'Saving...' : 'Save Configuration'}
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                            <div>
+                              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                                Gemini Live Model
+                              </label>
+                              <select
+                                value={aiConfigDraft.geminiLiveModel}
+                                onChange={(e) =>
+                                  setAiConfigDraft({ ...aiConfigDraft, geminiLiveModel: e.target.value })
+                                }
+                                className="w-full px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-white font-mono text-xs"
+                              >
+                                {(aiOverview.allowedOptions?.liveModels || ['gemini-3.8-live']).map(
+                                  (m: string) => (
+                                    <option key={m} value={m}>
+                                      {m}
+                                    </option>
+                                  )
+                                )}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                                Neural Voice Preset
+                              </label>
+                              <select
+                                value={aiConfigDraft.geminiVoiceName}
+                                onChange={(e) =>
+                                  setAiConfigDraft({ ...aiConfigDraft, geminiVoiceName: e.target.value })
+                                }
+                                className="w-full px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-white font-mono text-xs"
+                              >
+                                {(aiOverview.allowedOptions?.voices || ['Kore']).map((v: string) => (
+                                  <option key={v} value={v}>
+                                    {v}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                                Default Language
+                              </label>
+                              <select
+                                value={aiConfigDraft.defaultLanguage}
+                                onChange={(e) =>
+                                  setAiConfigDraft({ ...aiConfigDraft, defaultLanguage: e.target.value })
+                                }
+                                className="w-full px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-white font-mono text-xs"
+                              >
+                                {(aiOverview.allowedOptions?.languages || ['en-US', 'fil-PH']).map(
+                                  (lang: string) => (
+                                    <option key={lang} value={lang}>
+                                      {lang}
+                                    </option>
+                                  )
+                                )}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                                Max Concurrent Live Sessions
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={200}
+                                value={aiConfigDraft.maxConcurrentLiveSessions}
+                                onChange={(e) =>
+                                  setAiConfigDraft({
+                                    ...aiConfigDraft,
+                                    maxConcurrentLiveSessions: Number(e.target.value),
+                                  })
+                                }
+                                className="w-full px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-white font-mono text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                                Session TTL (Minutes)
+                              </label>
+                              <input
+                                type="number"
+                                min={2}
+                                max={120}
+                                value={aiConfigDraft.sessionTtlMinutes}
+                                onChange={(e) =>
+                                  setAiConfigDraft({
+                                    ...aiConfigDraft,
+                                    sessionTtlMinutes: Number(e.target.value),
+                                  })
+                                }
+                                className="w-full px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-white font-mono text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                                Daily Budget Guardrail (USD)
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={5000}
+                                step="1"
+                                value={aiConfigDraft.dailyEstimatedBudgetUsd}
+                                onChange={(e) =>
+                                  setAiConfigDraft({
+                                    ...aiConfigDraft,
+                                    dailyEstimatedBudgetUsd: Number(e.target.value),
+                                  })
+                                }
+                                className="w-full px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-white font-mono text-xs"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-4 pt-2 border-t border-slate-800 text-xs text-slate-300">
+                            {[
+                              { key: 'geminiLiveEnabled', label: 'Gemini Live Streaming' },
+                              { key: 'multilingualEnabled', label: 'Multilingual / Taglish' },
+                              { key: 'transcriptionEnabled', label: 'Live Transcription' },
+                              { key: 'bargeInEnabled', label: 'Barge-In Interruption' },
+                              { key: 'browserFallbackEnabled', label: 'Browser Speech Fallback' },
+                            ].map((toggle) => (
+                              <label
+                                key={toggle.key}
+                                className="inline-flex items-center gap-2 cursor-pointer font-mono text-[11px]"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(aiConfigDraft[toggle.key])}
+                                  onChange={(e) =>
+                                    setAiConfigDraft({
+                                      ...aiConfigDraft,
+                                      [toggle.key]: e.target.checked,
+                                    })
+                                  }
+                                  className="accent-[#00C2C7]"
+                                />
+                                <span>{toggle.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </form>
+                      )}
+
+                      {/* Active AI Voice Sessions */}
+                      <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                        <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                          Active AI Voice Sessions ({(aiOverview.activeSessions || []).length})
+                        </h3>
+                        {(aiOverview.activeSessions || []).length === 0 ? (
+                          <p className="text-xs text-slate-500 font-mono">
+                            No active real-time voice sessions at this moment.
+                          </p>
+                        ) : (
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-800 text-slate-400 font-mono text-[11px]">
+                                <th className="pb-2">SESSION ID</th>
+                                <th className="pb-2">CHANNEL / MODEL</th>
+                                <th className="pb-2">TURNS</th>
+                                <th className="pb-2">LAST ACTIVITY</th>
+                                <th className="pb-2 text-right">ACTION</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800/80">
+                              {aiOverview.activeSessions.map((sess: any) => (
+                                <tr key={sess.sessionId} className="text-slate-300">
+                                  <td className="py-2 font-mono text-[#00C2C7]">{sess.sessionId}</td>
+                                  <td className="py-2 font-mono text-[11px]">
+                                    {sess.channel} · {sess.model} ({sess.voiceName})
+                                  </td>
+                                  <td className="py-2 font-mono">{sess.turnCount}</td>
+                                  <td className="py-2 font-mono text-[11px]">{sess.lastActivityAt}</td>
+                                  <td className="py-2 text-right">
+                                    <button
+                                      type="button"
+                                      disabled={terminatingSessionId === sess.sessionId}
+                                      onClick={() => void handleTerminateAiSession(sess.sessionId)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-950/70 hover:bg-rose-900 border border-rose-500/40 text-rose-200 text-[11px] font-mono cursor-pointer disabled:opacity-50"
+                                    >
+                                      <Power className="w-3 h-3" />
+                                      <span>
+                                        {terminatingSessionId === sess.sessionId ? 'Ending...' : 'Terminate'}
+                                      </span>
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+
+                      {/* Recent Transcription Corrections & Diagnostics */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
+                          <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                            Transcription Corrections ({(aiOverview.transcriptionErrors || []).length})
+                          </h3>
+                          {(aiOverview.transcriptionErrors || []).length === 0 ? (
+                            <p className="text-xs text-slate-500 font-mono">
+                              No user transcript corrections reported.
+                            </p>
+                          ) : (
+                            <div className="space-y-2 max-h-56 overflow-y-auto">
+                              {aiOverview.transcriptionErrors.map((rep: any) => (
+                                <div
+                                  key={rep.id}
+                                  className="p-2.5 rounded-lg bg-[#0B1220] border border-slate-800 text-[11px] space-y-1"
+                                >
+                                  <div className="flex justify-between font-mono text-[10px] text-slate-500">
+                                    <span>{rep.language}</span>
+                                    <span>{rep.reportedAt}</span>
+                                  </div>
+                                  <p className="text-rose-300/90 line-through">{rep.originalTranscript}</p>
+                                  <p className="text-emerald-300">{rep.correctedTranscript}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
+                          <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                            Recent Conversation Diagnostics ({(aiOverview.conversationDiagnostics || []).length})
+                          </h3>
+                          {(aiOverview.conversationDiagnostics || []).length === 0 ? (
+                            <p className="text-xs text-slate-500 font-mono">
+                              No conversation diagnostics recorded yet.
+                            </p>
+                          ) : (
+                            <div className="space-y-2 max-h-56 overflow-y-auto">
+                              {aiOverview.conversationDiagnostics.map((diag: any) => (
+                                <div
+                                  key={diag.sessionId}
+                                  className="p-2.5 rounded-lg bg-[#0B1220] border border-slate-800 text-[11px] font-mono space-y-0.5"
+                                >
+                                  <div className="flex justify-between text-[#00C2C7]">
+                                    <span className="truncate max-w-[180px]">{diag.sessionId}</span>
+                                    <span>{diag.channel}</span>
+                                  </div>
+                                  <div className="text-slate-400">
+                                    Turns: {diag.turns} · Tools: {diag.toolCalls} · Policy Flags:{' '}
+                                    {diag.policyEnforcements}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ))}
               </>

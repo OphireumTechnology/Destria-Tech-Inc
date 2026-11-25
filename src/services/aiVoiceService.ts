@@ -19,12 +19,16 @@ import { apiUrl, resolveApiBaseUrl } from '../lib/apiClient';
 export type VoiceSessionState =
   | 'disconnected'
   | 'connecting'
+  | 'connected'
   | 'listening'
   | 'user_speaking'
+  | 'understanding'
   | 'processing'
   | 'ai_speaking'
   | 'interrupted'
   | 'reconnecting'
+  | 'microphone_unavailable'
+  | 'service_unavailable'
   | 'error'
   | 'stopping';
 
@@ -82,12 +86,26 @@ export interface VoiceAiIntent {
   updatedContext?: VoiceSharedContext;
 }
 
+export interface VoiceToolEvent {
+  toolName?: string;
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+export interface VoiceLiveSessionInfo {
+  model?: string;
+  voice?: string;
+  transportMode: VoiceTransportMode;
+}
+
 export interface VoiceEventCallbacks {
   onStatusChange?: (status: VoiceSessionState) => void;
   onSessionActiveChange?: (active: boolean) => void;
   onTransportModeChange?: (mode: VoiceTransportMode) => void;
+  onLiveSessionInfo?: (info: VoiceLiveSessionInfo) => void;
   onTranscript?: (text: string, isFinal: boolean) => void;
   onAiResponse?: (text: string, intent?: VoiceAiIntent) => void;
+  onToolEvent?: (event: VoiceToolEvent) => void;
   onVolumeChange?: (volume: number, bands?: number[]) => void;
   onVoiceEngineChange?: (engine: VoiceEngineType) => void;
   onTurnMetrics?: (metrics: VoiceTurnMetrics) => void;
@@ -107,6 +125,7 @@ export interface VoiceRuntimeDeps {
   speechSynthesis?: SpeechSynthesis | null;
   WebSocketCtor?: typeof WebSocket;
   enableLiveWebSocket?: boolean;
+  clauseMergeDelayMs?: number;
   recognitionRestartBaseDelayMs?: number;
   networkRetryDelaysMs?: number[];
   bargeInHoldMs?: number;
@@ -118,13 +137,69 @@ export interface VoiceRuntimeDeps {
 
 const ALLOWED_TRANSITIONS: Record<VoiceSessionState, ReadonlySet<VoiceSessionState>> = {
   disconnected: new Set(['connecting']),
-  connecting: new Set(['listening', 'ai_speaking', 'error', 'stopping', 'disconnected']),
-  listening: new Set(['user_speaking', 'processing', 'ai_speaking', 'reconnecting', 'error', 'stopping']),
-  user_speaking: new Set(['processing', 'listening', 'interrupted', 'reconnecting', 'error', 'stopping']),
-  processing: new Set(['ai_speaking', 'listening', 'interrupted', 'reconnecting', 'error', 'stopping']),
-  ai_speaking: new Set(['listening', 'interrupted', 'reconnecting', 'error', 'stopping']),
-  interrupted: new Set(['user_speaking', 'listening', 'processing', 'error', 'stopping']),
-  reconnecting: new Set(['listening', 'processing', 'ai_speaking', 'error', 'stopping']),
+  connecting: new Set([
+    'connected',
+    'listening',
+    'ai_speaking',
+    'microphone_unavailable',
+    'service_unavailable',
+    'error',
+    'stopping',
+    'disconnected',
+  ]),
+  connected: new Set(['listening', 'ai_speaking', 'reconnecting', 'service_unavailable', 'error', 'stopping']),
+  listening: new Set([
+    'user_speaking',
+    'understanding',
+    'processing',
+    'ai_speaking',
+    'reconnecting',
+    'microphone_unavailable',
+    'service_unavailable',
+    'error',
+    'stopping',
+  ]),
+  user_speaking: new Set([
+    'understanding',
+    'processing',
+    'listening',
+    'interrupted',
+    'reconnecting',
+    'error',
+    'stopping',
+  ]),
+  understanding: new Set([
+    'processing',
+    'ai_speaking',
+    'listening',
+    'interrupted',
+    'reconnecting',
+    'service_unavailable',
+    'error',
+    'stopping',
+  ]),
+  processing: new Set([
+    'ai_speaking',
+    'listening',
+    'interrupted',
+    'reconnecting',
+    'service_unavailable',
+    'error',
+    'stopping',
+  ]),
+  ai_speaking: new Set(['listening', 'interrupted', 'reconnecting', 'service_unavailable', 'error', 'stopping']),
+  interrupted: new Set(['user_speaking', 'listening', 'understanding', 'processing', 'error', 'stopping']),
+  reconnecting: new Set([
+    'connected',
+    'listening',
+    'processing',
+    'ai_speaking',
+    'service_unavailable',
+    'error',
+    'stopping',
+  ]),
+  microphone_unavailable: new Set(['connecting', 'stopping', 'disconnected']),
+  service_unavailable: new Set(['reconnecting', 'listening', 'connecting', 'stopping', 'disconnected']),
   error: new Set(['reconnecting', 'listening', 'connecting', 'stopping', 'disconnected']),
   stopping: new Set(['disconnected']),
 };
@@ -181,17 +256,26 @@ export class AIVoiceService {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private outputAudioContext: AudioContext | null = null;
+  private outputGainNode: GainNode | null = null;
   private outputAnalyser: AnalyserNode | null = null;
   private currentBufferSource: AudioBufferSourceNode | null = null;
   private liveQueuedSources: Set<AudioBufferSourceNode> = new Set();
   private liveNextStartTime = 0;
   private liveTurnCompleteReceived = false;
   private liveWs: WebSocket | null = null;
+  private liveWorkletNode: AudioWorkletNode | null = null;
   private liveProcessor: ScriptProcessorNode | null = null;
+  private liveSilentSink: GainNode | null = null;
+  private livePingTimer: ReturnType<typeof setInterval> | null = null;
+  private liveSessionResumptionHandle: string | null = null;
+  private liveModelName: string | undefined = undefined;
+  private liveVoiceName: string | undefined = undefined;
+  private liveReconnectAttempts = 0;
+  private liveEchoBargeInSince: number | null = null;
   private mediaStream: MediaStream | null = null;
   private animationFrameId: number | null = null;
 
-  // Speech recognition & duplicate guard state
+  // Speech recognition, natural pause clause merging & duplicate guard state
   private recognition: any = null;
   private isRecognitionRunning = false;
   private recognitionPausedForSpeech = false;
@@ -200,14 +284,19 @@ export class AIVoiceService {
   private lastFinalSubmittedAt = 0;
   private speechStartedAt: number | null = null;
   private lastInterimAt: number | null = null;
+  private pendingClauseBuffer = '';
+  private clauseFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Active playback & in-flight request cancellation
+  // Active playback, volume, push-to-talk & in-flight request cancellation
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private currentAudio: HTMLAudioElement | null = null;
   private activePlaybackAbortResolver: (() => void) | null = null;
   private activeFetchController: AbortController | null = null;
   private isSpeakerMuted = false;
+  private speakerVolume = 1.0;
   private isMicMuted = false;
+  private isPushToTalkMode = false;
+  private isPushToTalkPressed = false;
 
   // Timers (all cleared on stopSession)
   private recognitionRestartTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -227,6 +316,7 @@ export class AIVoiceService {
 
   private readonly deps: VoiceRuntimeDeps;
   private readonly idleTimeoutMs: number;
+  private readonly clauseMergeDelayMs: number;
   private readonly recognitionRestartBaseDelayMs: number;
   private readonly networkRetryDelaysMs: number[];
   private readonly bargeInHoldMs: number;
@@ -238,6 +328,10 @@ export class AIVoiceService {
     this.deps = deps;
     this.sessionId = `dti-voice-init-${Date.now()}`;
     this.idleTimeoutMs = deps.idleTimeoutMs ?? 5 * 60 * 1000;
+    // In real browsers, allow 1150ms of natural mid-sentence pause before finalizing turn-based clauses;
+    // in injected test harnesses without explicit override, finalize immediately for deterministic timing.
+    this.clauseMergeDelayMs =
+      deps.clauseMergeDelayMs ?? (deps.SpeechRecognitionCtor ? 0 : 1150);
     this.recognitionRestartBaseDelayMs = deps.recognitionRestartBaseDelayMs ?? 180;
     this.networkRetryDelaysMs = deps.networkRetryDelaysMs ?? [350, 800];
     this.bargeInHoldMs = deps.bargeInHoldMs ?? 240;
@@ -379,8 +473,135 @@ export class AIVoiceService {
     }
   }
 
+  public getSpeakerVolume(): number {
+    return this.speakerVolume;
+  }
+
+  public setSpeakerVolume(volume: number) {
+    const clamped = Math.max(0, Math.min(1, Number.isFinite(volume) ? volume : 1));
+    this.speakerVolume = clamped;
+    if (this.outputGainNode) {
+      this.outputGainNode.gain.value = this.isSpeakerMuted ? 0 : clamped;
+    }
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.volume = this.isSpeakerMuted ? 0 : clamped;
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
+  public getIsPushToTalkMode(): boolean {
+    return this.isPushToTalkMode;
+  }
+
+  public setPushToTalkMode(enabled: boolean) {
+    this.isPushToTalkMode = Boolean(enabled);
+    this.isPushToTalkPressed = false;
+    if (!this.isSessionActiveFlag) return;
+    if (this.transportMode === 'turn_based_continuous') {
+      if (enabled) {
+        this.pauseRecognitionTemporarily();
+      } else if (!this.isMicMuted && (this.status === 'listening' || this.status === 'user_speaking')) {
+        void this.resumeSpeechRecognitionSafely(this.sessionSeq);
+      }
+    }
+  }
+
+  public startPushToTalk() {
+    if (!this.isSessionActiveFlag || !this.isPushToTalkMode || this.isMicMuted) return;
+    this.isPushToTalkPressed = true;
+    if (this.status === 'ai_speaking') {
+      this.interrupt(true);
+    } else if (this.status === 'listening') {
+      this.transitionTo('user_speaking');
+    }
+    if (this.transportMode === 'gemini_live_duplex' && this.liveWs && this.liveWs.readyState === 1) {
+      try {
+        this.liveWs.send(JSON.stringify({ type: 'activity_start' }));
+      } catch {
+        // Ignore
+      }
+    } else if (this.transportMode === 'turn_based_continuous') {
+      void this.resumeSpeechRecognitionSafely(this.sessionSeq);
+    }
+  }
+
+  public endPushToTalk() {
+    if (!this.isSessionActiveFlag || !this.isPushToTalkMode) return;
+    this.isPushToTalkPressed = false;
+    if (this.transportMode === 'gemini_live_duplex' && this.liveWs && this.liveWs.readyState === 1) {
+      try {
+        this.liveWs.send(JSON.stringify({ type: 'activity_end' }));
+        if (this.status === 'user_speaking') {
+          this.transitionTo('understanding');
+        }
+      } catch {
+        // Ignore
+      }
+    } else if (this.transportMode === 'turn_based_continuous') {
+      this.flushPendingClauseBuffer(this.sessionSeq);
+      this.pauseRecognitionTemporarily();
+      if (this.status === 'user_speaking') {
+        this.transitionTo('listening');
+      }
+    }
+  }
+
+  public async submitTranscriptCorrection(originalText: string, correctedText: string): Promise<boolean> {
+    const cleanCorrected = correctedText.trim().slice(0, 1500);
+    const cleanOriginal = originalText.trim().slice(0, 1500);
+    if (!cleanCorrected) return false;
+
+    // Report transcription feedback asynchronously for Admin AI diagnostics (non-blocking)
+    void this.getFetch()(apiUrl('/api/voice/transcription-feedback'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: this.sessionId,
+        originalTranscript: cleanOriginal || cleanCorrected,
+        correctedTranscript: cleanCorrected,
+        language: this.language,
+      }),
+    }).catch(() => {});
+
+    // Dispatch corrected utterance into active Live stream or continuous turn pipeline
+    if (this.transportMode === 'gemini_live_duplex' && this.liveWs && this.liveWs.readyState === 1) {
+      this.conversationHistory = [
+        ...this.conversationHistory.slice(-19),
+        { sender: 'user', text: cleanCorrected },
+      ];
+      this.callbacks.onTranscript?.(cleanCorrected, true);
+      if (this.status === 'listening' || this.status === 'user_speaking') {
+        this.transitionTo('understanding');
+      }
+      this.liveWs.send(
+        JSON.stringify({
+          type: 'correct_transcript',
+          originalTranscript: cleanOriginal,
+          correctedTranscript: cleanCorrected,
+        })
+      );
+      return true;
+    }
+
+    await this.handleUserSpeech(cleanCorrected);
+    return true;
+  }
+
   public setSpeakerMuted(muted: boolean) {
     this.isSpeakerMuted = muted;
+    if (this.outputGainNode) {
+      this.outputGainNode.gain.value = muted ? 0 : this.speakerVolume;
+    }
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.volume = muted ? 0 : this.speakerVolume;
+      } catch {
+        // Ignore
+      }
+    }
     if (muted && this.status === 'ai_speaking') {
       const currentSession = this.sessionSeq;
       const currentResp = this.responseSeq;
@@ -546,13 +767,20 @@ export class AIVoiceService {
 
       if (!this.isCurrentActiveSession(mySession)) return false;
 
-      // 4. Optional full-duplex Gemini Live WebSocket if explicitly enabled & available
-      const allowLive = this.deps.enableLiveWebSocket ?? false;
+      // 4. Primary full-duplex Gemini Live WebSocket when available & permitted
+      const allowLive = this.deps.enableLiveWebSocket ?? true;
       if (allowLive && liveStreamingAvailable) {
+        this.liveReconnectAttempts = 0;
         const liveConnected = await this.tryConnectGeminiLive(mySession, liveWebSocketPath);
         if (liveConnected && this.isCurrentActiveSession(mySession)) {
           this.setTransportMode('gemini_live_duplex');
           this.setActiveVoiceEngine('gemini_live');
+          this.callbacks.onLiveSessionInfo?.({
+            model: this.liveModelName,
+            voice: this.liveVoiceName,
+            transportMode: 'gemini_live_duplex',
+          });
+          this.transitionTo('connected');
           this.transitionTo('listening');
           this.resetIdleTimer(mySession);
           return true;
@@ -561,6 +789,9 @@ export class AIVoiceService {
 
       // 5. Continuous Turn-Based Voice Mode (honestly labeled, never misrepresented as full-duplex)
       this.setTransportMode('turn_based_continuous');
+      this.callbacks.onLiveSessionInfo?.({
+        transportMode: 'turn_based_continuous',
+      });
 
       const RecognitionCtor = this.getSpeechRecognitionCtor();
       if (RecognitionCtor) {
@@ -574,7 +805,6 @@ export class AIVoiceService {
       this.resetIdleTimer(mySession);
 
       // 6. Deliver audible greeting AND AUTOMATICALLY RESUME LISTENING AFTERWARDS!
-      // (Root cause fix: previously passed restartRecognitionAfter = false, stranding the mic!)
       const greeting = this.language.startsWith('fil')
         ? 'Magandang araw po. Ako ang inyong DESTRIA TECH INC AI Corporate Solutions Consultant. Paano ko po matutulungan ang inyong enterprise technology project ngayon?'
         : 'Welcome to DESTRIA TECH INC. I am your AI Corporate Solutions Consultant. How may I assist with your enterprise technology initiative today?';
@@ -590,6 +820,11 @@ export class AIVoiceService {
     } catch (err: any) {
       if (!this.isCurrentActiveSession(mySession)) return false;
       const errName = err?.name || '';
+      const isMicError =
+        errName === 'NotAllowedError' ||
+        errName === 'PermissionDeniedError' ||
+        errName === 'NotFoundError' ||
+        errName === 'NotSupportedError';
       const msg =
         errName === 'NotAllowedError' || errName === 'PermissionDeniedError'
           ? 'Microphone permission was denied. Please allow microphone access in your browser settings and try again.'
@@ -597,7 +832,7 @@ export class AIVoiceService {
           ? 'No microphone device was detected. Please connect a microphone or continue via text chat.'
           : 'Unable to initialize voice audio input. Please check microphone permissions or continue via text chat.';
 
-      this.transitionTo('error');
+      this.transitionTo(isMicError ? 'microphone_unavailable' : 'error');
       this.callbacks.onError?.(msg);
       this.stopSession();
       return false;
@@ -687,9 +922,14 @@ export class AIVoiceService {
         // Ignore
       }
       this.outputAudioContext = null;
+      this.outputGainNode = null;
       this.outputAnalyser = null;
     }
 
+    this.pendingClauseBuffer = '';
+    this.isPushToTalkPressed = false;
+    this.liveSessionResumptionHandle = null;
+    this.liveEchoBargeInSince = null;
     this.setActiveVoiceEngine('none');
     this.setTransportMode('none');
     this.bargeInHighSince = null;
@@ -701,6 +941,14 @@ export class AIVoiceService {
   }
 
   private clearAllTimers() {
+    if (this.clauseFlushTimer) {
+      clearTimeout(this.clauseFlushTimer);
+      this.clauseFlushTimer = null;
+    }
+    if (this.livePingTimer) {
+      clearInterval(this.livePingTimer);
+      this.livePingTimer = null;
+    }
     if (this.recognitionRestartTimeout) {
       clearTimeout(this.recognitionRestartTimeout);
       this.recognitionRestartTimeout = null;
@@ -782,6 +1030,13 @@ export class AIVoiceService {
     if (!AudioCtx) return null;
     if (!this.outputAudioContext || this.outputAudioContext.state === 'closed') {
       this.outputAudioContext = new AudioCtx();
+      this.outputGainNode = null;
+      if (typeof this.outputAudioContext.createGain === 'function') {
+        const gainNode = this.outputAudioContext.createGain();
+        gainNode.gain.value = this.isSpeakerMuted ? 0 : this.speakerVolume;
+        gainNode.connect(this.outputAudioContext.destination);
+        this.outputGainNode = gainNode;
+      }
     }
     if (this.outputAudioContext.state === 'suspended') {
       try {
@@ -1033,6 +1288,15 @@ export class AIVoiceService {
 
     this.callbacks.onAiResponse?.(replyText, detectedIntent);
 
+    // Emit any server-executed tool events (e.g. prepared consultation/inquiry confirmation cards)
+    if (Array.isArray(responseData?.toolEvents)) {
+      for (const te of responseData.toolEvents) {
+        if (te && typeof te.type === 'string') {
+          this.callbacks.onToolEvent?.(te as VoiceToolEvent);
+        }
+      }
+    }
+
     // Only trigger booking/brief modal when the user affirmatively requested it
     if (detectedIntent.isBookingIntent) {
       this.callbacks.onBookingRequested?.();
@@ -1263,7 +1527,11 @@ export class AIVoiceService {
         const outputAnalyser = ctx.createAnalyser();
         outputAnalyser.fftSize = 64;
         source.connect(outputAnalyser);
-        outputAnalyser.connect(ctx.destination);
+        if (this.outputGainNode) {
+          outputAnalyser.connect(this.outputGainNode);
+        } else {
+          outputAnalyser.connect(ctx.destination);
+        }
 
         this.outputAnalyser = outputAnalyser;
         this.currentBufferSource = source;
@@ -1296,6 +1564,11 @@ export class AIVoiceService {
 
     try {
       const audio = new AudioConstructor(`data:${mimeType};base64,${audioBase64}`);
+      try {
+        audio.volume = this.isSpeakerMuted ? 0 : this.speakerVolume;
+      } catch {
+        // Ignore mock Audio implementations
+      }
       this.currentAudio = audio;
 
       return await new Promise<boolean>((resolve) => {
@@ -1385,6 +1658,7 @@ export class AIVoiceService {
       utterance.lang = this.language;
       utterance.rate = 0.98;
       utterance.pitch = 1.02;
+      utterance.volume = this.isSpeakerMuted ? 0 : this.speakerVolume;
       this.currentUtterance = utterance;
 
       const voices = typeof synth.getVoices === 'function' ? synth.getVoices() : [];
@@ -1639,15 +1913,38 @@ export class AIVoiceService {
         if (!this.speechStartedAt) this.speechStartedAt = Date.now();
         this.lastInterimAt = Date.now();
         this.resetIdleTimer(sessionSeq);
+        if (this.clauseFlushTimer) {
+          clearTimeout(this.clauseFlushTimer);
+          this.clauseFlushTimer = null;
+        }
         if (this.status === 'listening' || this.status === 'interrupted') {
           this.transitionTo('user_speaking');
         }
-        this.callbacks.onTranscript?.(interimTranscript.trim(), false);
+        const combinedPreview = this.pendingClauseBuffer
+          ? `${this.pendingClauseBuffer} ${interimTranscript.trim()}`
+          : interimTranscript.trim();
+        this.callbacks.onTranscript?.(combinedPreview, false);
       }
 
       if (finalTranscript.trim()) {
         this.consecutiveRecognitionFailures = 0;
-        void this.handleUserSpeech(finalTranscript.trim());
+        const piece = finalTranscript.trim();
+        if (this.clauseMergeDelayMs <= 0) {
+          void this.handleUserSpeech(piece);
+        } else {
+          this.pendingClauseBuffer = this.pendingClauseBuffer
+            ? `${this.pendingClauseBuffer} ${piece}`
+            : piece;
+          this.callbacks.onTranscript?.(this.pendingClauseBuffer, false);
+          if (this.clauseFlushTimer) {
+            clearTimeout(this.clauseFlushTimer);
+          }
+          // Wait briefly for natural mid-sentence pauses so multi-clause instructions stay intact
+          this.clauseFlushTimer = setTimeout(() => {
+            this.clauseFlushTimer = null;
+            this.flushPendingClauseBuffer(sessionSeq);
+          }, this.clauseMergeDelayMs);
+        }
       }
     };
 
@@ -1705,8 +2002,24 @@ export class AIVoiceService {
     };
   }
 
+  private flushPendingClauseBuffer(sessionSeq: number) {
+    if (this.clauseFlushTimer) {
+      clearTimeout(this.clauseFlushTimer);
+      this.clauseFlushTimer = null;
+    }
+    const merged = this.pendingClauseBuffer.trim();
+    this.pendingClauseBuffer = '';
+    if (!merged || !this.isCurrentActiveSession(sessionSeq)) return;
+    void this.handleUserSpeech(merged);
+  }
+
   private pauseRecognitionTemporarily() {
     this.recognitionPausedForSpeech = true;
+    if (this.clauseFlushTimer) {
+      clearTimeout(this.clauseFlushTimer);
+      this.clauseFlushTimer = null;
+    }
+    this.pendingClauseBuffer = '';
     if (this.recognitionRestartTimeout) {
       clearTimeout(this.recognitionRestartTimeout);
       this.recognitionRestartTimeout = null;
@@ -1828,6 +2141,7 @@ export class AIVoiceService {
             JSON.stringify({
               type: 'init',
               sessionId: this.sessionId,
+              resumptionHandle: this.liveSessionResumptionHandle || undefined,
               language: this.language,
               history: this.conversationHistory.slice(-10),
             })
@@ -1844,8 +2158,74 @@ export class AIVoiceService {
           }
 
           if (msg.type === 'ready') {
-            this.startLiveMicrophoneStreaming(sessionSeq, ws);
+            this.liveModelName = typeof msg.model === 'string' ? msg.model : undefined;
+            this.liveVoiceName = typeof msg.voice === 'string' ? msg.voice : undefined;
+            this.liveReconnectAttempts = 0;
+            void this.startLiveMicrophoneStreaming(sessionSeq, ws);
+            if (this.livePingTimer) clearInterval(this.livePingTimer);
+            this.livePingTimer = setInterval(() => {
+              if (this.liveWs && this.liveWs.readyState === 1) {
+                try {
+                  this.liveWs.send(JSON.stringify({ type: 'ping' }));
+                } catch {
+                  // Ignore
+                }
+              }
+            }, 30_000);
             done(true);
+            return;
+          }
+
+          if (msg.type === 'pong') {
+            return;
+          }
+
+          if (msg.type === 'resumption_update' && typeof msg.handle === 'string') {
+            this.liveSessionResumptionHandle = msg.handle;
+            return;
+          }
+
+          if (msg.type === 'understanding') {
+            if (this.status === 'listening' || this.status === 'user_speaking' || this.status === 'interrupted') {
+              this.transitionTo('understanding');
+            }
+            return;
+          }
+
+          if (msg.type === 'tool_event') {
+            const toolEvent: VoiceToolEvent = {
+              toolName: typeof msg.toolName === 'string' ? msg.toolName : undefined,
+              type: String(msg.eventType || msg.type || 'tool_event'),
+              payload: (msg.payload && typeof msg.payload === 'object' ? msg.payload : {}) as Record<string, unknown>,
+            };
+            this.callbacks.onToolEvent?.(toolEvent);
+            if (toolEvent.type === 'human_assistance_requested') {
+              this.callbacks.onAiResponse?.(
+                'You may reach our official executive desk at +1 (307) 419-4277 or info@destriatech.com.',
+                { isHumanEscalation: true }
+              );
+            }
+            return;
+          }
+
+          if (msg.type === 'policy_override') {
+            this.clearPlaybackResources();
+            if (typeof msg.text === 'string' && msg.text.trim()) {
+              this.conversationHistory = [
+                ...this.conversationHistory.slice(-19),
+                { sender: 'ai', text: msg.text.trim() },
+              ];
+              this.callbacks.onAiResponse?.(msg.text.trim());
+            }
+            if (this.isCurrentActiveSession(sessionSeq)) {
+              this.transitionTo('listening');
+            }
+            return;
+          }
+
+          if (msg.type === 'session_expired' || msg.type === 'session_terminated') {
+            this.callbacks.onError?.(msg.message || 'Voice session ended by server policy.');
+            this.stopSession();
             return;
           }
 
@@ -1867,11 +2247,20 @@ export class AIVoiceService {
           }
 
           if (msg.type === 'input_transcript' && msg.text) {
+            const text = String(msg.text).trim();
+            const isFinal = Boolean(msg.isFinal);
+            if (!isFinal) {
+              if (this.status === 'listening' || this.status === 'interrupted') {
+                this.transitionTo('user_speaking');
+              }
+              this.callbacks.onTranscript?.(text, false);
+              return;
+            }
             this.conversationHistory = [
               ...this.conversationHistory.slice(-19),
-              { sender: 'user', text: String(msg.text) },
+              { sender: 'user', text },
             ];
-            this.callbacks.onTranscript?.(String(msg.text), true);
+            this.callbacks.onTranscript?.(text, true);
             this.resetIdleTimer(sessionSeq);
             return;
           }
@@ -1915,15 +2304,23 @@ export class AIVoiceService {
             return;
           }
           if (this.isCurrentActiveSession(sessionSeq) && this.transportMode === 'gemini_live_duplex') {
-            // Gracefully downgrade to turn-based continuous mode while preserving context
             this.teardownLiveBridge();
-            this.setTransportMode('turn_based_continuous');
-            const RecognitionCtor = this.getSpeechRecognitionCtor();
-            if (RecognitionCtor && !this.recognition) {
-              this.setupRecognition(RecognitionCtor, sessionSeq);
+            // Attempt one automatic session resumption if handle exists before graceful downgrade
+            if (this.liveSessionResumptionHandle && this.liveReconnectAttempts < 1) {
+              this.liveReconnectAttempts += 1;
+              this.transitionTo('reconnecting');
+              void this.tryConnectGeminiLive(sessionSeq, wsPath).then((reconnected) => {
+                if (reconnected && this.isCurrentActiveSession(sessionSeq)) {
+                  this.transitionTo('listening');
+                  return;
+                }
+                if (this.isCurrentActiveSession(sessionSeq)) {
+                  this.downgradeLiveToTurnBased(sessionSeq);
+                }
+              });
+              return;
             }
-            this.transitionTo('listening');
-            void this.resumeSpeechRecognitionSafely(sessionSeq);
+            this.downgradeLiveToTurnBased(sessionSeq);
           }
         };
       } catch {
@@ -1933,22 +2330,118 @@ export class AIVoiceService {
     });
   }
 
-  private startLiveMicrophoneStreaming(sessionSeq: number, ws: WebSocket) {
+  private downgradeLiveToTurnBased(sessionSeq: number) {
+    if (!this.isCurrentActiveSession(sessionSeq)) return;
+    this.setTransportMode('turn_based_continuous');
+    this.callbacks.onLiveSessionInfo?.({ transportMode: 'turn_based_continuous' });
+    const RecognitionCtor = this.getSpeechRecognitionCtor();
+    if (RecognitionCtor && !this.recognition) {
+      this.setupRecognition(RecognitionCtor, sessionSeq);
+    }
+    this.transitionTo('listening');
+    void this.resumeSpeechRecognitionSafely(sessionSeq);
+  }
+
+  private handleCapturedLivePcmFrame(
+    pcmBase64: string,
+    rms: number,
+    sessionSeq: number,
+    ws: WebSocket
+  ) {
+    if (!this.isCurrentActiveSession(sessionSeq) || this.isMicMuted || ws.readyState !== 1) return;
+    if (this.isPushToTalkMode && !this.isPushToTalkPressed) return;
+
+    // Adaptive acoustic echo guard while assistant audio is playing
+    if (this.status === 'ai_speaking') {
+      if (rms < 0.045) {
+        this.liveEchoBargeInSince = null;
+        return;
+      }
+      if (rms >= 0.065 && !this.isPushToTalkMode) {
+        const now = Date.now();
+        if (this.liveEchoBargeInSince === null) {
+          this.liveEchoBargeInSince = now;
+        } else if (now - this.liveEchoBargeInSince >= 180) {
+          this.liveEchoBargeInSince = null;
+          this.interrupt(true);
+        }
+      } else {
+        this.liveEchoBargeInSince = null;
+      }
+    } else {
+      this.liveEchoBargeInSince = null;
+    }
+
+    ws.send(JSON.stringify({ type: 'audio', data: pcmBase64 }));
+  }
+
+  private async startLiveMicrophoneStreaming(sessionSeq: number, ws: WebSocket) {
     if (!this.audioContext || !this.mediaStream) return;
+
+    const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+    // Silent gain sink prevents routing raw microphone capture back to the speakers (zero feedback loop)
+    const silentSink =
+      typeof this.audioContext.createGain === 'function' ? this.audioContext.createGain() : null;
+    if (silentSink) {
+      silentSink.gain.value = 0;
+      silentSink.connect(this.audioContext.destination);
+      this.liveSilentSink = silentSink;
+    }
+
+    // Primary path: Off-main-thread AudioWorkletProcessor (anti-aliased 16kHz PCM16 + RMS)
+    const hasAudioWorklet =
+      typeof AudioWorkletNode !== 'undefined' &&
+      Boolean((this.audioContext as any).audioWorklet?.addModule);
+
+    if (hasAudioWorklet) {
+      try {
+        await (this.audioContext as any).audioWorklet.addModule('/worklets/pcm-capture-processor.js');
+        if (!this.isCurrentActiveSession(sessionSeq) || ws.readyState !== 1) return;
+        const workletNode = new AudioWorkletNode(this.audioContext, 'destria-pcm-capture-processor');
+        this.liveWorkletNode = workletNode;
+        workletNode.port.onmessage = (ev: MessageEvent) => {
+          const payload = ev.data;
+          if (!payload || !payload.pcm16) return;
+          const bytes = new Uint8Array(payload.pcm16);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const b64 = typeof btoa === 'function' ? btoa(binary) : Buffer.from(bytes).toString('base64');
+          this.handleCapturedLivePcmFrame(b64, Number(payload.rms) || 0, sessionSeq, ws);
+        };
+        source.connect(workletNode);
+        if (silentSink) {
+          workletNode.connect(silentSink);
+        }
+        return;
+      } catch {
+        // Gracefully fall back to ScriptProcessorNode below
+      }
+    }
+
+    // Fallback path: ScriptProcessorNode with anti-aliased box-averaging downsampler + silent sink
     try {
-      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
       const processor = this.audioContext.createScriptProcessor(4096, 1, 1);
       this.liveProcessor = processor;
       processor.onaudioprocess = (ev) => {
-        if (!this.isCurrentActiveSession(sessionSeq) || this.isMicMuted || ws.readyState !== 1) return;
         const input = ev.inputBuffer.getChannelData(0);
         const downsampled = this.downsampleTo16k(input, this.audioContext?.sampleRate || 16000);
-        ws.send(JSON.stringify({ type: 'audio', data: pcm16FloatToBase64(downsampled) }));
+        let sumSq = 0;
+        for (let i = 0; i < downsampled.length; i++) {
+          sumSq += downsampled[i] * downsampled[i];
+        }
+        const rms = downsampled.length > 0 ? Math.sqrt(sumSq / downsampled.length) : 0;
+        this.handleCapturedLivePcmFrame(pcm16FloatToBase64(downsampled), rms, sessionSeq, ws);
       };
       source.connect(processor);
-      processor.connect(this.audioContext.destination);
+      if (silentSink) {
+        processor.connect(silentSink);
+      } else {
+        processor.connect(this.audioContext.destination);
+      }
     } catch {
-      // Ignore if ScriptProcessor unavailable
+      // Ignore if neither AudioWorklet nor ScriptProcessor is available
     }
   }
 
@@ -1957,8 +2450,15 @@ export class AIVoiceService {
     const ratio = sourceRate / 16000;
     const outLen = Math.floor(input.length / ratio);
     const result = new Float32Array(outLen);
+    // Anti-aliased box-averaging downsample
     for (let i = 0; i < outLen; i++) {
-      result[i] = input[Math.floor(i * ratio)];
+      const start = Math.floor(i * ratio);
+      const end = Math.min(input.length, Math.max(start + 1, Math.floor((i + 1) * ratio)));
+      let sum = 0;
+      for (let j = start; j < end; j++) {
+        sum += input[j];
+      }
+      result[i] = sum / (end - start);
     }
     return result;
   }
@@ -1984,7 +2484,11 @@ export class AIVoiceService {
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 64;
     source.connect(analyser);
-    analyser.connect(ctx.destination);
+    if (this.outputGainNode) {
+      analyser.connect(this.outputGainNode);
+    } else {
+      analyser.connect(ctx.destination);
+    }
     this.outputAnalyser = analyser;
 
     const now = ctx.currentTime;
@@ -2006,6 +2510,19 @@ export class AIVoiceService {
   }
 
   private teardownLiveBridge() {
+    if (this.livePingTimer) {
+      clearInterval(this.livePingTimer);
+      this.livePingTimer = null;
+    }
+    if (this.liveWorkletNode) {
+      try {
+        this.liveWorkletNode.port.onmessage = null;
+        this.liveWorkletNode.disconnect();
+      } catch {
+        // Ignore
+      }
+      this.liveWorkletNode = null;
+    }
     if (this.liveProcessor) {
       try {
         this.liveProcessor.onaudioprocess = null;
@@ -2014,6 +2531,14 @@ export class AIVoiceService {
         // Ignore
       }
       this.liveProcessor = null;
+    }
+    if (this.liveSilentSink) {
+      try {
+        this.liveSilentSink.disconnect();
+      } catch {
+        // Ignore
+      }
+      this.liveSilentSink = null;
     }
     if (this.liveWs) {
       try {
