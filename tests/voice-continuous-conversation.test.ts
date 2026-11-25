@@ -4,6 +4,17 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { WebSocket as WsClient } from 'ws';
+import { randomUUID } from 'node:crypto';
+import type {
+  AppointmentRecord,
+  CreateAppointmentInput,
+  CreateOutboxInput,
+  CreateSolutionRequestInput,
+  DatabaseRepository,
+  EmailOutboxRecord,
+  SolutionRequestRecord,
+  UpdateOutboxPatch,
+} from '../src/server/db/types';
 import { createApp } from '../src/server/app';
 import { attachVoiceLiveBridge, VOICE_LIVE_WS_PATH } from '../src/server/voiceLiveBridge';
 import {
@@ -256,6 +267,95 @@ async function waitForCondition(predicate: () => boolean, timeoutMs = 3000): Pro
   }
 }
 
+
+/**
+ * Isolated durable test double: exercises the genuine Express inquiry and
+ * appointment contracts without contacting production Supabase or Resend.
+ * These are application integration tests, not live provider acceptance.
+ */
+function createVoiceTestDatabase(): DatabaseRepository {
+  const inquiries: SolutionRequestRecord[] = [];
+  const appointments: AppointmentRecord[] = [];
+  const outbox: EmailOutboxRecord[] = [];
+  return {
+    isConfigured: true,
+    async ping() { return { ok: true, configured: true }; },
+    async findSolutionRequestByIdempotencyKey(key: string) {
+      return inquiries.find((record) => record.idempotencyKey === key) || null;
+    },
+    async createSolutionRequest(input: CreateSolutionRequestInput) {
+      const existing = input.idempotencyKey
+        ? inquiries.find((record) => record.idempotencyKey === input.idempotencyKey)
+        : undefined;
+      if (existing) return { record: existing, created: false };
+      const now = new Date().toISOString();
+      const record: SolutionRequestRecord = {
+        ...input, id: randomUUID(), status: 'submitted', emailDeliveryStatus: 'pending',
+        sourceChannel: input.sourceChannel || 'AI Voice', createdAt: now, updatedAt: now,
+      };
+      inquiries.push(record);
+      return { record, created: true };
+    },
+    async updateSolutionRequestEmailStatus(referenceCode, status) {
+      const record = inquiries.find((item) => item.referenceCode === referenceCode);
+      if (record) record.emailDeliveryStatus = status;
+    },
+    async listSolutionRequests({ limit, offset }) {
+      return { records: inquiries.slice(offset, offset + limit), total: inquiries.length };
+    },
+    async getBookedSlotsForDate(date: string) {
+      return appointments.filter((item) => item.scheduledDate === date && item.status === 'confirmed')
+        .map((item) => item.scheduledTimeSlot);
+    },
+    async createAppointment(input: CreateAppointmentInput) {
+      const existing = input.idempotencyKey
+        ? appointments.find((record) => record.idempotencyKey === input.idempotencyKey)
+        : undefined;
+      if (existing) return { record: existing, created: false };
+      const now = new Date().toISOString();
+      const record: AppointmentRecord = { ...input, id: randomUUID(), createdAt: now, updatedAt: now };
+      appointments.push(record);
+      return { record, created: true };
+    },
+    async getAppointmentByReference(ref: string) {
+      return appointments.find((item) => item.referenceCode === ref) || null;
+    },
+    async updateAppointment(ref, patch) {
+      const record = appointments.find((item) => item.referenceCode === ref);
+      if (!record) throw new Error('Appointment not found in isolated test database.');
+      Object.assign(record, patch, { updatedAt: new Date().toISOString() });
+      return record;
+    },
+    async listAppointments({ limit, offset }) {
+      return { records: appointments.slice(offset, offset + limit), total: appointments.length };
+    },
+    async createOutboxRecord(input: CreateOutboxInput) {
+      const existing = outbox.find((item) => item.dedupeKey === input.dedupeKey);
+      if (existing) return { record: existing, created: false };
+      const now = new Date().toISOString();
+      const record: EmailOutboxRecord = {
+        ...input, id: randomUUID(), status: 'queued', provider: 'resend',
+        deliveryAttempts: 0, createdAt: now, updatedAt: now,
+      };
+      outbox.push(record);
+      return { record, created: true };
+    },
+    async updateOutboxStatus(id: string, patch: UpdateOutboxPatch) {
+      const record = outbox.find((item) => item.id === id);
+      if (!record) throw new Error('Notification not found in isolated test database.');
+      Object.assign(record, patch, { updatedAt: new Date().toISOString() });
+    },
+    async listRetryableOutbox() { return []; },
+    async listOutboxByEntity(entityType, entityReference) {
+      return outbox.filter((item) => item.entityType === entityType && item.entityReference === entityReference);
+    },
+    async writeAuditLog() {},
+    async listAuditLogs() { return { records: [], total: 0 }; },
+    async findActiveAdminByEmail() { return null; },
+    async verifySupabaseUserToken() { return null; },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 25-Scenario Continuous AI Voice Regression Suite (DTI-VOICE-REPAIR-001)
 // ---------------------------------------------------------------------------
@@ -266,7 +366,14 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
   let closeLiveBridge: () => void;
 
   before(async () => {
-    const { app, ai } = createApp();
+    const { app, ai } = createApp({
+      db: createVoiceTestDatabase(),
+      // No actual outbound email is permitted during automated tests.
+      emailTransport: {
+        isConfigured: false,
+        async send() { return { status: 'unconfigured' as const, error: 'Isolated test transport.' }; },
+      },
+    });
     server = http.createServer(app);
     const bridge = attachVoiceLiveBridge(server, ai);
     closeLiveBridge = bridge.close;
@@ -609,7 +716,7 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
             });
           }
         }
-        return null;
+        return new Response(null, { status: 404 });
       },
     });
 
@@ -654,7 +761,7 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
         if (url.includes('/api/voice/speak')) {
           return new Response(JSON.stringify({ success: false }), { status: 503 });
         }
-        return null;
+        return new Response(null, { status: 404 });
       },
     });
     await h1.service.startSession();
@@ -678,7 +785,7 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
             { status: 200, headers: { 'Content-Type': 'application/json' } }
           );
         }
-        return null;
+        return new Response(null, { status: 404 });
       },
     });
     await h2.service.startSession();
@@ -694,7 +801,7 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
         if (url.includes('/api/voice/speak')) {
           return new Response(JSON.stringify({ success: false }), { status: 503 });
         }
-        return null;
+        return new Response(null, { status: 404 });
       },
     });
     await h3.service.startSession();
@@ -782,13 +889,15 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        clientName: 'Elena Vance',
-        companyName: 'Vance Logistics Corp',
-        clientEmail: 'elena@vancelogistics.example',
-        selectedService: 'Enterprise Web & Portal Architecture',
-        businessProblem: 'Unify partner portal and workflow automation.',
-        keyFeatures: ['Role-Based Access', 'CRM Sync'],
-        submissionSource: 'ai_voice_assistant',
+        type: 'contact_inquiry',
+        fullName: 'Elena Vance',
+        company: 'Vance Logistics Corp',
+        email: 'elena@vancelogistics.example',
+        contactNumber: '+1 (307) 555-0192',
+        projectDescription: 'Unify partner portal and workflow automation with controlled access.',
+        privacyConsent: true,
+        commercialPolicyConsent: true,
+        sourceChannel: 'AI Voice',
       }),
     });
     assert.equal(inquiryRes.status, 201);
@@ -796,27 +905,36 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
     assert.equal(inquiryBody.success, true);
     assert.ok(inquiryBody.referenceId);
 
-    // 23. Executive Consultation scheduling endpoint
-    const consultRes = await fetch(`${baseUrl}/api/consultations`, {
+    // 23. Real executive scheduling endpoint, with a future weekday and an authorized slot.
+    const futureBusinessDate = new Date();
+    futureBusinessDate.setUTCDate(futureBusinessDate.getUTCDate() + 7);
+    while ([0, 6].includes(futureBusinessDate.getUTCDay())) {
+      futureBusinessDate.setUTCDate(futureBusinessDate.getUTCDate() + 1);
+    }
+    const consultRes = await fetch(`${baseUrl}/api/appointments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        clientName: 'Elena Vance',
+        fullName: 'Elena Vance',
         companyName: 'Vance Logistics Corp',
-        clientEmail: 'elena@vancelogistics.example',
-        clientPhone: '+1 (307) 555-0192',
-        executive: 'Leodenis Languisan (Chief Technology Officer)',
-        consultationType: 'CTO Technical Consultation',
-        selectedDate: '2026-12-15',
-        selectedTime: '10:00 AM',
-        projectSummary: 'Enterprise web portal and AI workflow integration.',
-        submissionSource: 'ai_voice_assistant',
+        email: 'elena@vancelogistics.example',
+        phone: '+1 (307) 555-0192',
+        executivePathway: 'cto',
+        consultationType: 'video',
+        scheduledDate: futureBusinessDate.toISOString().slice(0, 10),
+        scheduledTimeSlot: '10:00 AM - 10:30 AM',
+        clientTimezone: 'America/Denver',
+        consultationPurpose: 'Enterprise web portal and AI workflow integration.',
+        availabilityVerified: false,
+        sourceChannel: 'AI Voice',
       }),
     });
     assert.equal(consultRes.status, 201);
     const consultBody = await consultRes.json();
     assert.equal(consultBody.success, true);
-    assert.ok(consultBody.bookingReference);
+    assert.ok(consultBody.appointment?.referenceCode);
+    assert.equal(consultBody.appointment?.sourceChannel, 'AI Voice');
+    assert.equal(consultBody.appointment?.status, 'pending_review');
   });
 
   // Scenario 24: State machine transition enforcement + Gemini Live WebSocket bridge honest behavior

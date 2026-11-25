@@ -664,7 +664,11 @@ export async function processVoiceConversationTurn(params: {
     session.context.executivePreference = execPref;
   }
 
-  const dedupedHistory = buildDeduplicatedHistory(session.history, clientHistory, userMessage);
+  const dedupedHistory: Array<{ sender: 'user' | 'ai'; text: string }> = buildDeduplicatedHistory(
+    session.history,
+    clientHistory,
+    userMessage
+  );
   const lastAiMessage = [...dedupedHistory].reverse().find((m) => m.sender === 'ai')?.text || '';
   const extractedOptions = extractPresentedOptionsFromText(lastAiMessage);
   if (extractedOptions.length >= 2) {
@@ -681,8 +685,8 @@ export async function processVoiceConversationTurn(params: {
     const replyText = policyDecision.approvedResponse;
     session.history = [
       ...dedupedHistory,
-      { sender: 'user', text: userMessage },
-      { sender: 'ai', text: replyText },
+      { sender: 'user' as const, text: userMessage },
+      { sender: 'ai' as const, text: replyText },
     ].slice(-24);
     session.turnCount += 1;
     session.lastActivityAt = Date.now();
@@ -795,8 +799,8 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
 
         session.history = [
           ...dedupedHistory,
-          { sender: 'user', text: userMessage },
-          { sender: 'ai', text: enforced.replyText },
+          { sender: 'user' as const, text: userMessage },
+          { sender: 'ai' as const, text: enforced.replyText },
         ].slice(-24);
         session.turnCount += 1;
         session.lastActivityAt = Date.now();
@@ -849,8 +853,8 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
   }
   session.history = [
     ...dedupedHistory,
-    { sender: 'user', text: userMessage },
-    { sender: 'ai', text: enforcedFallback.replyText },
+    { sender: 'user' as const, text: userMessage },
+    { sender: 'ai' as const, text: enforcedFallback.replyText },
   ].slice(-24);
   session.turnCount += 1;
   session.lastActivityAt = Date.now();
