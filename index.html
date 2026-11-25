@@ -2,6 +2,18 @@
 <html lang="en" class="scroll-smooth dark">
   <head>
     <meta charset="UTF-8" />
+    <base href="/" />
+    <script>
+      (function () {
+        var prefix = location.hostname.endsWith(".github.io") && /^\/Destria-Tech-Inc(?:\/|$)/.test(location.pathname) ? "/Destria-Tech-Inc" : "";
+        document.querySelector("base").href = prefix + "/";
+        if (/^#\/portal(?:\/|\?|$)/.test(location.hash)) {
+          var target = new URL(prefix + location.hash.slice(1), location.origin || "https://destriatech.com");
+          new URLSearchParams(location.search || "").forEach(function(v,k){ if (!target.searchParams.has(k)) target.searchParams.set(k,v); });
+          history.replaceState(null, "", target.pathname + target.search);
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DESTRIA TECH INC | Engineering Intelligent Solutions. Empowering Enterprise Transformation.</title>
     <meta name="description" content="DESTRIA TECH INC (DTI) & DESTRIA NETWORK is a Wyoming, USA technology corporation delivering customized enterprise software engineering, artificial intelligence systems, blockchain and Web3 infrastructure, cloud cybersecurity, digital modernization, and enterprise technology transformation." />
@@ -35,7 +47,7 @@
       "url": "https://destriatech.com/",
       "logo": "https://destriatech.com/branding/destria-logo-1024.png",
       "email": "info@destriatech.com",
-      "telephone": "+1-307-419-4277",
+      "telephone": "+13074194277",
       "address": {
         "@type": "PostalAddress",
         "streetAddress": "SUITE 6082 - 30 N Gould St #6082",
@@ -47,7 +59,7 @@
       "contactPoint": [
         {
           "@type": "ContactPoint",
-          "telephone": "+1-307-419-4277",
+          "telephone": "+13074194277",
           "email": "info@destriatech.com",
           "contactType": "customer service",
           "areaServed": "Worldwide",
