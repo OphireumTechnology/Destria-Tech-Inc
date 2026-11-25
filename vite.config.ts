@@ -1,40 +1,12 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import fs from 'fs';
 import path from 'path';
-import {defineConfig, type Plugin} from 'vite';
-
-/**
- * Emits a refresh-safe static entry at `dist/portal/login/index.html` with
- * relative `./` asset references adjusted to `../../` so direct navigation,
- * page reloads, and bookmarks to `https://destriatech.com/portal/login`
- * return HTTP 200 on GitHub Pages without altering root `dist/index.html`.
- */
-function portalLoginEntryPlugin(): Plugin {
-  return {
-    name: 'destria-portal-login-static-entry',
-    closeBundle() {
-      const distDir = path.resolve(__dirname, 'dist');
-      const rootIndexPath = path.join(distDir, 'index.html');
-      if (!fs.existsSync(rootIndexPath)) return;
-
-      const rootHtml = fs.readFileSync(rootIndexPath, 'utf8');
-      const loginHtml = rootHtml.replace(
-        /\b(href|src|content)="\.\//g,
-        '$1="../../'
-      );
-
-      const loginDir = path.join(distDir, 'portal', 'login');
-      fs.mkdirSync(loginDir, {recursive: true});
-      fs.writeFileSync(path.join(loginDir, 'index.html'), loginHtml, 'utf8');
-    },
-  };
-}
+import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
     base: './',
-    plugins: [react(), tailwindcss(), portalLoginEntryPlugin()],
+    plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
