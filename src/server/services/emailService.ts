@@ -352,7 +352,8 @@ export class TransactionalEmailService {
       </div>`
     );
 
-    const adminText = `New Enterprise Service Inquiry ${request.referenceCode}\nClient: ${request.fullName} <${request.email}> | ${request.contactNumber}\nCompany: ${request.company}\nSolutions: ${request.serviceTitle}\nCommercial Status: Subject to Formal Assessment\nRequirements:\n${request.projectDescription}`;
+    const inquiryDetails = `Submitted: ${request.createdAt}\nSource: ${request.sourceChannel}\nConsent: ${request.privacyConsent}\nTimeline: ${request.targetTimeline || 'Not specified'}\nDocument filename: ${request.fileName || 'None'}\nStatus: ${request.status}`;
+    const adminText = `New Enterprise Service Inquiry ${request.referenceCode}\nClient: ${request.fullName} <${request.email}> | ${request.contactNumber}\nCompany: ${request.company}\nSolutions: ${request.serviceTitle}\nCommercial Status: Subject to Formal Assessment\nRequirements:\n${request.projectDescription}\n${inquiryDetails}`;
 
     const customerStatus = await this.enqueueAndDispatch({
       dedupeKey: `sol:${request.referenceCode}:customer`,
@@ -374,7 +375,7 @@ export class TransactionalEmailService {
       recipientEmail: recipient,
       notificationType: 'admin_alert',
       subject: `[NEW ENTERPRISE INQUIRY] ${request.referenceCode} — ${request.company}`,
-      htmlBody: adminHtml,
+      htmlBody: adminHtml.replace('</body>', `<pre style="white-space:pre-wrap">${escapeHtml(inquiryDetails)}</pre></body>`),
       textBody: adminText,
       replyTo: request.email,
       correlationId,
@@ -459,7 +460,8 @@ export class TransactionalEmailService {
       </p>`
     );
 
-    const adminText = `Consultation ${kind}: ${appointment.referenceCode} (${statusLabel})\nClient: ${appointment.fullName} <${appointment.email}> | ${appointment.phone}\nDate/Slot: ${appointment.scheduledDate} ${appointment.scheduledTimeSlot}`;
+    const appointmentDetails = `Timezone: ${appointment.clientTimezone}\nChannel: ${appointment.consultationType}\nExecutive pathway: ${appointment.executivePathway || 'Not specified'}\nNotes: ${appointment.notes || 'None'}\nSubmitted: ${appointment.createdAt}\nBrief reference: ${appointment.briefReferenceCode || 'None'}`;
+    const adminText = `Consultation ${kind}: ${appointment.referenceCode} (${statusLabel})\nClient: ${appointment.fullName} <${appointment.email}> | ${appointment.phone}\nDate/Slot: ${appointment.scheduledDate} ${appointment.scheduledTimeSlot}\n${appointmentDetails}`;
 
     const dedupeSuffix = kind === 'created' ? 'created' : `${kind}:${Date.now()}`;
     const notifType = kind === 'created' ? 'appointment_request' : 'appointment_update';
