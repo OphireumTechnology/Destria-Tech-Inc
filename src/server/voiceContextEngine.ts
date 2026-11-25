@@ -21,6 +21,11 @@ import {
 } from './aiCommercialPolicy';
 import { AiRuntimeConfigRegistry } from './aiRuntimeConfig';
 import { AIToolsExecutor, getGeminiFunctionDeclarations } from './aiToolsEngine';
+import {
+  buildDeterministicConversationalReply,
+  buildNaturalGeminiContextBlock,
+  classifyConversationalTurn,
+} from './conversationalEngine';
 
 const CATALOG_SUMMARY_FOR_AI = CATALOG_CATEGORIES.filter((c) => c.id !== 'all')
   .map((c) => {
@@ -45,6 +50,12 @@ export interface VoiceDiscoveryContext {
   clientEmail?: string;
   clientCompany?: string;
   targetTimeline?: string;
+  preferredName?: string;
+  preferredLanguage?: string;
+  previousQuestions?: string[];
+  discussedTopics?: string[];
+  lastTopic?: string;
+  userPreferences?: string[];
 }
 
 export interface VoiceSessionRecord {
@@ -523,8 +534,46 @@ export function generateContextualFallbackReply(params: {
     };
   }
 
-  // Passively capture client info so assistant never re-asks stated details
-  extractClientContextFromUtterance(cleanedUtterance, nextContext);
+  // 0b. Natural conversational intent & memory classification (greetings, personal AI Q&A, general knowledge, multilingual, memory recall, subject changes, closures)
+  const conversationalClass = classifyConversationalTurn(userMessage, history, nextContext as Record<string, unknown>);
+  if (conversationalClass.memory.preferredName) {
+    nextContext.preferredName = conversationalClass.memory.preferredName;
+    if (!nextContext.clientName) nextContext.clientName = conversationalClass.memory.preferredName;
+  }
+  nextContext.preferredLanguage = conversationalClass.language;
+  nextContext.previousQuestions = conversationalClass.memory.previousQuestions;
+  nextContext.discussedTopics = conversationalClass.memory.discussedTopics;
+  nextContext.lastTopic = conversationalClass.memory.lastTopic;
+  nextContext.userPreferences = conversationalClass.memory.userPreferences;
+
+  // Handle explicit subject change by clearing active enterprise discovery lock
+  if (conversationalClass.intent === 'subject_change') {
+    nextContext.selectedService = undefined;
+    nextContext.category = undefined;
+    nextContext.businessProblem = undefined;
+    nextContext.presentedOptions = [];
+    const pivotReply = buildDeterministicConversationalReply(userMessage, conversationalClass);
+    if (pivotReply) {
+      return {
+        replyText: pivotReply.replyText,
+        updatedContext: nextContext,
+        recommendedServiceIds: [],
+        quickReplies: [],
+        isBookingIntent: false,
+        requiresBookingConfirmation: false,
+        isBriefIntent: false,
+        isHumanEscalation: false,
+        isCorrection: false,
+        isClarificationNeeded: false,
+        recognizedIntentCategory: 'subject_change',
+      };
+    }
+  }
+
+  // Passively capture client info only when not purely casual/personal
+  if (!conversationalClass.isCasualOrPersonal) {
+    extractClientContextFromUtterance(cleanedUtterance, nextContext);
+  }
 
   const lastAiMessage = [...history].reverse().find((m) => m.sender === 'ai')?.text || '';
   const extractedFromLastAi = extractPresentedOptionsFromText(lastAiMessage);
@@ -542,7 +591,52 @@ export function generateContextualFallbackReply(params: {
   const isBriefIntent = /\b(project\s+brief|review\s+brief|generate\s+brief|proposal\s+summary|scope\s+document|service\s+inquiry|submit\s+inquiry)\b/i.test(
     normalized
   );
-  const isHumanEscalation = detectHumanEscalationIntent(cleanedUtterance);
+  const isHumanEscalation =
+    conversationalClass.intent !== 'personal_ai_question' &&
+    detectHumanEscalationIntent(cleanedUtterance);
+
+  // If this turn is casual, personal AI question, general knowledge, memory recall, closure,
+  // pure greeting, multilingual small talk, or non-DESTRIA technical discussion —
+  // AND NOT an active consultation follow-up (like "Which one?" / "The second option" / booking confirmation) —
+  // respond naturally WITHOUT pushing corporate sales discovery!
+  const isOrdinalOptionFollowUp =
+    (nextContext.presentedOptions?.length || 0) >= 2 &&
+    /\b(first|second|third|fourth|1st|2nd|3rd|which\s+one|either|both|option\s+[1-4])\b/i.test(normalized);
+  const isActiveConsultationFollowUp =
+    bookingCheck.isBookingIntent ||
+    isBriefIntent ||
+    isHumanEscalation ||
+    isOrdinalOptionFollowUp ||
+    Boolean(execPref) ||
+    (Boolean(nextContext.selectedService || nextContext.category) &&
+      /\b(how\s+does\s+it\s+work|tell\s+me\s+more|what\s+about|integrat|timeline|security|compliance|deploy|architecture|more\s+about\s+(?:it|that|this))\b/i.test(
+        normalized
+      ));
+
+  if (
+    !isActiveConsultationFollowUp &&
+    (conversationalClass.isCasualOrPersonal ||
+      conversationalClass.intent === 'technical_discussion' ||
+      conversationalClass.intent === 'conversation_continuation' ||
+      (conversationalClass.intent === 'conversation_correction' && !execPref))
+  ) {
+    const naturalReply = buildDeterministicConversationalReply(userMessage, conversationalClass);
+    if (naturalReply) {
+      return {
+        replyText: naturalReply.replyText,
+        updatedContext: nextContext,
+        recommendedServiceIds: [],
+        quickReplies: naturalReply.quickReplies,
+        isBookingIntent: false,
+        requiresBookingConfirmation: false,
+        isBriefIntent: false,
+        isHumanEscalation: false,
+        isCorrection: conversationalClass.intent === 'conversation_correction' || isCorrection,
+        isClarificationNeeded: conversationalClass.requiresClarification,
+        recognizedIntentCategory: conversationalClass.intent,
+      };
+    }
+  }
 
   // 1. Human escalation intent
   if (isHumanEscalation) {
@@ -1198,25 +1292,79 @@ export async function processVoiceConversationTurn(params: {
     };
   }
 
-  const isFilipino =
-    language.startsWith('fil') ||
-    /\b(po|opo|gusto|pwede|kailangan|namin|paano|magpa)\b/i.test(userMessage);
+  const conversationalClass = classifyConversationalTurn(
+    userMessage,
+    dedupedHistory,
+    session.context as Record<string, unknown>
+  );
+  if (conversationalClass.memory.preferredName) {
+    session.context.preferredName = conversationalClass.memory.preferredName;
+    if (!session.context.clientName) {
+      session.context.clientName = conversationalClass.memory.preferredName;
+    }
+  }
+  session.context.preferredLanguage = conversationalClass.language;
+  session.context.previousQuestions = conversationalClass.memory.previousQuestions;
+  session.context.discussedTopics = conversationalClass.memory.discussedTopics;
+  session.context.lastTopic = conversationalClass.memory.lastTopic;
+  session.context.userPreferences = conversationalClass.memory.userPreferences;
+  const effectiveLanguage = conversationalClass.language || language;
+  session.language = effectiveLanguage;
+
+  // Handle private executive/employee personal probes deterministically so LLM can never speculate
+  if (conversationalClass.isPrivateExecutiveProbe) {
+    const privateReply = buildDeterministicConversationalReply(userMessage, conversationalClass)!;
+    session.history = [
+      ...dedupedHistory,
+      { sender: 'user' as const, text: userMessage },
+      { sender: 'ai' as const, text: privateReply.replyText },
+    ].slice(-24);
+    session.turnCount += 1;
+    session.lastActivityAt = Date.now();
+    const latencyMs = Date.now() - startedAt;
+    return {
+      sessionId: session.sessionId,
+      replyText: privateReply.replyText,
+      spokenText: formatTextForVoiceSpeech(privateReply.replyText),
+      policyEnforced: false,
+      detectedIntent: {
+        isBookingIntent: false,
+        requiresBookingConfirmation: false,
+        isBriefIntent: false,
+        isHumanEscalation: false,
+        executivePreference: session.context.executivePreference,
+        recognizedIntentCategory: 'personal_ai_question',
+      },
+      updatedContext: { ...session.context },
+      recommendedServiceIds: [],
+      quickReplies: [],
+      provider: 'DESTRIA Conversational Privacy Guard',
+      aiLatencyMs: latencyMs,
+      language: effectiveLanguage,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   const bookingCheck = detectAffirmativeBookingIntent(userMessage, lastAiMessage);
   const isCorrection = detectUserCorrection(userMessage);
+  const allowToolsThisTurn =
+    conversationalClass.shouldAllowEnterpriseTools ||
+    bookingCheck.isBookingIntent ||
+    detectHumanEscalationIntent(normalizedUtterance);
 
-  // 2. Live Gemini 4 Hydrogen multi-turn voice reasoning with retrieval-grounded KB & tool calling
+  // 2. Live Gemini 4 Hydrogen multi-turn voice reasoning with natural conversational intelligence & gated tool calling
   if (ai) {
     try {
-      const kbHits = retrieveCorporateKnowledge(userMessage, { topK: 3 });
-      const groundedKbBlock = formatGroundedKnowledgeBlock(kbHits);
+      const kbHits = allowToolsThisTurn ? retrieveCorporateKnowledge(userMessage, { topK: 3 }) : [];
+      const groundedKbBlock = kbHits.length > 0 ? formatGroundedKnowledgeBlock(kbHits) : '';
+      const naturalContextBlock = buildNaturalGeminiContextBlock(conversationalClass, 'voice');
 
       const contextSummary = [
         `Session ID: ${session.sessionId}`,
         `Turn Number: ${session.turnCount + 1}`,
-        `Discovery Stage: ${session.context.currentStage || 'welcome'}`,
-        `Selected Service/Topic: ${session.context.selectedService || session.context.category || 'Not yet selected'}`,
-        `Captured Business Problem: ${session.context.businessProblem || 'Not yet captured'}`,
-        `Known Client Name: ${session.context.clientName || 'Not yet provided'}`,
+        `Preferred User Name: ${session.context.preferredName || session.context.clientName || 'Not yet shared'}`,
+        `Selected Service/Topic: ${session.context.selectedService || session.context.category || 'None active'}`,
+        `Captured Business Problem: ${session.context.businessProblem || 'None active'}`,
         `Known Client Company: ${session.context.clientCompany || 'Not yet provided'}`,
         `Known Client Email: ${session.context.clientEmail || 'Not yet provided'}`,
         `Known Target Timeline: ${session.context.targetTimeline || 'Not yet provided'}`,
@@ -1228,26 +1376,23 @@ export async function processVoiceConversationTurn(params: {
         }`,
       ].join('\n');
 
+      const enterpriseReferenceBlock = allowToolsThisTurn
+        ? `\nRETRIEVED CORPORATE KNOWLEDGE (Version ${CORPORATE_KNOWLEDGE_VERSION}):\n${groundedKbBlock}\n\nOFFICIAL 10-CATEGORY ENTERPRISE TECHNOLOGY DIVISIONS (CUSTOMIZED SOLUTIONS — ZERO PUBLIC PRICING):\n${CATALOG_DIVISION_SUMMARIES.map((d) => `${Number(d.number)}. ${d.label} (${d.count} frameworks)`).join('\n')}\n\nCATALOG REFERENCE:\n${CATALOG_SUMMARY_FOR_AI.slice(0, 3500)}`
+        : '';
+
       const systemInstruction = `${MANDATORY_AI_SYSTEM_INSTRUCTION}
 
-ACTIVE VOICE CONVERSATION STATE:
-${contextSummary}
+${naturalContextBlock}
 
-RETRIEVED CORPORATE KNOWLEDGE (Version ${CORPORATE_KNOWLEDGE_VERSION}):
-${groundedKbBlock}
-
-OFFICIAL 10-CATEGORY ENTERPRISE TECHNOLOGY DIVISIONS (CUSTOMIZED SOLUTIONS — ZERO PUBLIC PRICING):
-${CATALOG_DIVISION_SUMMARIES.map((d) => `${Number(d.number)}. ${d.label} (${d.count} frameworks)`).join('\n')}
-
-CATALOG REFERENCE:
-${CATALOG_SUMMARY_FOR_AI.slice(0, 3500)}
+ACTIVE VOICE SESSION MEMORY:
+${contextSummary}${enterpriseReferenceBlock}
 
 NATURAL TWO-WAY VOICE CONVERSATION RULES:
-- You are engaged in a continuous, natural, two-way executive voice conversation as DESTRIA TECH INC's AI Corporate Solutions Consultant.
-- Understand natural English, Filipino-accented English, Taglish code-switching, incomplete thoughts, technical jargon, and corrections to prior information without restarting or re-asking details already known above.
-- Use authorized tools when checking real appointment availability, retrieving corporate profile/brochures, or preparing consultation/inquiry submissions. NEVER submit without explicit client confirmation.
-- Keep spoken responses crisp and natural: 2 to 3 clear spoken sentences, zero markdown, zero bullets, zero asterisks, zero JSON.
-- Respond in ${isFilipino ? 'natural, respectful Filipino/Taglish as appropriate' : 'clear, warm, neutral American executive English'}.`;
+- Respond naturally, warmly, and directly to what the user just said—whether casual chat, a personal question about you as an AI, general knowledge, technology discussion, or DESTRIA TECH INC enterprise consultation.
+- Match the user's language automatically (English, Filipino, Taglish, Spanish, French, etc.) and switch seamlessly mid-conversation without losing memory.
+- Handle incomplete thoughts, follow-up references, subject changes, and user corrections smoothly without restarting or re-asking details already known above.
+- Only use enterprise consultation tools when the user explicitly requests DESTRIA TECH INC services, corporate resources, scheduling, or human assistance. NEVER submit bookings or inquiries without explicit client confirmation.
+- Keep spoken responses natural and concise (typically 1 to 3 clear spoken sentences), zero markdown, zero bullets, zero asterisks, zero JSON.`;
 
       const contents: any[] = dedupedHistory.map((turn) => ({
         role: turn.sender === 'user' ? 'user' : 'model',
@@ -1255,9 +1400,11 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
       }));
       contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      const tools = toolsExecutor
-        ? [{ functionDeclarations: getGeminiFunctionDeclarations({ nonBlocking: false }) }]
-        : undefined;
+      // CRITICAL: Only expose enterprise tools when intent actually warrants them!
+      const tools =
+        toolsExecutor && allowToolsThisTurn
+          ? [{ functionDeclarations: getGeminiFunctionDeclarations({ nonBlocking: false }) }]
+          : undefined;
 
       const chatModel = runtimeConfig?.getSettings().geminiChatModel || 'gemini-4-hydrogen';
       const collectedToolEvents: Array<{ type: string; payload: Record<string, unknown> }> = [];
@@ -1287,7 +1434,7 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
         }
 
         const functionCalls = response?.functionCalls;
-        if (functionCalls && functionCalls.length > 0 && toolsExecutor) {
+        if (functionCalls && functionCalls.length > 0 && toolsExecutor && allowToolsThisTurn) {
           const prevContent = response.candidates?.[0]?.content;
           if (prevContent) contents.push(prevContent);
 
@@ -1329,7 +1476,9 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
         if (newPresented.length >= 2) {
           session.context.presentedOptions = newPresented;
         }
-        const matched = matchCatalogServices(`${userMessage} ${enforced.replyText}`, 2);
+        const matched = allowToolsThisTurn
+          ? matchCatalogServices(`${userMessage} ${enforced.replyText}`, 2)
+          : [];
         if (matched.length > 0 && (!session.context.selectedService || isCorrection)) {
           session.context.selectedService = matched[0].title;
         }
@@ -1358,6 +1507,14 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
           ? (resourceEvent.payload.resourceLinks as CorporateResourceLink[])
           : undefined;
 
+        const quickReplies = conversationalClass.isCasualOrPersonal
+          ? []
+          : newPresented.length >= 2
+          ? newPresented.slice(0, 3)
+          : allowToolsThisTurn
+          ? ['Tell me more', 'Review Project Brief', 'Schedule Consultation']
+          : [];
+
         return {
           sessionId: session.sessionId,
           replyText: enforced.replyText,
@@ -1370,19 +1527,18 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
             isHumanEscalation: detectHumanEscalationIntent(normalizedUtterance),
             isCorrection,
             executivePreference: session.context.executivePreference,
-            recognizedIntentCategory: 'gemini_contextual_reasoning',
+            recognizedIntentCategory: conversationalClass.isCasualOrPersonal
+              ? conversationalClass.intent
+              : 'gemini_contextual_reasoning',
           },
           updatedContext: { ...session.context },
           recommendedServiceIds: matched.map((m) => m.id),
-          quickReplies:
-            newPresented.length >= 2
-              ? newPresented.slice(0, 3)
-              : ['Tell me more', 'Review Project Brief', 'Schedule Consultation'],
+          quickReplies,
           resourceLinks,
           toolEvents: collectedToolEvents.length > 0 ? collectedToolEvents : undefined,
           provider: chatModel,
           aiLatencyMs: latencyMs,
-          language,
+          language: effectiveLanguage,
           timestamp: new Date().toISOString(),
         };
       }

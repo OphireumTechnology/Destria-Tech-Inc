@@ -108,14 +108,13 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       {
         id: 'msg-welcome',
         sender: 'ai',
-        text: `Welcome to ${corporateIdentity.legalName} (${corporateIdentity.networkName}). I am your AI Corporate Solutions Consultant. We deliver customized enterprise technology solutions across software architecture, AI systems, cloud infrastructure, cybersecurity, and digital transformation. How may I assist with your organization's objectives today?`,
+        text: `Hi! I'm the AI assistant for ${corporateIdentity.legalName} (${corporateIdentity.networkName}). Feel free to chat casually, ask a general or technical question in any language, or explore customized enterprise technology solutions whenever you're ready—how can I help today?`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         stage: 'welcome',
         quickReplies: [
-          'AI Solutions & AI Agents',
-          'Enterprise Software & Custom Apps',
-          'Cloud Infrastructure & Cybersecurity',
-          'Request an Enterprise Consultation',
+          'Explore AI & Enterprise Solutions',
+          'About DESTRIA TECH INC',
+          'Request a Consultation',
         ],
       },
     ];
@@ -205,12 +204,11 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                 : intent?.isBriefIntent
                 ? 'review_brief'
                 : undefined,
-            quickReplies:
-              intent?.quickReplies && intent.quickReplies.length > 0
-                ? intent.quickReplies
-                : intent?.isBookingIntent
-                ? ['Schedule Consultation', 'Review Project Brief']
-                : ['Review Project Brief', 'Schedule Consultation'],
+            quickReplies: Array.isArray(intent?.quickReplies)
+              ? intent.quickReplies
+              : intent?.isBookingIntent
+              ? ['Schedule Consultation', 'Review Project Brief']
+              : [],
           },
         ]);
 
@@ -468,14 +466,14 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
     setIsTyping(true);
 
     try {
-      // Check for human escalation keywords
-      if (/speak to human|talk to human|call executive|solutions architect|phone number|call now|direct contact/i.test(text)) {
+      // Only intercept explicit modal-trigger actions (never hijack casual chat or questions)
+      if (/^(?:speak\s+to\s+(?:a\s+)?human|talk\s+to\s+(?:a\s+)?human|direct\s+solutions\s+contact|call\s+executive)$/i.test(text)) {
         setTimeout(() => {
           setIsTyping(false);
           const aiEscalateMsg: ChatMessage = {
             id: `ai-esc-${Date.now()}`,
             sender: 'ai',
-            text: `Our ${COMPANY_CONFIG.name} solutions architecture team is available for structured technical consultations.${COMPANY_CONFIG.corporatePhone ? ` You can also reach us at ${COMPANY_CONFIG.corporatePhone}.` : ''} Would you like to review direct contact options or schedule a consultation meeting?`,
+            text: `I'd be happy to connect you with our ${COMPANY_CONFIG.name} solutions team.${COMPANY_CONFIG.corporatePhone ? ` You can also reach us directly at ${COMPANY_CONFIG.corporatePhone}.` : ''} Would you like to view direct contact options or schedule a consultation?`,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             suggestedAction: 'talk_to_human',
             quickReplies: ['Direct Solutions Contact', 'Schedule Consultation'],
@@ -484,12 +482,11 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
           if (isVoiceActive && !isSpeakerMuted) {
             aiVoiceService.speakText(aiEscalateMsg.text);
           }
-        }, 600);
+        }, 350);
         return;
       }
 
-      // Check if user wants to review brief or schedule appointment
-      if (/review brief|view brief|see brief|project brief/i.test(text)) {
+      if (/^(?:review\s+project\s+brief|view\s+brief|see\s+brief|open\s+project\s+brief)$/i.test(text)) {
         setTimeout(() => {
           setIsTyping(false);
           setActiveRequestSource(isVoiceActive ? 'AI Voice' : 'AI Chat');
@@ -509,16 +506,16 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
             setCurrentBrief(draftBrief);
             setIsBriefModalOpen(true);
           }
-        }, 500);
+        }, 300);
         return;
       }
 
-      if (/schedule|book appointment|set meeting|consultation slot/i.test(text)) {
+      if (/^(?:schedule\s+consultation(?:\s+now)?|book\s+appointment|open\s+scheduling\s+form|request\s+a\s+consultation|request\s+an\s+enterprise\s+consultation)$/i.test(text)) {
         setTimeout(() => {
           setIsTyping(false);
           setActiveRequestSource(isVoiceActive ? 'AI Voice' : 'AI Chat');
           setIsBookingModalOpen(true);
-        }, 500);
+        }, 300);
         return;
       }
 
@@ -565,9 +562,9 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
         {
           id: `err-${Date.now()}`,
           sender: 'ai',
-          text: 'I apologize for the transient disruption. Our solution architects are ready to assist. You may also schedule a direct consultation slot or view direct contact options.',
+          text: 'Sorry, the connection dropped for a moment. Could you repeat the last part?',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          quickReplies: ['Schedule Consultation', 'Direct Solutions Contact'],
+          quickReplies: [],
         },
       ]);
     }
@@ -629,14 +626,13 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       {
         id: `msg-welcome-reset-${Date.now()}`,
         sender: 'ai',
-        text: `Consultation session reset. Welcome to ${corporateIdentity.legalName} (${corporateIdentity.networkName}). Explore any of our 10 customized enterprise technology divisions or describe your objectives to coordinate a consultation and formal proposal.`,
+        text: `Fresh start! I'm the AI assistant for ${corporateIdentity.legalName} (${corporateIdentity.networkName}). Feel free to chat casually, ask a question in any language, or explore enterprise technology solutions whenever you'd like.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         stage: 'welcome',
         quickReplies: [
-          'AI Solutions & AI Agents',
-          'Enterprise Software & Custom Apps',
-          'Cloud Infrastructure & Cybersecurity',
-          'Request an Enterprise Consultation',
+          'Explore AI & Enterprise Solutions',
+          'About DESTRIA TECH INC',
+          'Request a Consultation',
         ],
       },
     ]);
@@ -767,20 +763,33 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                       : 'ONLINE'}
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400">Executive Discovery & Scope Architect</p>
+                <p className="text-[10px] text-slate-400">Conversational AI &amp; Solutions Assistant</p>
               </div>
             </div>
 
             <div className="flex items-center gap-1">
-              {/* Language Switcher */}
+              {/* Multilingual Language Switcher */}
               <div className="relative mr-1">
                 <button
-                  onClick={() => handleLanguageChange(voiceLanguage === 'en-US' ? 'fil-PH' : 'en-US')}
+                  onClick={() => {
+                    const order: VoiceLanguage[] = ['en-US', 'fil-PH', 'es-ES', 'fr-FR'];
+                    const nextLang = order[(order.indexOf(voiceLanguage) + 1) % order.length];
+                    handleLanguageChange(nextLang);
+                  }}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono border border-slate-700 transition-colors cursor-pointer"
-                  title="Toggle Language: English / Filipino"
+                  title="Switch Voice Language (EN / FIL / ES / FR — multilingual auto-detection active)"
+                  aria-label={`Voice language ${voiceLanguage}`}
                 >
                   <Globe className="w-3 h-3 text-[#00C2C7]" />
-                  <span>{voiceLanguage === 'en-US' ? 'EN' : 'FIL'}</span>
+                  <span>
+                    {voiceLanguage === 'fil-PH'
+                      ? 'FIL'
+                      : voiceLanguage === 'es-ES'
+                      ? 'ES'
+                      : voiceLanguage === 'fr-FR'
+                      ? 'FR'
+                      : 'EN'}
+                  </span>
                 </button>
               </div>
 
@@ -820,44 +829,46 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
 
           {!isMinimized && (
             <>
-              {/* Stage Progress Bar */}
-              <div className="px-4 py-2 bg-slate-900/90 border-b border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-[#00C2C7] uppercase font-bold">Discovery Phase</span>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4].map((step) => {
-                      const active = step <= getStageStep();
-                      return (
-                        <div
-                          key={step}
-                          className={`h-1.5 rounded-full transition-all duration-300 ${
-                            active ? 'w-6 bg-[#00C2C7]' : 'w-2 bg-slate-700'
-                          }`}
-                        />
-                      );
-                    })}
+              {/* Stage Progress Bar (only shown during active enterprise discovery/scoping) */}
+              {(state.currentStage !== 'welcome' || Boolean(state.requirements.category) || Boolean(currentBrief)) && (
+                <div className="px-4 py-2 bg-slate-900/90 border-b border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-[#00C2C7] uppercase font-bold">Solution Scope</span>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4].map((step) => {
+                        const active = step <= getStageStep();
+                        return (
+                          <div
+                            key={step}
+                            className={`h-1.5 rounded-full transition-all duration-300 ${
+                              active ? 'w-6 bg-[#00C2C7]' : 'w-2 bg-slate-700'
+                            }`}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {currentBrief && (
+                      <button
+                        onClick={() => setIsBriefModalOpen(true)}
+                        className="text-[10px] font-mono text-[#D4AF37] hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <FileText className="w-3 h-3" />
+                        <span>Brief</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setIsBookingModalOpen(true)}
+                      className="text-[10px] font-mono text-[#00C2C7] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Calendar className="w-3 h-3" />
+                      <span>Book</span>
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  {currentBrief && (
-                    <button
-                      onClick={() => setIsBriefModalOpen(true)}
-                      className="text-[10px] font-mono text-[#D4AF37] hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <FileText className="w-3 h-3" />
-                      <span>Brief</span>
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setIsBookingModalOpen(true)}
-                    className="text-[10px] font-mono text-[#00C2C7] hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Calendar className="w-3 h-3" />
-                    <span>Book</span>
-                  </button>
-                </div>
-              </div>
+              )}
 
               {/* Voice Error Notice if any */}
               {voiceError && (
@@ -1108,10 +1119,10 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                 {isTyping && (
                   <div className="flex items-center gap-2 text-slate-400 text-xs font-mono">
                     <div className="w-6 h-6 rounded-lg bg-[#111827] border border-cyan-500/40 flex items-center justify-center text-[#00C2C7]">
-                      <Bot className="w-3.5 h-3.5 animate-spin" />
+                      <Bot className="w-3.5 h-3.5 animate-pulse" />
                     </div>
                     <span className="flex items-center gap-1">
-                      <span>Synthesizing technical response</span>
+                      <span>Thinking</span>
                       <span className="animate-bounce">.</span>
                       <span className="animate-bounce delay-100">.</span>
                       <span className="animate-bounce delay-200">.</span>
@@ -1220,13 +1231,13 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                       {voiceStatus === 'service_unavailable' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-rose-400">
                           <AlertCircle className="w-3.5 h-3.5" />
-                          <span>AI Service Unavailable</span>
+                          <span>Connection Unavailable</span>
                         </span>
                       )}
                       {voiceStatus === 'error' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-rose-400">
                           <AlertCircle className="w-3.5 h-3.5" />
-                          <span>Connection Error</span>
+                          <span>Connection Unavailable</span>
                         </span>
                       )}
                       {voiceStatus !== 'connecting' &&
@@ -1249,13 +1260,13 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                       {!isMicMuted && voiceStatus === 'user_speaking' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-emerald-300">
                           <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
-                          <span>You're Speaking...</span>
+                          <span>You&apos;re Speaking...</span>
                         </span>
                       )}
                       {!isMicMuted && voiceStatus === 'interrupted' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-amber-300">
                           <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />
-                          <span>Interrupted</span>
+                          <span>Listening...</span>
                         </span>
                       )}
                       {!isMicMuted && voiceStatus === 'understanding' && (
@@ -1270,34 +1281,51 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                           <span>Processing...</span>
                         </span>
                       )}
-                      {!isMicMuted && voiceStatus === 'ai_speaking' && (
+                      {voiceStatus === 'ai_speaking' && !isSpeakerMuted && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-[#00C2C7]">
-                          <Volume2 className="w-3.5 h-3.5 animate-bounce" />
+                          <Volume2 className="w-3.5 h-3.5 animate-pulse" />
                           <span>Speaking...</span>
+                        </span>
+                      )}
+                      {voiceStatus === 'ai_speaking' && isSpeakerMuted && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-slate-400">
+                          <VolumeX className="w-3.5 h-3.5" />
+                          <span>Speaker Muted</span>
                         </span>
                       )}
                     </div>
 
-                    {/* Real AnalyserNode Waveform Visualization (16 Frequency Bands) */}
-                    <div className="flex items-center gap-1 h-6" aria-label={`Audio level ${audioVolume}%`}>
+                    {/* Real AnalyserNode Waveform Visualization (16 Frequency Bands — strictly idle when silent/muted) */}
+                    <div
+                      className="flex items-center gap-[3px] h-7 px-2 rounded-lg bg-[#0B1220]/80 border border-slate-800/80"
+                      role="meter"
+                      aria-label={`Voice audio level ${audioVolume}%`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={audioVolume}
+                    >
                       {audioBands.map((bandLevel, i) => {
-                        const heightPercent = isVoiceActive
-                          ? Math.max(12, Math.min(100, bandLevel))
-                          : 12;
+                        const isLiveAudioBar =
+                          isVoiceActive &&
+                          ((voiceStatus === 'ai_speaking' && !isSpeakerMuted) ||
+                            ((voiceStatus === 'listening' || voiceStatus === 'user_speaking') && !isMicMuted));
+                        const heightPercent = isLiveAudioBar
+                          ? Math.max(14, Math.min(100, bandLevel))
+                          : 14;
                         return (
                           <div
                             key={i}
                             style={{ height: `${heightPercent}%` }}
-                            className={`w-1 rounded-full transition-all duration-75 ${
-                              voiceStatus === 'ai_speaking'
-                                ? 'bg-[#00C2C7]'
-                                : voiceStatus === 'listening' || voiceStatus === 'user_speaking'
-                                ? 'bg-emerald-400'
+                            className={`w-[3px] rounded-full transition-[height] duration-75 motion-reduce:transition-none ${
+                              voiceStatus === 'ai_speaking' && !isSpeakerMuted
+                                ? 'bg-gradient-to-t from-[#009b9f] to-[#00C2C7]'
+                                : (voiceStatus === 'listening' || voiceStatus === 'user_speaking') && !isMicMuted
+                                ? 'bg-gradient-to-t from-emerald-500 to-emerald-300'
                                 : voiceStatus === 'understanding'
-                                ? 'bg-sky-400'
+                                ? 'bg-sky-400/70'
                                 : voiceStatus === 'reconnecting' || voiceStatus === 'processing'
-                                ? 'bg-amber-400/70'
-                                : 'bg-slate-700'
+                                ? 'bg-amber-400/60'
+                                : 'bg-slate-700/70'
                             }`}
                           />
                         );

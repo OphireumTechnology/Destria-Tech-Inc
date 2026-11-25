@@ -35,7 +35,7 @@ export type VoiceSessionState =
 /** Backwards-compatible alias */
 export type VoiceState = VoiceSessionState;
 
-export type VoiceLanguage = 'en-US' | 'fil-PH';
+export type VoiceLanguage = 'en-US' | 'fil-PH' | 'es-ES' | 'fr-FR';
 export type VoiceEngineType = 'gemini_live' | 'gemini_neural' | 'browser_fallback' | 'none';
 export type VoiceTransportMode = 'gemini_live_duplex' | 'turn_based_continuous' | 'none';
 
@@ -47,6 +47,11 @@ export interface VoiceSharedContext {
   executivePreference?: 'ceo' | 'cto' | 'advisory';
   presentedOptions?: string[];
   keyFeatures?: string[];
+  preferredName?: string;
+  preferredLanguage?: string;
+  previousQuestions?: string[];
+  discussedTopics?: string[];
+  userPreferences?: string[];
 }
 
 export interface VoiceTurnMetrics {
@@ -128,6 +133,8 @@ export interface VoiceRuntimeDeps {
   clauseMergeDelayMs?: number;
   recognitionRestartBaseDelayMs?: number;
   networkRetryDelaysMs?: number[];
+  liveConnectTimeoutMs?: number;
+  liveReconnectDelaysMs?: number[];
   bargeInHoldMs?: number;
   bargeInThreshold?: number;
   idleTimeoutMs?: number;
@@ -804,10 +811,14 @@ export class AIVoiceService {
 
       this.resetIdleTimer(mySession);
 
-      // 6. Deliver audible greeting AND AUTOMATICALLY RESUME LISTENING AFTERWARDS!
+      // 6. Deliver warm, natural audible greeting AND AUTOMATICALLY RESUME LISTENING AFTERWARDS!
       const greeting = this.language.startsWith('fil')
-        ? 'Magandang araw po. Ako ang inyong DESTRIA TECH INC AI Corporate Solutions Consultant. Paano ko po matutulungan ang inyong enterprise technology project ngayon?'
-        : 'Welcome to DESTRIA TECH INC. I am your AI Corporate Solutions Consultant. How may I assist with your enterprise technology initiative today?';
+        ? 'Kumusta! Ako ang AI assistant ng DESTRIA TECH INC. Pwede tayong mag-chat nang kaswal, magtanong tungkol sa kahit ano, o pag-usapan ang technology solutions—paano ako makakatulong ngayon?'
+        : this.language.startsWith('es')
+        ? '¡Hola! Soy el asistente de IA de DESTRIA TECH INC. Puedes charlar conmigo libremente o preguntarme lo que necesites—¿cómo puedo ayudarte hoy?'
+        : this.language.startsWith('fr')
+        ? 'Bonjour ! Je suis l’assistant IA de DESTRIA TECH INC. N’hésitez pas à discuter librement ou à me poser vos questions—comment puis-je vous aider ?'
+        : "Hi! I'm the AI assistant for DESTRIA TECH INC. Feel free to chat casually, ask any question, or explore technology solutions—how can I help you today?";
 
       // Record greeting in history only if conversation has no prior AI greeting
       if (this.conversationHistory.length === 0) {
@@ -2109,6 +2120,8 @@ export class AIVoiceService {
     } else if (typeof window !== 'undefined' && window.location?.host) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       wsUrl = `${protocol}//${window.location.host}${wsPath}`;
+    } else if (this.deps.WebSocketCtor) {
+      wsUrl = `ws://127.0.0.1${wsPath}`;
     } else {
       return false;
     }
@@ -2122,10 +2135,11 @@ export class AIVoiceService {
         resolve(ok);
       };
 
+      const connectTimeoutMs = this.deps.liveConnectTimeoutMs ?? 6000;
       const connectTimeout = setTimeout(() => {
         this.teardownLiveBridge();
         done(false);
-      }, 3500);
+      }, connectTimeoutMs);
 
       try {
         const ws = new WsCtor(wsUrl);
@@ -2143,7 +2157,7 @@ export class AIVoiceService {
               sessionId: this.sessionId,
               resumptionHandle: this.liveSessionResumptionHandle || undefined,
               language: this.language,
-              history: this.conversationHistory.slice(-10),
+              history: this.conversationHistory.slice(-12),
             })
           );
         };
@@ -2208,7 +2222,7 @@ export class AIVoiceService {
             ) {
               this.callbacks.onAiResponse?.(
                 'You may reach our official executive desk at +1 (307) 419-4277 or info@destriatech.com.',
-                { isHumanEscalation: true }
+                { isHumanEscalation: true, quickReplies: ['Schedule Consultation', 'Direct Solutions Contact'] }
               );
             }
             return;
@@ -2221,7 +2235,7 @@ export class AIVoiceService {
                 ...this.conversationHistory.slice(-19),
                 { sender: 'ai', text: msg.text.trim() },
               ];
-              this.callbacks.onAiResponse?.(msg.text.trim());
+              this.callbacks.onAiResponse?.(msg.text.trim(), { quickReplies: ['Request an Enterprise Consultation'] });
             }
             if (this.isCurrentActiveSession(sessionSeq)) {
               this.transitionTo('listening');
@@ -2262,6 +2276,11 @@ export class AIVoiceService {
               this.callbacks.onTranscript?.(text, false);
               return;
             }
+            // Prevent duplicate final transcript submission on reconnect overlap
+            const lastEntry = this.conversationHistory[this.conversationHistory.length - 1];
+            if (lastEntry?.sender === 'user' && lastEntry.text.toLowerCase() === text.toLowerCase()) {
+              return;
+            }
             this.conversationHistory = [
               ...this.conversationHistory.slice(-19),
               { sender: 'user', text },
@@ -2273,22 +2292,28 @@ export class AIVoiceService {
 
           if (msg.type === 'audio' && msg.data) {
             this.liveTurnCompleteReceived = false;
-            if (this.status !== 'ai_speaking') {
+            if (this.status !== 'ai_speaking' && !this.isSpeakerMuted) {
               this.transitionTo('ai_speaking');
             }
-            void this.enqueueLivePcm24kChunk(String(msg.data), sessionSeq);
+            if (!this.isSpeakerMuted) {
+              void this.enqueueLivePcm24kChunk(String(msg.data), sessionSeq);
+            }
             return;
           }
 
           if (msg.type === 'turn_complete') {
             this.liveTurnCompleteReceived = true;
             if (msg.text) {
-              this.turnCount += 1;
-              this.conversationHistory = [
-                ...this.conversationHistory.slice(-19),
-                { sender: 'ai', text: String(msg.text) },
-              ];
-              this.callbacks.onAiResponse?.(String(msg.text));
+              const outText = String(msg.text).trim();
+              const prevEntry = this.conversationHistory[this.conversationHistory.length - 1];
+              if (outText && !(prevEntry?.sender === 'ai' && prevEntry.text === outText)) {
+                this.turnCount += 1;
+                this.conversationHistory = [
+                  ...this.conversationHistory.slice(-19),
+                  { sender: 'ai', text: outText },
+                ];
+                this.callbacks.onAiResponse?.(outText, { quickReplies: [] });
+              }
             }
             // Only resume 'listening' once the actual queued audio playback finishes!
             if (this.liveQueuedSources.size === 0 && this.isCurrentActiveSession(sessionSeq)) {
@@ -2310,12 +2335,18 @@ export class AIVoiceService {
             return;
           }
           if (this.isCurrentActiveSession(sessionSeq) && this.transportMode === 'gemini_live_duplex') {
+            // Flush any partial buffered audio immediately so reconnected stream never replays stale audio
+            this.clearPlaybackResources();
             this.teardownLiveBridge();
-            // Attempt one automatic session resumption if handle exists before graceful downgrade
-            if (this.liveSessionResumptionHandle && this.liveReconnectAttempts < 1) {
+
+            const reconnectDelays = this.deps.liveReconnectDelaysMs ?? [400, 1000, 2000];
+            if (this.liveReconnectAttempts < reconnectDelays.length) {
+              const delayMs = reconnectDelays[this.liveReconnectAttempts] ?? 1000;
               this.liveReconnectAttempts += 1;
               this.transitionTo('reconnecting');
-              void this.tryConnectGeminiLive(sessionSeq, wsPath).then((reconnected) => {
+              void this.sleep(delayMs).then(async () => {
+                if (!this.isCurrentActiveSession(sessionSeq)) return;
+                const reconnected = await this.tryConnectGeminiLive(sessionSeq, wsPath);
                 if (reconnected && this.isCurrentActiveSession(sessionSeq)) {
                   this.transitionTo('listening');
                   return;
@@ -2407,8 +2438,10 @@ export class AIVoiceService {
         this.liveWorkletNode = workletNode;
         workletNode.port.onmessage = (ev: MessageEvent) => {
           const payload = ev.data;
-          if (!payload || !payload.pcm16) return;
-          const bytes = new Uint8Array(payload.pcm16);
+          // Support both pcmBuffer (posted by pcm-capture-processor.js) and legacy pcm16 property names
+          const rawPcm = payload?.pcmBuffer || payload?.pcm16;
+          if (!rawPcm) return;
+          const bytes = new Uint8Array(rawPcm);
           let binary = '';
           for (let i = 0; i < bytes.length; i++) {
             binary += String.fromCharCode(bytes[i]);
@@ -2658,9 +2691,11 @@ export class AIVoiceService {
 
   private generateContextualLocalFallback(input: string): string {
     const isFilipino = this.language.startsWith('fil');
+    const isSpanish = this.language.startsWith('es');
+    const isFrench = this.language.startsWith('fr');
     const lower = input.toLowerCase();
 
-    if (/(price|pricing|cost|budget|rate|discount|promo|cheapest|quote|estimate)/i.test(lower)) {
+    if (/(price|pricing|cost|budget|rate|discount|promo|cheapest|quote|estimate|magkano|presyo|cu[aá]nto\s+cuesta|combien\s+co[ûu]te)/i.test(lower)) {
       return isFilipino
         ? 'Ang DESTRIA TECH INC ay nagbibigay ng customized enterprise technology solutions at hindi naglalathala ng standardized pricing. Maaari po tayong mag-schedule ng initial consultation, mag-email sa info@destriatech.com, o tumawag sa +1 (307) 419-4277.'
         : "DESTRIA TECH INC delivers customized enterprise technology solutions tailored to each client's operational, technical, security, and integration requirements. Because every project is individually architected, we do not publish standardized pricing or provide automated cost estimates. You may schedule a consultation through our website, email info@destriatech.com, or call +1 (307) 419-4277.";
@@ -2672,15 +2707,36 @@ export class AIVoiceService {
         : 'That depends on your business priority. May I ask whether your main focus is attracting customers, automating operations, or improving transaction transparency?';
     }
 
-    if (this.sharedContext.selectedService) {
+    if (/\b(how\s+are\s+you|kamusta|kumusta|c[oó]mo\s+est[aá]s|comment\s+[çc]a\s+va)\b/i.test(lower)) {
       return isFilipino
-        ? `Naintindihan ko po iyon para sa ${this.sharedContext.selectedService}. Nagkaroon lamang ng sandaling network interruption, ngunit tuloy po ang ating usapan. Ano pa po ang nais ninyong idagdag sa requirements?`
-        : `I captured that for ${this.sharedContext.selectedService}. We experienced a brief connection interruption, but our conversation context is intact. What additional requirements or questions would you like to discuss?`;
+        ? 'Ayos na ayos ako, salamat sa pagtanong! Kamusta ka naman?'
+        : isSpanish
+        ? '¡Estoy muy bien, gracias por preguntar! ¿Cómo estás tú?'
+        : isFrench
+        ? 'Je vais très bien, merci ! Comment allez-vous ?'
+        : "I'm doing great, thanks for asking! How's your day going?";
     }
 
-    return isFilipino
-      ? 'Nagkaroon po ng sandaling network interruption, ngunit nakikinig pa rin po ako. Maaari po ba ninyong ulitin o ibahagi ang susunod ninyong tanong tungkol sa inyong proyekto?'
-      : 'We experienced a brief network interruption, but I am still listening and ready to continue. Could you share a bit more about your project goals or ask your next question?';
+    if (/\b(are\s+you\s+married|how\s+old\s+are\s+you|where\s+do\s+you\s+live|are\s+you\s+(?:a\s+)?(?:real\s+person|human)|do\s+you\s+have\s+children)\b/i.test(lower)) {
+      return "I'm an AI assistant for DESTRIA TECH INC, so I don't have personal human traits like an age, family, or physical home—but I'm always happy to chat or help out!";
+    }
+
+    if (this.sharedContext.selectedService) {
+      return isFilipino
+        ? `Naintindihan ko po iyon para sa ${this.sharedContext.selectedService}. Paumanhin, naputol saglit ang koneksyon, pero intact pa rin ang usapan natin—pwede mo bang ulitin ang huling bahagi?`
+        : `I still have our context for ${this.sharedContext.selectedService}. Sorry, the connection dropped for a moment. Could you repeat the last part?`;
+    }
+
+    if (isFilipino) {
+      return 'Paumanhin, naputol saglit ang koneksyon. Pwede mo bang ulitin ang huling bahagi?';
+    }
+    if (isSpanish) {
+      return 'Disculpa, la conexión se interrumpió un momento. ¿Podrías repetir la última parte?';
+    }
+    if (isFrench) {
+      return 'Désolé, la connexion a été interrompue un instant. Pourriez-vous répéter la dernière partie ?';
+    }
+    return 'Sorry, the connection dropped for a moment. Could you repeat the last part?';
   }
 
   private sleep(ms: number): Promise<void> {

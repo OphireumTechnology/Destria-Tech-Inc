@@ -289,7 +289,7 @@ export const aiConsultantService = {
     userMessage: string,
     state: ConsultationState,
     conversationHistory: ChatMessage[],
-    language: 'en-US' | 'fil-PH' = 'en-US'
+    language: string = 'en-US'
   ): Promise<{ aiMessage: ChatMessage; updatedState: ConsultationState; toolEvents?: ChatToolEvent[]; sessionId: string }> {
     const trimmed = userMessage.trim();
     const updatedState: ConsultationState = {
@@ -303,41 +303,56 @@ export const aiConsultantService = {
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const msgId = `msg-${Date.now()}`;
 
-    if (updatedState.currentStage === 'welcome') {
-      const matchedCat =
-        CATALOG_CATEGORIES.find(
-          (c) =>
-            c.id !== 'all' &&
-            (trimmed.toLowerCase().includes(c.label.toLowerCase()) ||
-              trimmed.toLowerCase().includes(c.shortLabel.toLowerCase()))
-        )?.label || trimmed;
-      updatedState.requirements.category = matchedCat;
-      updatedState.currentStage = 'problem';
-    } else if (updatedState.currentStage === 'problem') {
-      updatedState.requirements.businessProblem = trimmed;
-      updatedState.currentStage = 'features';
-    } else if (updatedState.currentStage === 'features') {
-      updatedState.requirements.keyFeatures = trimmed
-        .split(/,|\n| and /)
-        .map((f) => f.trim())
-        .filter(Boolean);
-      updatedState.currentStage = 'client_info';
-    } else if (updatedState.currentStage === 'client_info') {
-      const emailMatch = trimmed.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-      if (emailMatch) updatedState.client.email = emailMatch[0].toLowerCase();
-      const phoneMatch = trimmed.match(/(\+?\d[\d\s\-().]{6,}\d)/);
-      if (phoneMatch && !updatedState.client.phone) {
-        updatedState.client.phone = phoneMatch[1].trim();
+    const lower = trimmed.toLowerCase();
+    const looksLikeEnterpriseQuery =
+      /\b(destria|ophireum|enterprise|erp|crm|custom\s+software|web\s+development|mobile\s+app|ai\s+agent|automation|blockchain|smart\s+contract|cloud\s+infrastructure|cybersecurity|multimedia|3d|vfx|consultation|proposal|project\s+brief|our\s+company|our\s+business|we\s+need\s+to\s+build)\b/i.test(
+        lower
+      ) ||
+      CATALOG_CATEGORIES.some(
+        (c) =>
+          c.id !== 'all' &&
+          (lower.includes(c.label.toLowerCase()) || lower.includes(c.shortLabel.toLowerCase()))
+      );
+
+    // Only advance enterprise discovery stage when the conversation is actually about enterprise solutions
+    if (looksLikeEnterpriseQuery || updatedState.currentStage !== 'welcome') {
+      if (updatedState.currentStage === 'welcome' && looksLikeEnterpriseQuery) {
+        const matchedCat =
+          CATALOG_CATEGORIES.find(
+            (c) =>
+              c.id !== 'all' &&
+              (lower.includes(c.label.toLowerCase()) || lower.includes(c.shortLabel.toLowerCase()))
+          )?.label || '';
+        if (matchedCat) {
+          updatedState.requirements.category = matchedCat;
+          updatedState.currentStage = 'problem';
+        }
+      } else if (updatedState.currentStage === 'problem' && looksLikeEnterpriseQuery) {
+        updatedState.requirements.businessProblem = trimmed;
+        updatedState.currentStage = 'features';
+      } else if (updatedState.currentStage === 'features' && looksLikeEnterpriseQuery) {
+        updatedState.requirements.keyFeatures = trimmed
+          .split(/,|\n| and /)
+          .map((f) => f.trim())
+          .filter(Boolean);
+        updatedState.currentStage = 'client_info';
+      } else if (updatedState.currentStage === 'client_info' && looksLikeEnterpriseQuery) {
+        const emailMatch = trimmed.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+        if (emailMatch) updatedState.client.email = emailMatch[0].toLowerCase();
+        const phoneMatch = trimmed.match(/(\+?\d[\d\s\-().]{6,}\d)/);
+        if (phoneMatch && !updatedState.client.phone) {
+          updatedState.client.phone = phoneMatch[1].trim();
+        }
+        const nameExplicit = trimmed.match(/(?:my name is|i am|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/);
+        if (nameExplicit && !updatedState.client.fullName) {
+          updatedState.client.fullName = nameExplicit[1].trim();
+        }
+        const companyExplicit = trimmed.match(/(?:company is|organization is|from|at)\s+([A-Za-z0-9&.,'\-\s]{2,60})/i);
+        if (companyExplicit && !updatedState.client.companyName && !companyExplicit[1].includes('@')) {
+          updatedState.client.companyName = companyExplicit[1].split(/[,\n]/)[0].trim();
+        }
+        updatedState.currentStage = 'brief_ready';
       }
-      const nameExplicit = trimmed.match(/(?:my name is|i am|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/);
-      if (nameExplicit && !updatedState.client.fullName) {
-        updatedState.client.fullName = nameExplicit[1].trim();
-      }
-      const companyExplicit = trimmed.match(/(?:company is|organization is|from|at)\s+([A-Za-z0-9&.,'\-\s]{2,60})/i);
-      if (companyExplicit && !updatedState.client.companyName && !companyExplicit[1].includes('@')) {
-        updatedState.client.companyName = companyExplicit[1].split(/[,\n]/)[0].trim();
-      }
-      updatedState.currentStage = 'brief_ready';
     }
 
     try {
@@ -348,11 +363,13 @@ export const aiConsultantService = {
           sessionId: activeChatSessionId,
           userMessage: trimmed.slice(0, 1500),
           stateContext: {
-            category: updatedState.requirements.category,
-            businessProblem: updatedState.requirements.businessProblem,
+            category: updatedState.requirements.category || undefined,
+            businessProblem: updatedState.requirements.businessProblem || undefined,
             currentStage: updatedState.currentStage,
+            preferredName: updatedState.client.fullName || undefined,
+            preferredLanguage: language,
           },
-          conversationHistory: conversationHistory.slice(-8).map((m) => ({
+          conversationHistory: conversationHistory.slice(-12).map((m) => ({
             sender: m.sender,
             text: m.text.slice(0, 1200),
           })),
@@ -364,6 +381,14 @@ export const aiConsultantService = {
         const data = await response.json();
         if (typeof data.sessionId === 'string' && data.sessionId.trim()) {
           activeChatSessionId = data.sessionId.trim();
+        }
+        if (data.memory?.preferredName && !updatedState.client.fullName) {
+          updatedState.client.fullName = String(data.memory.preferredName);
+        }
+        if (data.detectedIntent === 'subject_change') {
+          updatedState.requirements.category = '';
+          updatedState.requirements.businessProblem = '';
+          updatedState.currentStage = 'welcome';
         }
         const recommendedIds: string[] = Array.isArray(data.recommendedServiceIds)
           ? data.recommendedServiceIds
@@ -378,6 +403,12 @@ export const aiConsultantService = {
           updatedState.currentStage = 'brief_ready';
         }
 
+        const quickReplies = Array.isArray(data.quickReplies)
+          ? data.quickReplies
+          : recommendedIds.length > 0
+          ? ['Review Project Brief', 'Request an Enterprise Consultation']
+          : [];
+
         return {
           aiMessage: {
             id: msgId,
@@ -387,9 +418,7 @@ export const aiConsultantService = {
             recommendedServiceIds: recommendedIds,
             resourceLinks: Array.isArray(data.resourceLinks) ? data.resourceLinks : undefined,
             suggestedAction: data.suggestedAction,
-            quickReplies: Array.isArray(data.quickReplies)
-              ? data.quickReplies
-              : ['Review Project Brief', 'Request an Enterprise Consultation'],
+            quickReplies,
           },
           updatedState,
           toolEvents,
@@ -397,7 +426,7 @@ export const aiConsultantService = {
         };
       }
     } catch (err) {
-      console.warn('[DESTRIA] Falling back to local corporate solutions engine:', err);
+      console.warn('[DESTRIA] Falling back to local conversational engine:', err);
     }
 
     // Offline Commercial Policy Guardrail
@@ -422,12 +451,47 @@ export const aiConsultantService = {
       };
     }
 
-    const localMatches = matchCatalogLocally(
-      `${trimmed} ${updatedState.requirements.category} ${updatedState.requirements.businessProblem}`,
-      3
-    );
+    // Natural offline handling for greetings, personal AI questions, and casual chat
+    if (/^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|kamusta|kumusta|hola|bonjour)\b/i.test(lower)) {
+      return {
+        aiMessage: {
+          id: msgId,
+          sender: 'ai',
+          text: `Hi! I'm the AI assistant for ${corporateIdentity.legalName}. Feel free to chat casually, ask a question, or explore technology solutions—what's on your mind?`,
+          timestamp: now,
+          quickReplies: [],
+        },
+        updatedState,
+        sessionId: activeChatSessionId,
+      };
+    }
+    if (/\b(how\s+are\s+you|are\s+you\s+married|how\s+old\s+are\s+you|where\s+do\s+you\s+live|are\s+you\s+(?:a\s+)?(?:real\s+person|human)|do\s+you\s+have\s+children|what\s+is\s+your\s+name)\b/i.test(lower)) {
+      const personalText = /\bhow\s+are\s+you\b/i.test(lower)
+        ? `I'm doing great, thanks for asking! How's your day going, and how can I help?`
+        : /\bname\b/i.test(lower)
+        ? `I'm the AI assistant for ${corporateIdentity.legalName}—you can just call me your DESTRIA AI assistant. What can I help you with today?`
+        : `I'm an AI assistant for ${corporateIdentity.legalName}, so I don't have personal human traits like an age, home, or family—but I'm always happy to chat or help with whatever you're curious about!`;
+      return {
+        aiMessage: {
+          id: msgId,
+          sender: 'ai',
+          text: personalText,
+          timestamp: now,
+          quickReplies: [],
+        },
+        updatedState,
+        sessionId: activeChatSessionId,
+      };
+    }
 
-    if (updatedState.currentStage === 'brief_ready') {
+    const localMatches = looksLikeEnterpriseQuery
+      ? matchCatalogLocally(
+          `${trimmed} ${updatedState.requirements.category} ${updatedState.requirements.businessProblem}`,
+          3
+        )
+      : [];
+
+    if (updatedState.currentStage === 'brief_ready' && looksLikeEnterpriseQuery) {
       updatedState.generatedBrief = synthesizeBriefFromState(
         updatedState,
         localMatches.map((m) => m.id)
@@ -448,26 +512,45 @@ export const aiConsultantService = {
       };
     }
 
-    const matchText =
-      localMatches.length > 0
-        ? `Aligned customized enterprise solution frameworks from ${corporateIdentity.legalName}:\n${localMatches
-            .map((m) => `• ${m.title} — ${formatCatalogEngagement(m).primaryLabel} (${formatCatalogEngagement(m).secondaryLabel})`)
-            .join('\n')}\n\nTo prepare for a formal technical assessment, what target timeline and enterprise integrations does your organization require?`
-        : `Thank you for contacting ${corporateIdentity.legalName}. To prepare a customized solution assessment across our 10 technology divisions, please share your operational objectives, target users, and required integrations. You may also reach us directly at ${corporateIdentity.contact.telephone.display} or ${corporateIdentity.contact.email}.`;
+    if (localMatches.length > 0) {
+      const matchText = `Aligned customized enterprise solution frameworks from ${corporateIdentity.legalName}:\n${localMatches
+        .map((m) => `• ${m.title} — ${formatCatalogEngagement(m).primaryLabel} (${formatCatalogEngagement(m).secondaryLabel})`)
+        .join('\n')}\n\nWould you like to discuss any of these in more detail or coordinate a technical consultation?`;
+
+      return {
+        aiMessage: {
+          id: msgId,
+          sender: 'ai',
+          text: matchText,
+          timestamp: now,
+          stage: 'recommendation',
+          recommendedServiceIds: localMatches.map((m) => m.id),
+          quickReplies: [
+            'Review Project Brief',
+            'Request an Enterprise Consultation',
+            'Direct Solutions Contact',
+          ],
+        },
+        updatedState,
+        sessionId: activeChatSessionId,
+      };
+    }
+
+    const recoveryText = language.startsWith('fil')
+      ? 'Paumanhin, naputol saglit ang koneksyon. Pwede mo bang ulitin ang huling bahagi?'
+      : language.startsWith('es')
+      ? 'Disculpa, la conexión se interrumpió un momento. ¿Podrías repetir la última parte?'
+      : language.startsWith('fr')
+      ? 'Désolé, la connexion a été interrompue un instant. Pourriez-vous répéter la dernière partie ?'
+      : 'Sorry, the connection dropped for a moment. Could you repeat the last part?';
 
     return {
       aiMessage: {
         id: msgId,
         sender: 'ai',
-        text: matchText,
+        text: recoveryText,
         timestamp: now,
-        stage: 'recommendation',
-        recommendedServiceIds: localMatches.map((m) => m.id),
-        quickReplies: [
-          'Review Project Brief',
-          'Request an Enterprise Consultation',
-          'Direct Solutions Contact',
-        ],
+        quickReplies: [],
       },
       updatedState,
       sessionId: activeChatSessionId,

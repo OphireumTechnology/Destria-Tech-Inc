@@ -114,12 +114,18 @@ function buildLiveSystemInstruction(
   multilingualEnabled: boolean,
   history?: Array<{ sender: 'user' | 'ai'; text: string }>
 ): string {
-  const isFilipino = language.startsWith('fil');
+  const langLabel = language.startsWith('fil')
+    ? 'natural Filipino or Taglish (matching the speaker)'
+    : language.startsWith('es')
+    ? 'natural, warm Spanish'
+    : language.startsWith('fr')
+    ? 'natural, warm French'
+    : 'clear, warm, natural English (or automatically matching whatever language the user speaks)';
   const recentTurns = Array.isArray(history)
     ? history
-        .slice(-10)
+        .slice(-12)
         .filter((h) => h && typeof h.text === 'string' && h.text.trim())
-        .map((h) => `${h.sender === 'user' ? 'Client' : 'Consultant'}: ${h.text.slice(0, 320)}`)
+        .map((h) => `${h.sender === 'user' ? 'User' : 'Assistant'}: ${h.text.slice(0, 320)}`)
         .join('\n')
     : '';
 
@@ -131,24 +137,21 @@ ${buildCompactCorporateGrounding()}
 OFFICIAL 10-CATEGORY ENTERPRISE TECHNOLOGY DIVISIONS (CUSTOMIZED SOLUTIONS — ZERO PUBLIC PRICING):
 ${CATALOG_DIVISION_SUMMARIES.map((d) => `${Number(d.number)}. ${d.label}`).join(', ')}.
 
-REAL-TIME EXECUTIVE VOICE CONSULTATION & SPEECH UNDERSTANDING DIRECTIVES:
-- You are an AI Corporate Solutions Consultant for DESTRIA TECH INC (always transparently identify as an AI consultant, never a human executive or corporate signatory).
-- Speak in a warm, composed, welcoming, authoritative female executive tone in ${
-    isFilipino
-      ? 'natural respectful Filipino/Taglish as appropriate'
-      : 'clear neutral American English'
-  }.
+REAL-TIME NATURAL VOICE CONVERSATION DIRECTIVES:
+- You are the helpful, intelligent AI voice assistant for DESTRIA TECH INC (always transparently identify as an AI assistant—never claim to be human, never invent human family/life stories, and never act as an authorized corporate signatory).
+- Speak naturally, warmly, and clearly in ${langLabel}, adapting your tone and length to match the user effortlessly.
 - ${
     multilingualEnabled
-      ? 'Accurately understand natural English, Filipino-accented English, international accents, and English/Filipino (Taglish) code-switching without losing technical intent.'
-      : 'Prioritize clear English technical comprehension.'
+      ? 'Automatically understand and respond naturally in English, Filipino, Taglish, Spanish, French, and other spoken languages, including mid-conversation language switches without resetting conversation memory.'
+      : 'Prioritize clear English comprehension.'
   }
-- Handle incomplete thoughts, multi-clause requirements, technical terms (ERP, CRM, Kubernetes, RAG, Solidity, ISO 27001, Ophireum), follow-up references, and user corrections smoothly without restarting discovery or re-asking details the client already provided.
-- If the client audio is unclear, muffled, or ambiguous, politely ask for brief clarification instead of guessing or fabricating facts.
-- Use your authorized tools to retrieve corporate facts, search/recommend catalog solutions, record requirements, validate client details, check REAL appointment availability, and prepare consultation requests or service inquiries.
-- CRITICAL CONFIRMATION RULE: NEVER call submit_consultation_request or submit_service_inquiry without FIRST calling prepare_consultation_request / prepare_service_inquiry, reading the exact summary back to the client, and receiving explicit client verbal or UI confirmation.
-- Keep spoken replies concise and conversational (2 to 4 clear sentences), without markdown formatting, asterisks, or bullet symbols.
-${recentTurns ? `\nPRIOR CONVERSATION CONTEXT:\n${recentTurns}` : ''}`;
+- Engage warmly in casual conversation, honest personal questions about yourself as an AI, general knowledge, and technology discussions WITHOUT forcing the conversation into corporate sales scripts or consultation requests.
+- Only discuss DESTRIA TECH INC services, corporate resources, or consultations—and ONLY invoke enterprise tools—when relevant to what the user asks.
+- Handle incomplete thoughts, interruptions (barge-in), follow-up references, subject changes, and user corrections smoothly without restarting or re-asking details already shared.
+- If the user's audio is unclear, muffled, or ambiguous, politely ask for brief clarification instead of guessing or fabricating facts.
+- CRITICAL CONFIRMATION RULE: NEVER call submit_consultation_request or submit_service_inquiry without FIRST calling prepare_consultation_request / prepare_service_inquiry, reading the exact summary back, and receiving explicit client verbal or UI confirmation.
+- Keep spoken replies concise, conversational, and easy to interrupt (typically 1 to 3 clear spoken sentences), with zero markdown, zero bullets, zero asterisks, and zero system labels.
+${recentTurns ? `\nPRIOR CONVERSATION MEMORY:\n${recentTurns}` : ''}`;
 }
 
 function sendJsonSafe(ws: WebSocket, payload: Record<string, unknown>) {
@@ -382,9 +385,10 @@ export function attachVoiceLiveBridge(
         }
         activeModel = settings.geminiLiveModel;
         activeVoice = settings.geminiVoiceName;
+        const requestedLang = typeof parsed.language === 'string' ? parsed.language.trim() : '';
         activeLanguage =
-          parsed.language === 'fil-PH' || parsed.language === 'en-US'
-            ? parsed.language
+          /^(?:en-US|fil-PH|es-ES|fr-FR|de-DE|ja-JP|ko-KR|zh-CN)$/.test(requestedLang)
+            ? (requestedLang as typeof activeLanguage)
             : settings.defaultLanguage;
 
         const isExtendedThinking = activeModel === 'gemini-3.8-live-extended-thinking';

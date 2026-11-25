@@ -182,6 +182,11 @@ export function sanitizeChatInput(raw: unknown):
         executivePreference?: 'ceo' | 'cto' | 'advisory';
         presentedOptions?: string[];
         keyFeatures?: string[];
+        preferredName?: string;
+        preferredLanguage?: string;
+        previousQuestions?: string[];
+        discussedTopics?: string[];
+        userPreferences?: string[];
       };
     }
   | { ok: false; error: string } {
@@ -233,6 +238,27 @@ export function sanitizeChatInput(raw: unknown):
         .slice(0, 10)
     : undefined;
 
+  const previousQuestions = Array.isArray(rawState.previousQuestions)
+    ? rawState.previousQuestions
+        .map((item) => sanitizeText(item, 220))
+        .filter(Boolean)
+        .slice(0, 10)
+    : undefined;
+
+  const discussedTopics = Array.isArray(rawState.discussedTopics)
+    ? rawState.discussedTopics
+        .map((item) => sanitizeText(item, 100))
+        .filter(Boolean)
+        .slice(0, 8)
+    : undefined;
+
+  const userPreferences = Array.isArray(rawState.userPreferences)
+    ? rawState.userPreferences
+        .map((item) => sanitizeText(item, 100))
+        .filter(Boolean)
+        .slice(0, 6)
+    : undefined;
+
   return {
     ok: true,
     sessionId,
@@ -247,6 +273,11 @@ export function sanitizeChatInput(raw: unknown):
       executivePreference,
       presentedOptions,
       keyFeatures,
+      preferredName: sanitizeText(rawState.preferredName, 80) || undefined,
+      preferredLanguage: sanitizeText(rawState.preferredLanguage, 16) || undefined,
+      previousQuestions,
+      discussedTopics,
+      userPreferences,
     },
   };
 }

@@ -17,7 +17,7 @@
     "verify:routing:dist": "node scripts/verify-clean-routing.mjs --dist",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:unit": "node --import tsx --test tests/corporate-profile.test.ts tests/corporate-resources.test.ts tests/corporate-identity-regression.test.ts tests/enterprise-routing.test.ts tests/portal-login-modernization.test.ts tests/voice-continuous-conversation.test.ts",
-    "test:integration": "node --import tsx --test tests/gemini-live-upgrade.test.ts tests/client-portal.test.ts tests/dual-recipient-notifications.test.ts tests/deployment-integration.test.ts tests/enterprise-stabilization.test.ts tests/phase1-stabilization.test.ts tests/master-enterprise-repair.test.ts",
+    "test:integration": "node --import tsx --test tests/natural-conversational-ai.test.ts tests/gemini-live-upgrade.test.ts tests/client-portal.test.ts tests/dual-recipient-notifications.test.ts tests/deployment-integration.test.ts tests/enterprise-stabilization.test.ts tests/phase1-stabilization.test.ts tests/master-enterprise-repair.test.ts",
     "test:security": "node --import tsx --test tests/security-hardening-regression.test.ts tests/corporate-governance-regression.test.ts tests/gemini-live-upgrade.test.ts"
   },
   "dependencies": {
