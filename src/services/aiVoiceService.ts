@@ -202,6 +202,8 @@ export class AIVoiceService {
   private recognitionRestartTimeout: ReturnType<typeof setTimeout> | null = null;
   private idleTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private playbackWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  // Resolve awaited audio playback when interruption or session cleanup cancels its callbacks.
+  private pendingPlaybackCancel: (() => void) | null = null;
   private speechKeepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private bargeInHighSince: number | null = null;
@@ -1218,9 +1220,16 @@ export class AIVoiceService {
 
       return await new Promise<boolean>((resolve) => {
         let finished = false;
+        const cancelPendingPlayback = () => {
+          if (finished) return;
+          finished = true;
+          resolve(false);
+        };
+        this.pendingPlaybackCancel = cancelPendingPlayback;
         const finishOnce = () => {
           if (finished) return;
           finished = true;
+          if (this.pendingPlaybackCancel === cancelPendingPlayback) this.pendingPlaybackCancel = null;
           this.clearPlaybackWatchdog();
           if (this.currentBufferSource === source) {
             this.currentBufferSource = null;
@@ -1276,9 +1285,16 @@ export class AIVoiceService {
 
       return await new Promise<boolean>((resolve) => {
         let settled = false;
+        const cancelPendingPlayback = () => {
+          if (settled) return;
+          settled = true;
+          resolve(false);
+        };
+        this.pendingPlaybackCancel = cancelPendingPlayback;
         const settle = (ok: boolean) => {
           if (settled) return;
           settled = true;
+          if (this.pendingPlaybackCancel === cancelPendingPlayback) this.pendingPlaybackCancel = null;
           this.clearPlaybackWatchdog();
           if (this.currentAudio === audio) {
             this.currentAudio = null;
@@ -1329,9 +1345,16 @@ export class AIVoiceService {
 
     return await new Promise<boolean>((resolve) => {
       let settled = false;
+      const cancelPendingPlayback = () => {
+        if (settled) return;
+        settled = true;
+        resolve(false);
+      };
+      this.pendingPlaybackCancel = cancelPendingPlayback;
       const finishOnce = (ok: boolean) => {
         if (settled) return;
         settled = true;
+        if (this.pendingPlaybackCancel === cancelPendingPlayback) this.pendingPlaybackCancel = null;
         this.clearPlaybackWatchdog();
         if (this.speechKeepAliveTimer) {
           clearInterval(this.speechKeepAliveTimer);
@@ -1475,6 +1498,11 @@ export class AIVoiceService {
   }
 
   private clearPlaybackResources() {
+    // A canceled playback must settle its awaiting promise. Detaching onend/onerror
+    // and clearing the watchdog without settlement otherwise wedges an interrupted session.
+    const cancelPendingPlayback = this.pendingPlaybackCancel;
+    this.pendingPlaybackCancel = null;
+    cancelPendingPlayback?.();
     this.clearPlaybackWatchdog();
     if (this.speechKeepAliveTimer) {
       clearInterval(this.speechKeepAliveTimer);
