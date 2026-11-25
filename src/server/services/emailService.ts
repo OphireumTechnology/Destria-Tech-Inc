@@ -60,6 +60,7 @@ export class ResendEmailTransport implements EmailTransport {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
+        signal: AbortSignal.timeout(15000),
         body: JSON.stringify({
           from: this.fromAddress,
           to: [message.to],
@@ -78,10 +79,8 @@ export class ResendEmailTransport implements EmailTransport {
         };
       }
 
-      return {
-        status: 'sent',
-        providerReference: body.id || `resend_${Date.now()}`,
-      };
+      if (!body.id) return { status: 'failed', error: 'Provider response missing message ID.' };
+      return { status: 'sent', providerReference: body.id };
     } catch (err: any) {
       return {
         status: 'failed',
@@ -156,6 +155,12 @@ function renderEmailShell(title: string, badge: string, bodyHtml: string): strin
 </html>`;
 }
 
+function notificationRecipients(value: string | undefined, fallback: string): string[] {
+  const recipients = [...new Set((value || fallback).split(',').map(v => v.trim().toLowerCase()).filter(Boolean))];
+  if (!recipients.length || recipients.some(v => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))) throw new Error('Invalid notification recipient configuration');
+  return recipients;
+}
+
 export class TransactionalEmailService {
   private readonly adminInbox: string;
 
@@ -196,6 +201,7 @@ export class TransactionalEmailService {
       subject: params.subject,
       htmlBody: params.htmlBody,
       textBody: params.textBody,
+      metadata: params.replyTo ? { replyTo: params.replyTo } : undefined,
     });
 
     if (record.status === 'sent') {
@@ -361,18 +367,19 @@ export class TransactionalEmailService {
       correlationId,
     });
 
-    const adminStatus = await this.enqueueAndDispatch({
-      dedupeKey: `sol:${request.referenceCode}:admin`,
+    const adminResults = await Promise.allSettled(notificationRecipients(process.env.SERVICE_INQUIRY_RECIPIENTS, this.adminInbox).map(recipient => this.enqueueAndDispatch({
+      dedupeKey: `sol:${request.referenceCode}:admin:${recipient}`,
       entityType: 'solution_request',
       entityReference: request.referenceCode,
-      recipientEmail: this.adminInbox,
+      recipientEmail: recipient,
       notificationType: 'admin_alert',
       subject: `[NEW ENTERPRISE INQUIRY] ${request.referenceCode} — ${request.company}`,
       htmlBody: adminHtml,
       textBody: adminText,
       replyTo: request.email,
       correlationId,
-    });
+    })));
+    const adminStatus = adminResults.every(r => r.status === 'fulfilled' && r.value === 'sent') ? 'sent' : adminResults.every(r => r.status === 'fulfilled' && r.value === 'unconfigured') ? 'unconfigured' : 'failed';
 
     const overallStatus =
       customerStatus === 'sent' && adminStatus === 'sent'
@@ -470,18 +477,19 @@ export class TransactionalEmailService {
       correlationId,
     });
 
-    const adminStatus = await this.enqueueAndDispatch({
-      dedupeKey: `apt:${appointment.referenceCode}:admin:${dedupeSuffix}`,
+    const adminResults = await Promise.allSettled(notificationRecipients(process.env.EXECUTIVE_CONSULTATION_RECIPIENTS, this.adminInbox).map(recipient => this.enqueueAndDispatch({
+      dedupeKey: `apt:${appointment.referenceCode}:admin:${dedupeSuffix}:${recipient}`,
       entityType: 'appointment',
       entityReference: appointment.referenceCode,
-      recipientEmail: this.adminInbox,
+      recipientEmail: recipient,
       notificationType: 'admin_alert',
       subject: `[CONSULTATION ${kind.toUpperCase()}] ${appointment.referenceCode} — ${appointment.scheduledDate} ${appointment.scheduledTimeSlot}`,
       htmlBody: adminHtml,
       textBody: adminText,
       replyTo: appointment.email,
       correlationId,
-    });
+    })));
+    const adminStatus = adminResults.every(r => r.status === 'fulfilled' && r.value === 'sent') ? 'sent' : adminResults.every(r => r.status === 'fulfilled' && r.value === 'unconfigured') ? 'unconfigured' : 'failed';
 
     return { customerStatus, adminStatus };
   }
@@ -497,6 +505,7 @@ export class TransactionalEmailService {
         subject: item.subject,
         html: item.htmlBody,
         text: item.textBody,
+        replyTo: typeof item.metadata?.replyTo === 'string' ? item.metadata.replyTo : undefined,
       });
 
       const attempts = item.deliveryAttempts + 1;
