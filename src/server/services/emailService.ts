@@ -1181,7 +1181,12 @@ export class TransactionalEmailService {
       return { matched: false };
     }
 
-    const eventTs = payload.created_at || new Date().toISOString();
+    const parsedEventTime = Date.parse(payload.created_at || '');
+    const eventTs = Number.isFinite(parsedEventTime) ? new Date(parsedEventTime).toISOString() : new Date().toISOString();
+    // A delayed notification must never downgrade a confirmed delivery.
+    if (existing.status === 'delivered' && (eventType === 'email.delivered' || eventType === 'email.delivery_delayed')) {
+      return { matched: true, status: existing.status, outboxId: existing.id };
+    }
 
     if (eventType === 'email.delivered') {
       await this.db.updateOutboxStatus(existing.id, {
