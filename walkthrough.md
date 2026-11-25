@@ -30,7 +30,7 @@ All repairs were validated locally through TypeScript static checking, productio
    - Authored non-destructive additive migration `supabase/migrations/003_enterprise_portal_stabilization.sql` and implemented real parameterized Supabase queries + private Storage in `src/server/portal/supabasePortalRepository.ts`.
    - Wired real transactional email templates (with clean `https://destriatech.com/portal/...` links) into registration, verification resend, password recovery, password change, and email change flows.
 4. **Executive Consultations & Neural Voice Integrity:**
-   - Added distinct CEO (`Desmond Hines`) vs. CTO consultation pathways and updated the default scheduling timezone to `America/Denver`.
+   - Added distinct CEO (`Desmond Hinds`) vs. CTO consultation pathways and updated the default scheduling timezone to `America/Denver`.
    - Upgraded `@google/genai` to `^3.6.1`, fixed WAV double-header wrapping in `/api/voice/speak`, and added real Web Audio `AnalyserNode` output metering in `src/services/aiVoiceService.ts`.
 5. **Automated Test & Build Results:**
    - `npm run lint` (`tsc --noEmit`): Passed (0 errors).

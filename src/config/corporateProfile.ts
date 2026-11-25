@@ -11,6 +11,7 @@
  */
 
 import { CANONICAL_ORIGIN } from './routes';
+import { executiveLeadership } from '../data/companyConfig';
 
 const rawBaseUrl =
   typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL
@@ -60,7 +61,7 @@ export const CORPORATE_PROFILE_HIGHLIGHTS: readonly CorporateProfileHighlight[] 
     number: '06',
     title: 'Executive Leadership',
     summary:
-      'Corporate leadership structure led by Founder & Chief Executive Officer Desmond Hines and Chief Technology Officer Leodenis Languisan.',
+      `Corporate leadership structure led by ${executiveLeadership.founderAndCEO.title} ${executiveLeadership.founderAndCEO.fullName} and ${executiveLeadership.chiefTechnologyOfficer.title} ${executiveLeadership.chiefTechnologyOfficer.fullName}.`,
   },
   {
     number: '07',
@@ -147,7 +148,7 @@ export const corporateProfile = {
     "Explore DESTRIA TECH INC's corporate identity, executive leadership, enterprise technology capabilities, strategic objectives, governance framework and commitment to responsible digital transformation.",
   pageCount: 17,
   /** Exact verified byte size of the approved 17-page Corporate Profile PDF */
-  verifiedFileSizeBytes: 6689421 as number | null,
+  verifiedFileSizeBytes: 6990179 as number | null,
   pagePath: '/corporate-profile',
   documentPath: '/documents/destria-tech-inc-corporate-profile.pdf',
   coverPath: '/branding/corporate-profile-cover.webp',

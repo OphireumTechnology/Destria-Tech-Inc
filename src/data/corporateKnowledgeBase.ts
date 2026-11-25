@@ -1,5 +1,6 @@
 import {
   corporateIdentity,
+  executiveLeadership,
   CORPORATE_SERVICE_STATEMENT,
   COMMERCIAL_ENGAGEMENT_STATEMENT,
   LEGAL_GOVERNANCE_STATEMENTS,
@@ -27,7 +28,7 @@ import {
  * fabricated certifications, unverified client claims, or public pricing.
  */
 
-export const CORPORATE_KNOWLEDGE_VERSION = '2026.11.26-enterprise-v2';
+export const CORPORATE_KNOWLEDGE_VERSION = '2026.11.26-enterprise-v3';
 
 export type KnowledgeDomainId =
   | 'corporate_identity'
@@ -98,27 +99,27 @@ export const CORPORATE_KNOWLEDGE_BASE: readonly CorporateKnowledgeEntry[] = [
   {
     id: 'kb-executive-leadership',
     domain: 'executive_leadership',
-    title: 'Executive Leadership — Founder & CEO and Co-Founder & CTO',
+    title: 'Executive Leadership — Founder & CEO and Chief Technology Officer',
     keywords: [
       'ceo',
       'cto',
       'founder',
-      'co-founder',
       'leadership',
       'executives',
       'management',
       'desmond',
-      'desmond hines',
+      'desmond hinds',
+      'hinds',
       'leodenis',
       'leodenis languisan',
       'who runs',
       'owner',
     ],
     summary:
-      'DESTRIA TECH INC is led by Founder & Chief Executive Officer Desmond Hines and Co-Founder & Chief Technology Officer Leodenis Languisan.',
+      `DESTRIA TECH INC is led by ${executiveLeadership.founderAndCEO.title} ${executiveLeadership.founderAndCEO.fullName} and ${executiveLeadership.chiefTechnologyOfficer.title} ${executiveLeadership.chiefTechnologyOfficer.fullName}.`,
     facts: [
-      `Founder & Chief Executive Officer: ${corporateIdentity.leadership.ceo.name} (${corporateIdentity.leadership.ceo.title}) — executive strategy, institutional partnerships, and governance.`,
-      `Co-Founder & Chief Technology Officer: ${corporateIdentity.leadership.cto.name} (${corporateIdentity.leadership.cto.title}) — enterprise systems architecture, AI engineering, cloud security, and technical delivery.`,
+      `${executiveLeadership.founderAndCEO.title}: ${executiveLeadership.founderAndCEO.fullName} — executive strategy, institutional partnerships, and governance.`,
+      `${executiveLeadership.chiefTechnologyOfficer.title}: ${executiveLeadership.chiefTechnologyOfficer.fullName} — enterprise systems architecture, AI engineering, cloud security, and technical delivery.`,
       'Prospective clients can request a CEO Strategic Consultation, CTO Technical Architecture Consultation, or Solutions Architecture Team Advisory session.',
     ],
     canonicalLinks: ['https://destriatech.com/corporate-profile', 'https://destriatech.com/consultation'],
@@ -456,7 +457,7 @@ export const CORPORATE_KNOWLEDGE_BASE: readonly CorporateKnowledgeEntry[] = [
       'Prospective clients can initiate a Service Inquiry or schedule an Executive Consultation (CEO Strategic, CTO Technical, or Solutions Architecture Team) through the website or with explicit confirmation through the AI Consultant.',
     facts: [
       'Consultation Page: https://destriatech.com/consultation',
-      'Available Pathways: Executive Strategy Consultation (CEO Desmond Hines), Technical Architecture Consultation (CTO Leodenis Languisan), or Enterprise Solutions Advisory.',
+      `Available Pathways: Executive Strategy Consultation (CEO ${executiveLeadership.founderAndCEO.fullName}), Technical Architecture Consultation (CTO ${executiveLeadership.chiefTechnologyOfficer.fullName}), or Enterprise Solutions Advisory.`,
       'Consultation Formats: Video Conference, Telephone Call, or Executive Briefing by prior arrangement.',
       'Every verified submission requires explicit client confirmation and is routed automatically to DESTRIA TECH INC authorized leadership and advisory desks.',
       'When live calendar confirmation is pending, requests are honestly registered as Pending Scheduling Confirmation rather than falsely marked confirmed.',

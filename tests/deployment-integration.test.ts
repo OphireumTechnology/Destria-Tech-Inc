@@ -269,7 +269,7 @@ test('Backend CORS allows authorized Destria origins, blocks legacy/unauthorized
     {
       id: 'adm-deploy-1',
       email: 'executive@destriatech.com',
-      fullName: 'Desmond Hines',
+      fullName: 'Desmond Hinds',
       role: 'super_admin',
       isActive: true,
     },

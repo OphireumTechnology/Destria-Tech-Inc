@@ -22,16 +22,21 @@ const ZOOM_LEVELS = [75, 100, 125, 150] as const;
 
 /**
  * Lazy-loaded embedded PDF preview modal for official DESTRIA TECH INC corporate resources.
- * Loaded strictly on-demand when a visitor initiates an inline preview so the main page
- * bundle and initial network payload stay lean.
+ * Styled in Deep Navy (#0B1F3B) and Graphite (#111827) to match the modernized Corporate
+ * Resources section, with keyboard dismissal, loading indicator, zoom/page controls, and
+ * accessible fallback controls when inline PDF rendering is unsupported.
  */
 export const ResourcePdfModal: React.FC<ResourcePdfModalProps> = ({ resource, onClose }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [zoomPercent, setZoomPercent] = useState<number>(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLoadingViewer, setIsLoadingViewer] = useState(true);
 
   useEffect(() => {
+    closeButtonRef.current?.focus();
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
@@ -48,6 +53,15 @@ export const ResourcePdfModal: React.FC<ResourcePdfModalProps> = ({ resource, on
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, [onClose]);
+
+  useEffect(() => {
+    setIsLoadingViewer(true);
+    // Some browsers do not fire `onLoad` on PDF <object> elements; clear overlay gracefully
+    const timer = window.setTimeout(() => {
+      setIsLoadingViewer(false);
+    }, 1100);
+    return () => window.clearTimeout(timer);
+  }, [resource.id, currentPage, zoomPercent]);
 
   const handleToggleFullscreen = async () => {
     const el = containerRef.current;
@@ -80,15 +94,21 @@ export const ResourcePdfModal: React.FC<ResourcePdfModalProps> = ({ resource, on
       role="dialog"
       aria-modal="true"
       aria-labelledby="resource-pdf-modal-title"
-      className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-5 bg-[#0B1F3B]/85 backdrop-blur-sm"
+      className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-5 bg-[#0B1F3B]/90 backdrop-blur-md"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
       <div
         ref={containerRef}
-        className="w-full max-w-6xl h-[92vh] bg-white text-[#111827] rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col"
+        className="w-full max-w-6xl h-[92vh] bg-[#111827] text-[#F3F4F6] rounded-2xl border border-slate-700/80 shadow-2xl overflow-hidden flex flex-col"
       >
+        {/* Top Gold-Cyan Accent Hairline */}
+        <div
+          aria-hidden="true"
+          className="h-[2px] w-full bg-gradient-to-r from-[#D4AF37] via-[#00C2C7] to-[#0EA5E9] shrink-0"
+        />
+
         {/* Modal Header */}
         <div className="px-4 sm:px-6 py-3.5 bg-[#0B1F3B] text-white border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
@@ -101,7 +121,7 @@ export const ResourcePdfModal: React.FC<ResourcePdfModalProps> = ({ resource, on
             >
               {resource.title}
             </h3>
-            <p className="text-[11px] font-mono text-slate-300 mt-0.5">
+            <p className="text-[11px] font-mono tabular-nums text-[#F3F4F6]/75 mt-0.5">
               {resource.format} · {resource.pageCount} Pages ·{' '}
               {formatResourceFileSize(resource.fileSizeBytes)}
             </p>
@@ -111,69 +131,70 @@ export const ResourcePdfModal: React.FC<ResourcePdfModalProps> = ({ resource, on
             <a
               href={resource.fileUrl}
               download={resource.downloadFilename}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#D4AF37] hover:bg-[#c59f2c] text-[#0B1F3B] text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#00C2C7] hover:bg-[#19d2d7] text-[#111827] text-xs font-bold transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Download PDF</span>
             </a>
             <a
               href={resource.fileUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-100 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#111827] hover:bg-slate-800 border border-slate-700 hover:border-[#00C2C7] text-[#F3F4F6] text-xs font-semibold transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
             >
-              <ExternalLink className="w-3.5 h-3.5 text-[#00C2C7]" />
-              <span className="hidden sm:inline">Open in New Tab</span>
+              <ExternalLink className="w-3.5 h-3.5 text-[#00C2C7]" aria-hidden="true" />
+              <span className="hidden sm:inline">View PDF</span>
             </a>
             <button
+              ref={closeButtonRef}
               type="button"
               onClick={onClose}
               aria-label="Close document preview"
-              className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
+              className="p-2 rounded-lg bg-[#111827] hover:bg-slate-800 border border-slate-700 hover:border-[#D4AF37] text-[#F3F4F6] hover:text-white cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         </div>
 
         {/* Viewer Controls Toolbar */}
-        <div className="px-4 sm:px-6 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="px-4 sm:px-6 py-2.5 bg-[#111827] border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage <= 1}
               aria-label="Previous page"
-              className="p-1.5 rounded-lg bg-white border border-slate-300 text-[#0B1F3B] hover:border-[#0B1F3B] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              className="p-1.5 rounded-lg bg-[#0B1F3B] border border-slate-700 text-[#F3F4F6] hover:border-[#00C2C7] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" aria-hidden="true" />
             </button>
-            <span className="font-mono text-slate-700">
-              Page <strong className="text-[#0B1F3B]">{currentPage}</strong> of {resource.pageCount}
+            <span className="font-mono tabular-nums text-[#F3F4F6]/85">
+              Page <strong className="text-white">{currentPage}</strong> of {resource.pageCount}
             </span>
             <button
               type="button"
               onClick={() => setCurrentPage((p) => Math.min(resource.pageCount, p + 1))}
               disabled={currentPage >= resource.pageCount}
               aria-label="Next page"
-              className="p-1.5 rounded-lg bg-white border border-slate-300 text-[#0B1F3B] hover:border-[#0B1F3B] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              className="p-1.5 rounded-lg bg-[#0B1F3B] border border-slate-700 text-[#F3F4F6] hover:border-[#00C2C7] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center rounded-lg bg-white border border-slate-300 overflow-hidden">
+            <div className="inline-flex items-center rounded-lg bg-[#0B1F3B] border border-slate-700 overflow-hidden">
               <button
                 type="button"
                 onClick={handleZoomOut}
                 disabled={zoomPercent <= ZOOM_LEVELS[0]}
                 aria-label="Zoom out"
-                className="p-1.5 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="p-1.5 text-[#F3F4F6] hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                <ZoomOut className="w-3.5 h-3.5" />
+                <ZoomOut className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
-              <span className="px-2 font-mono text-slate-800 min-w-[44px] text-center">
+              <span className="px-2 font-mono tabular-nums text-white min-w-[46px] text-center">
                 {zoomPercent}%
               </span>
               <button
@@ -181,9 +202,9 @@ export const ResourcePdfModal: React.FC<ResourcePdfModalProps> = ({ resource, on
                 onClick={handleZoomIn}
                 disabled={zoomPercent >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
                 aria-label="Zoom in"
-                className="p-1.5 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="p-1.5 text-[#F3F4F6] hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                <ZoomIn className="w-3.5 h-3.5" />
+                <ZoomIn className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </div>
 
@@ -191,34 +212,48 @@ export const ResourcePdfModal: React.FC<ResourcePdfModalProps> = ({ resource, on
               type="button"
               onClick={handleToggleFullscreen}
               aria-label={isFullscreen ? 'Exit fullscreen' : 'View fullscreen'}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-800 hover:border-[#0B1F3B] cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0B1F3B] border border-slate-700 text-[#F3F4F6] hover:border-[#00C2C7] cursor-pointer transition-colors"
             >
               {isFullscreen ? (
-                <Minimize2 className="w-3.5 h-3.5 text-[#0B1F3B]" />
+                <Minimize2 className="w-3.5 h-3.5 text-[#00C2C7]" aria-hidden="true" />
               ) : (
-                <Maximize2 className="w-3.5 h-3.5 text-[#0B1F3B]" />
+                <Maximize2 className="w-3.5 h-3.5 text-[#00C2C7]" aria-hidden="true" />
               )}
               <span className="hidden sm:inline">{isFullscreen ? 'Exit' : 'Fullscreen'}</span>
             </button>
           </div>
         </div>
 
-        {/* Embedded PDF Object with Accessible Fallback */}
-        <div className="flex-1 bg-slate-100 overflow-hidden relative">
+        {/* Embedded PDF Object with Loading State & Accessible Fallback */}
+        <div className="flex-1 bg-[#081529] overflow-hidden relative">
+          {isLoadingViewer && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#081529]/80"
+            >
+              <div className="px-5 py-3 rounded-xl bg-[#0B1F3B] border border-slate-700 text-[#F3F4F6] text-xs font-mono flex items-center gap-3 shadow-lg">
+                <div className="w-4 h-4 rounded-full border-2 border-[#00C2C7] border-t-transparent animate-spin motion-reduce:animate-none" />
+                <span>Loading PDF document...</span>
+              </div>
+            </div>
+          )}
+
           <object
             key={`${resource.id}-${currentPage}-${zoomPercent}`}
             data={pdfViewerSrc}
             type="application/pdf"
             aria-label={`${resource.title} PDF Preview`}
+            onLoad={() => setIsLoadingViewer(false)}
             className="w-full h-full block"
           >
-            <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4 bg-white">
-              <FileText className="w-10 h-10 text-[#0B1F3B]" />
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4 bg-[#111827]">
+              <FileText className="w-10 h-10 text-[#D4AF37]" aria-hidden="true" />
               <div className="max-w-md space-y-2">
-                <h4 className="text-base font-bold text-[#0B1F3B]">
+                <h4 className="text-base font-bold text-white">
                   Direct Document Access
                 </h4>
-                <p className="text-sm text-slate-600 leading-relaxed">
+                <p className="text-sm text-[#F3F4F6]/80 leading-relaxed">
                   Your browser does not render embedded PDFs inline. Open the official{' '}
                   {resource.pageCount}-page PDF in a new tab or download it directly below.
                 </p>
@@ -227,18 +262,18 @@ export const ResourcePdfModal: React.FC<ResourcePdfModalProps> = ({ resource, on
                 <a
                   href={resource.fileUrl}
                   download={resource.downloadFilename}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#0B1F3B] hover:bg-[#112c52] text-white text-xs font-bold transition-colors"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#00C2C7] hover:bg-[#19d2d7] text-[#111827] text-xs font-bold transition-colors"
                 >
-                  <Download className="w-4 h-4 text-[#D4AF37]" />
+                  <Download className="w-4 h-4" aria-hidden="true" />
                   <span>Download PDF</span>
                 </a>
                 <a
                   href={resource.fileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-300 hover:border-[#0B1F3B] text-[#0B1F3B] text-xs font-semibold transition-colors"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#0B1F3B] border border-slate-600 hover:border-[#00C2C7] text-white text-xs font-semibold transition-colors"
                 >
-                  <ExternalLink className="w-4 h-4 text-[#00C2C7]" />
+                  <ExternalLink className="w-4 h-4 text-[#00C2C7]" aria-hidden="true" />
                   <span>View PDF in New Tab</span>
                 </a>
               </div>

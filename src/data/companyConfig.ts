@@ -8,18 +8,31 @@
 
 import { BRAND_ASSETS } from './brandAssets';
 
+export const executiveLeadership = {
+  founderAndCEO: {
+    fullName: 'Desmond Hinds',
+    title: 'Founder & Chief Executive Officer',
+    organization: 'DESTRIA TECH INC',
+  },
+  chiefTechnologyOfficer: {
+    fullName: 'Leodenis Languisan',
+    title: 'Chief Technology Officer',
+    organization: 'DESTRIA TECH INC',
+  },
+} as const;
+
 export const corporateIdentity = {
   legalName: 'DESTRIA TECH INC',
   networkName: 'DESTRIA NETWORK',
   abbreviation: 'DTI',
   leadership: {
     ceo: {
-      name: 'Desmond Hines',
-      title: 'Founder & Chief Executive Officer',
+      name: executiveLeadership.founderAndCEO.fullName,
+      title: executiveLeadership.founderAndCEO.title,
     },
     cto: {
-      name: 'Leodenis Languisan',
-      title: 'Co-Founder & Chief Technology Officer',
+      name: executiveLeadership.chiefTechnologyOfficer.fullName,
+      title: executiveLeadership.chiefTechnologyOfficer.title,
     },
   },
   jurisdiction: 'Wyoming, United States of America',
@@ -395,8 +408,8 @@ export const COMPANY_CONFIG = {
     lightSilverBg: '#F3F4F6',
     metallicGold: '#D4AF37',
     deepNavy: '#0B1F3B',
-    techBlue: '#1D4ED8',
-    emeraldTeal: '#0F766E',
+    techBlue: '#0EA5E9',
+    emeraldTeal: '#10B981',
     pureWhite: '#FFFFFF',
   },
 

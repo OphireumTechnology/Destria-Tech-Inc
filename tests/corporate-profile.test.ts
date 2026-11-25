@@ -70,7 +70,7 @@ describe('DESTRIA TECH INC — Official Corporate Profile Integration Suite', ()
     assert.equal(formatCorporateProfileFileSize(2 * 1024 * 1024), '2.00 MB');
     assert.equal(formatCorporateProfileFileSize(850 * 1024), '850 KB');
     assert.equal(formatCorporateProfileFileSize(null), null);
-    assert.equal(getCorporateProfileMetaSummary(), 'PDF Document | 17 Pages | 6.38 MB | Free Download');
+    assert.equal(getCorporateProfileMetaSummary(), 'PDF Document | 17 Pages | 6.67 MB | Free Download');
     assert.equal(
       getCorporateProfileMetaSummary(3.5 * 1024 * 1024),
       'PDF Document | 17 Pages | 3.50 MB | Free Download'

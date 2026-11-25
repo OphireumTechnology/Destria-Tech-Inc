@@ -32,6 +32,6 @@
    - Register a real test client, verify real inbox receipt of verification and password reset emails (confirming clean `https://destriatech.com/portal/...` links), reset password, and confirm prior sessions revoke.
    - Upload valid and spoofed files to private Supabase Storage and verify signed download expiration and quarantine metadata.
    - Conduct live Gemini neural TTS listening test and verify real audio level visualization.
-   - Verify CEO (Desmond Hines) and CTO consultation bookings in `America/Denver` timezone.
+   - Verify CEO (Desmond Hinds) and CTO consultation bookings in `America/Denver` timezone.
    - Inspect all public and portal views across `320px`, `375px`, `768px`, `1024px`, `1440px`, and `2560px` viewports.
 5. Obtain written Owner approval and schedule production cutover with rollback runbook on standby.

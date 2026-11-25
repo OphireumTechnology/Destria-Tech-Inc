@@ -467,7 +467,7 @@ test('4. File upload magic-byte spoofing rejection & quarantine metadata integri
   }
 });
 
-test('5. Executive Consultation pathways route distinctly to CEO (Desmond Hines) vs CTO and default to America/Denver', async () => {
+test('5. Executive Consultation pathways route distinctly to CEO (Desmond Hinds) vs CTO and default to America/Denver', async () => {
   const db = new EnterpriseTestDb();
   const srv = await startServer({
     db,

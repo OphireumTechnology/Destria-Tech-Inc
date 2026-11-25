@@ -115,7 +115,7 @@ describe('DESTRIA TECH INC — Corporate Resources & Services Brochure Integrati
     assert.equal(SERVICES_BROCHURE_RESOURCE.format, 'PDF');
     assert.equal(SERVICES_BROCHURE_RESOURCE.isPublished, true);
     assert.equal(formatResourceFileSize(SERVICES_BROCHURE_RESOURCE.fileSizeBytes), '2.76 MB');
-    assert.equal(formatResourceFileSize(CORPORATE_PROFILE_RESOURCE.fileSizeBytes), '6.38 MB');
+    assert.equal(formatResourceFileSize(CORPORATE_PROFILE_RESOURCE.fileSizeBytes), '6.67 MB');
 
     // Accessible HTML summaries cover all 9 service divisions + executive overview/approach/comms
     assert.ok(SERVICES_BROCHURE_PAGE_SUMMARIES.length >= 11);

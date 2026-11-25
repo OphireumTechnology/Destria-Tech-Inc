@@ -17,8 +17,8 @@ OFFICIAL CORPORATE INFORMATION:
 - Legal Entity Name: DESTRIA TECH INC
 - Network Brand: DESTRIA NETWORK
 - Abbreviation: DTI
-- Founder & Chief Executive Officer: ${corporateIdentity.leadership.ceo.name}
-- Co-Founder & Chief Technology Officer: ${corporateIdentity.leadership.cto.name}
+- ${corporateIdentity.leadership.ceo.title}: ${corporateIdentity.leadership.ceo.name}
+- ${corporateIdentity.leadership.cto.title}: ${corporateIdentity.leadership.cto.name}
 - Entity Classification: Corporation, as represented in corporate materials
 - Jurisdiction of Registration: ${corporateIdentity.jurisdiction}
 - Official Corporate Headquarters Address: ${corporateIdentity.headquarters.fullAddress}
@@ -60,12 +60,12 @@ export const APPROVED_AI_RESPONSES = {
   telephone:
     'You may reach DESTRIA TECH INC via our official corporate telephone number at +1 (307) 419-4277, or by email at info@destriatech.com.',
 
-  ceo: `${corporateIdentity.leadership.ceo.name} is the Founder and Chief Executive Officer of ${corporateIdentity.legalName}.`,
+  ceo: `${corporateIdentity.leadership.ceo.name} is the ${corporateIdentity.leadership.ceo.title} of ${corporateIdentity.legalName}.`,
 
-  cto: `${corporateIdentity.leadership.cto.name} is the Co-Founder and Chief Technology Officer of ${corporateIdentity.legalName}.`,
+  cto: `${corporateIdentity.leadership.cto.name} is the ${corporateIdentity.leadership.cto.title} of ${corporateIdentity.legalName}.`,
 
   corporateProfile:
-    'The official 17-page DESTRIA TECH INC Corporate Profile covers our executive leadership (Founder & CEO Desmond Hines and Co-Founder & CTO Leodenis Languisan), corporate vision and mission, seven core values, 10 strategic objectives, 8-layer modular enterprise technology architecture, 15-stage engagement framework, and governance standards. You may view or download it at https://destriatech.com/corporate-profile or browse all official publications at https://destriatech.com/resources.',
+    `The official 17-page DESTRIA TECH INC Corporate Profile covers our executive leadership (${corporateIdentity.leadership.ceo.title} ${corporateIdentity.leadership.ceo.name} and ${corporateIdentity.leadership.cto.title} ${corporateIdentity.leadership.cto.name}), corporate vision and mission, seven core values, 10 strategic objectives, 8-layer modular enterprise technology architecture, 15-stage engagement framework, and governance standards. You may view or download it at https://destriatech.com/corporate-profile or browse all official publications at https://destriatech.com/resources.`,
 
   servicesBrochure:
     'You may view or download our official 8-page Corporate Summary and Enterprise Technology Services brochure directly at https://destriatech.com/resources/destria-tech-line-of-services.pdf, or explore all official DESTRIA TECH INC publications at https://destriatech.com/resources. The brochure details all nine enterprise technology service divisions, our customized consultation-first approach, and official corporate communications.',
@@ -252,7 +252,7 @@ export function classifyCommercialPolicyIntent(userMessage: string): PolicyClass
 
   // 7. Executive Leadership Inquiries (CEO & CTO)
   const asksCeo =
-    /\b(ceo|chief\s+executive|founder|desmond\s+hines)\b/i.test(normalized) &&
+    /\b(ceo|chief\s+executive|founder|desmond\s+hinds|desmond\s+hines|desmond)\b/i.test(normalized) &&
     !/\b(cto|chief\s+technology|leodenis)\b/i.test(normalized);
   if (asksCeo) {
     return {
@@ -490,6 +490,8 @@ export function sanitizeConversationHistory(
  */
 export function formatTextForVoiceSpeech(text: string): string {
   return text
+    // Enforce canonical CEO surname in spoken delivery
+    .replace(/\bDesmond\s+Hines\b/gi, corporateIdentity.leadership.ceo.name)
     // Strip markdown formatting while keeping readable text
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')

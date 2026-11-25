@@ -208,7 +208,7 @@ export const CORPORATE_PROFILE_RESOURCE: CorporateResource = {
   downloadFilename: 'DESTRIA-TECH-INC-Corporate-Profile.pdf',
   format: 'PDF',
   pageCount: 17,
-  fileSizeBytes: 6689421,
+  fileSizeBytes: 6990179,
   isPublished: true,
   canonicalFileUrl: `${CANONICAL_ORIGIN}/documents/destria-tech-inc-corporate-profile.pdf`,
   documentPath: '/documents/destria-tech-inc-corporate-profile.pdf',
@@ -217,9 +217,14 @@ export const CORPORATE_PROFILE_RESOURCE: CorporateResource = {
   coverAltText:
     'Cover preview of the official 17-page DESTRIA TECH INC Corporate Profile PDF document',
   highlights: [
-    'Executive Leadership, Vision, Mission & 7 Core Values',
-    '8-Layer Modular Enterprise Technology Architecture',
-    '15-Stage Engagement, Security & Responsible AI Governance',
+    'Corporate identity and executive leadership',
+    'Corporate vision, mission and core values',
+    'Enterprise technology architecture',
+    'Corporate governance framework',
+    'Enterprise engagement lifecycle',
+    'Information security and data protection',
+    'Responsible artificial intelligence governance',
+    'Corporate strategic objectives',
   ],
 };
 
@@ -243,9 +248,14 @@ export const SERVICES_BROCHURE_RESOURCE: CorporateResource = {
   coverAltText:
     'Cover preview of the official 8-page DESTRIA TECH INC Corporate Summary and Enterprise Technology Services PDF brochure',
   highlights: [
-    'All 9 Enterprise Technology Service Divisions',
-    'AI Agents, Blockchain, Custom Software, Automation & Cloud Security',
-    'Corporate Approach, Consultation Commitment & Official Contact Channels',
+    'Enterprise technology service divisions',
+    'Artificial intelligence and AI agents',
+    'Blockchain and Web3 development',
+    'Enterprise software engineering',
+    'Automation and intelligent business systems',
+    'Cloud computing and cybersecurity',
+    'Corporate engagement approach',
+    'Official consultation channels',
   ],
 };
 
@@ -258,7 +268,7 @@ export const CORPORATE_RESOURCES_SECTION_COPY = {
   eyebrow: 'Official Corporate Publications',
   heading: 'Corporate Resources',
   description:
-    'Access official corporate documentation, enterprise service summaries and capability overviews from DESTRIA TECH INC.',
+    'Access official corporate documentation, enterprise technology service summaries, corporate governance information and digital transformation capabilities from DESTRIA TECH INC.',
   seoTitle: 'Corporate Resources & Services Brochure | DESTRIA TECH INC',
   seoDescription:
     'Access and download official DESTRIA TECH INC corporate resources, including our 8-page Corporate Summary and Enterprise Technology Services brochure and 17-page Corporate Profile PDF.',

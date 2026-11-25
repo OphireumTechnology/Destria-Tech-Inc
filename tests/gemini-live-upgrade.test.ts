@@ -167,7 +167,7 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
       { label: 'Mobile companion apps', utterance: 'Do you develop iOS and Android enterprise mobile apps with offline sync?', expectMatch: /mobile|iOS|Android|application|software/i },
       { label: 'Corporate profile PDF', utterance: 'Where can I download your official Corporate Profile PDF?', expectMatch: /Corporate Profile|17-page|PDF|destriatech\.com/i },
       { label: 'Services brochure PDF', utterance: 'Can you share the 8-page Line of Services brochure?', expectMatch: /Corporate Summary|Services|brochure|8-page|resources/i },
-      { label: 'CEO identity', utterance: 'Who is the founder and CEO of Destria Tech Inc?', expectMatch: /Desmond Hines/i },
+      { label: 'CEO identity', utterance: 'Who is the founder and CEO of Destria Tech Inc?', expectMatch: /Desmond Hinds/i },
       { label: 'CTO identity', utterance: 'Who serves as the Chief Technology Officer?', expectMatch: /Leodenis Languisan/i },
       { label: 'Headquarters address', utterance: 'Where is your corporate headquarters located?', expectMatch: /Sheridan|Wyoming|30 N Gould/i },
       { label: 'Official telephone', utterance: 'What is your official corporate phone number?', expectMatch: /307.*419.*4277/i },
@@ -346,7 +346,7 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
         validate: (r) =>
           r.detectedIntent.executivePreference === 'ceo' &&
           r.detectedIntent.isBookingIntent === false &&
-          /Desmond Hines|CEO|Chief Executive/i.test(r.replyText),
+          /Desmond Hinds|CEO|Chief Executive/i.test(r.replyText),
       },
       {
         label: 'Pricing follow-up inside active discovery',
@@ -476,7 +476,7 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
       topic: 'corporate headquarters and executive leadership',
     });
     assert.equal(t1.ok, true);
-    assert.match(JSON.stringify(t1.data), /Desmond Hines|Leodenis Languisan|Sheridan/i);
+    assert.match(JSON.stringify(t1.data), /Desmond Hinds|Leodenis Languisan|Sheridan/i);
 
     // Tool 2: get_corporate_profile
     const t2 = await aiToolsExecutor.executeTool(sessionId, 'get_corporate_profile', {
