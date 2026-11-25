@@ -961,7 +961,7 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
           language: 'en-US',
         }),
       });
-      assert.equal(fbRes.status, 200);
+      assert.equal(fbRes.status, 201);
 
       const overviewAfter = await (
         await fetch(`${baseUrl}/api/admin/ai/overview`, {
