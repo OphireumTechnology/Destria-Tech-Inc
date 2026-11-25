@@ -64,11 +64,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
       </div>
 
       {/* Main Navigation Bar — Desktop Height 88px */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[88px] flex items-center justify-between gap-4">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-[88px] flex items-center justify-between gap-4">
         {/* Zone 1: Official Corporate Emblem & Exact Brand Name */}
         <button
           onClick={() => handleNavClick('hero')}
-          className="flex items-center gap-3.5 sm:gap-4 group text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7] shrink-0"
+          className="flex items-center gap-2 sm:gap-4 min-w-0 group text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2C7]"
           aria-label={`${COMPANY_CONFIG.name} Homepage`}
         >
           <BrandLogo
@@ -81,7 +81,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
           />
 
           <div className="flex flex-col justify-center">
-            <span className="text-[15px] sm:text-[17px] font-bold tracking-wide text-white uppercase group-hover:text-[#00C2C7] transition-colors leading-tight">
+            <span className="text-[13px] sm:text-[17px] font-bold tracking-wide text-white uppercase group-hover:text-[#00C2C7] transition-colors leading-tight">
               {corporateIdentity.legalName}
             </span>
             <span className="text-[10px] sm:text-[10.5px] font-medium tracking-widest text-[#00C2C7] uppercase mt-0.5 font-mono">
@@ -91,7 +91,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
         </button>
 
         {/* Zone 2: Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-6 xl:gap-7 text-[13.5px] font-medium text-slate-300">
+        <nav className="hidden 2xl:flex items-center gap-4 text-[13.5px] font-medium text-slate-300">
           {navItems.map((item) => {
             const isActive = activeSection === item.id;
             return (
@@ -112,7 +112,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
         </nav>
 
         {/* Zone 3: Direct Telephone & Primary Action Buttons */}
-        <div className="hidden sm:flex items-center gap-2.5 shrink-0">
+        <div className="hidden xl:flex items-center gap-2.5 shrink-0">
           <a
             href={corporateIdentity.contact.telephone.href}
             className="hidden md:inline-flex xl:hidden items-center gap-1.5 px-3 py-2 text-[12px] font-mono font-semibold text-[#00C2C7] hover:text-white border border-slate-700/80 hover:border-[#00C2C7]/50 rounded-lg bg-[#081529] transition-colors whitespace-nowrap"
@@ -140,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
         </div>
 
         {/* Mobile Hamburger & Direct Call Button */}
-        <div className="flex lg:hidden items-center gap-2">
+        <div className="flex 2xl:hidden items-center gap-2 shrink-0">
           <a
             href={corporateIdentity.contact.telephone.href}
             className="p-2 text-[#00C2C7] bg-slate-900 rounded-lg border border-slate-800 sm:hidden"
@@ -152,6 +152,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="p-2.5 text-slate-300 hover:text-white focus:outline-none cursor-pointer rounded-lg bg-slate-900 border border-slate-800"
             aria-label="Toggle navigation menu"
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? <X className="w-5 h-5 text-[#00C2C7]" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -160,7 +161,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-[#0B1F3B] border-b border-slate-800 px-5 pt-3 pb-6 space-y-4 shadow-2xl">
+        <div className="2xl:hidden max-h-[calc(100dvh-88px)] overflow-y-auto bg-[#0B1F3B] border-b border-slate-800 px-5 pt-3 pb-6 space-y-4 shadow-2xl">
           <div className="p-3.5 rounded-lg bg-[#111827]/90 border border-slate-800 space-y-1.5 text-xs">
             <div className="text-slate-200 font-semibold">
               {corporateIdentity.legalName}{' '}
