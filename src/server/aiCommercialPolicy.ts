@@ -65,7 +65,7 @@ export const APPROVED_AI_RESPONSES = {
   cto: `${corporateIdentity.leadership.cto.name} is the Co-Founder and Chief Technology Officer of ${corporateIdentity.legalName}.`,
 
   corporateProfile:
-    'The official 17-page DESTRIA TECH INC Corporate Profile covers our executive leadership (Founder & CEO Desmond Hines and Co-Founder & CTO Leodenis Languisan), corporate vision and mission, seven core values, 10 strategic objectives, 8-layer modular enterprise technology architecture, 15-stage engagement framework, and governance standards. You may view or download it at https://destriatech.com/corporate-profile or browse all official publications at https://destriatech.com/resources.',
+    'The official 17-page DESTRIA TECH INC Corporate Profile covers our executive leadership (Founder & CEO Desmond Hinds and Co-Founder & CTO Leodenis Languisan), corporate vision and mission, seven core values, 10 strategic objectives, 8-layer modular enterprise technology architecture, 15-stage engagement framework, and governance standards. You may view or download it at https://destriatech.com/corporate-profile or browse all official publications at https://destriatech.com/resources.',
 
   servicesBrochure:
     'You may view or download our official 8-page Corporate Summary and Enterprise Technology Services brochure directly at https://destriatech.com/resources/destria-tech-line-of-services.pdf, or explore all official DESTRIA TECH INC publications at https://destriatech.com/resources. The brochure details all nine enterprise technology service divisions, our customized consultation-first approach, and official corporate communications.',
@@ -252,7 +252,7 @@ export function classifyCommercialPolicyIntent(userMessage: string): PolicyClass
 
   // 7. Executive Leadership Inquiries (CEO & CTO)
   const asksCeo =
-    /\b(ceo|chief\s+executive|founder|desmond\s+hines)\b/i.test(normalized) &&
+    /\b(ceo|chief\s+executive|founder|desmond\s+hinds)\b/i.test(normalized) &&
     !/\b(cto|chief\s+technology|leodenis)\b/i.test(normalized);
   if (asksCeo) {
     return {
