@@ -6,6 +6,10 @@ import {
   corporateIdentity,
   COMMERCIAL_ENGAGEMENT_STATEMENT,
 } from '../data/companyConfig';
+import {
+  CORPORATE_PROFILE_RESOURCE,
+  SERVICES_BROCHURE_RESOURCE,
+} from '../data/corporateResources';
 import { ROUTES } from '../config/routes';
 import { BrandLogo } from './BrandLogo';
 
@@ -102,56 +106,94 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenPortal, onOpen
             </div>
           </div>
 
-          {/* Quick Links (Cols 8-9) */}
-          <div className="lg:col-span-2 space-y-3">
-            <h4 className="text-xs font-mono uppercase text-white tracking-wider">Navigation</h4>
-            <ul className="space-y-2 text-xs">
-              <li>
-                <Link
-                  to={ROUTES.HOME}
-                  onClick={() => onNavigate('hero')}
-                  className="hover:text-white transition-colors cursor-pointer"
-                >
-                  Homepage
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to={ROUTES.ABOUT}
-                  onClick={() => onNavigate('about')}
-                  className="hover:text-white transition-colors cursor-pointer"
-                >
-                  About &amp; Governance
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to={ROUTES.SOLUTIONS}
-                  onClick={() => onNavigate('services')}
-                  className="hover:text-white transition-colors cursor-pointer"
-                >
-                  Technology Solutions
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to={ROUTES.PORTFOLIO}
-                  onClick={() => onNavigate('portfolio')}
-                  className="hover:text-white transition-colors cursor-pointer"
-                >
-                  Portfolio Showcases
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to={ROUTES.CONSULTATION}
-                  onClick={() => onNavigate('contact')}
-                  className="hover:text-white transition-colors cursor-pointer"
-                >
-                  Request a Consultation
-                </Link>
-              </li>
-            </ul>
+          {/* Quick Links & Corporate Resources (Cols 8-9) */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="space-y-3">
+              <h4 className="text-xs font-mono uppercase text-white tracking-wider">Navigation</h4>
+              <ul className="space-y-2 text-xs">
+                <li>
+                  <Link
+                    to={ROUTES.HOME}
+                    onClick={() => onNavigate('hero')}
+                    className="hover:text-white transition-colors cursor-pointer"
+                  >
+                    Homepage
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to={ROUTES.ABOUT}
+                    onClick={() => onNavigate('about')}
+                    className="hover:text-white transition-colors cursor-pointer"
+                  >
+                    About &amp; Governance
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to={ROUTES.SOLUTIONS}
+                    onClick={() => onNavigate('services')}
+                    className="hover:text-white transition-colors cursor-pointer"
+                  >
+                    Technology Solutions
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to={ROUTES.PORTFOLIO}
+                    onClick={() => onNavigate('portfolio')}
+                    className="hover:text-white transition-colors cursor-pointer"
+                  >
+                    Portfolio Showcases
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to={ROUTES.CONSULTATION}
+                    onClick={() => onNavigate('contact')}
+                    className="hover:text-white transition-colors cursor-pointer"
+                  >
+                    Request a Consultation
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div className="space-y-2.5 pt-4 border-t border-slate-800/80">
+              <h4 className="text-xs font-mono uppercase text-[#D4AF37] tracking-wider">
+                Corporate Resources
+              </h4>
+              <ul className="space-y-2 text-xs">
+                <li>
+                  <Link
+                    to={ROUTES.CORPORATE_PROFILE}
+                    className="hover:text-[#00C2C7] transition-colors cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span>Corporate Profile</span>
+                    <ArrowUpRight className="w-3 h-3 text-[#D4AF37]" />
+                  </Link>
+                </li>
+                <li>
+                  <a
+                    href={SERVICES_BROCHURE_RESOURCE.fileUrl}
+                    download={SERVICES_BROCHURE_RESOURCE.downloadFilename}
+                    className="hover:text-[#00C2C7] transition-colors cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span>Services &amp; Capabilities</span>
+                    <ArrowUpRight className="w-3 h-3 text-[#D4AF37]" />
+                  </a>
+                </li>
+                <li>
+                  <Link
+                    to={ROUTES.RESOURCES}
+                    className="hover:text-[#00C2C7] transition-colors cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span>Download Center</span>
+                    <ArrowUpRight className="w-3 h-3 text-[#00C2C7]" />
+                  </Link>
+                </li>
+              </ul>
+            </div>
           </div>
 
           {/* Enterprise Network & Legal Governance Links (Cols 10-12) */}
@@ -171,11 +213,21 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenPortal, onOpen
               </li>
               <li>
                 <a
-                  href={COMPANY_CONFIG.corporateProfilePdfUrl}
-                  download="DESTRIA-TECH-INC-Corporate-Profile.pdf"
+                  href={CORPORATE_PROFILE_RESOURCE.fileUrl}
+                  download={CORPORATE_PROFILE_RESOURCE.downloadFilename}
                   className="hover:text-[#00C2C7] transition-colors cursor-pointer flex items-center gap-1"
                 >
                   <span>Official Corporate Profile (PDF)</span>
+                  <ArrowUpRight className="w-3 h-3 text-[#D4AF37]" />
+                </a>
+              </li>
+              <li>
+                <a
+                  href={SERVICES_BROCHURE_RESOURCE.fileUrl}
+                  download={SERVICES_BROCHURE_RESOURCE.downloadFilename}
+                  className="hover:text-[#00C2C7] transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <span>Services &amp; Capabilities Brochure (PDF)</span>
                   <ArrowUpRight className="w-3 h-3 text-[#D4AF37]" />
                 </a>
               </li>

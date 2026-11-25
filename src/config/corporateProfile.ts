@@ -146,8 +146,8 @@ export const corporateProfile = {
   description:
     "Explore DESTRIA TECH INC's corporate identity, executive leadership, enterprise technology capabilities, strategic objectives, governance framework and commitment to responsible digital transformation.",
   pageCount: 17,
-  /** Exact verified byte size of the approved PDF once attached & validated (null until verified) */
-  verifiedFileSizeBytes: null as number | null,
+  /** Exact verified byte size of the approved 17-page Corporate Profile PDF */
+  verifiedFileSizeBytes: 6689421 as number | null,
   pagePath: '/corporate-profile',
   documentPath: '/documents/destria-tech-inc-corporate-profile.pdf',
   coverPath: '/branding/corporate-profile-cover.webp',

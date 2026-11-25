@@ -580,8 +580,8 @@ test('Scenario 1-6, 15, 16, 20: Real GitHub Pages static-hosting HTTP simulation
     await new Promise<void>((resolve) => staticServer.close(() => resolve()));
   }
 
-  // Verify manifest counts match expected implementation scope
-  assert.equal(PUBLIC_STATIC_ROUTES.length, 7);
+  // Verify manifest counts match expected implementation scope (including /corporate-profile and /resources)
+  assert.equal(PUBLIC_STATIC_ROUTES.length, 9);
   assert.equal(GOVERNANCE_STATIC_ROUTES.length, 11);
   assert.equal(PORTAL_STATIC_ROUTES.length, 27);
   assert.equal(PORTAL_DYNAMIC_PREFIXES.length, 3);

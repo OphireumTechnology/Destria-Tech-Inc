@@ -7,6 +7,7 @@ import { CorporateProfileSection } from './components/CorporateProfileSection';
 import { ServicesSection } from './components/ServicesSection';
 import { PortfolioSection } from './components/PortfolioSection';
 import { EnterpriseSuiteSection } from './components/EnterpriseSuiteSection';
+import { CorporateResourcesSection } from './components/CorporateResourcesSection';
 import { ContactSection } from './components/ContactSection';
 import { EnterpriseModal } from './components/EnterpriseModal';
 import { LegalGovernanceModal } from './components/LegalGovernanceModal';
@@ -29,6 +30,7 @@ import {
 } from './config/routes';
 
 const CorporateProfilePage = lazy(() => import('./components/CorporateProfilePage'));
+const ResourcesPage = lazy(() => import('./components/ResourcesPage'));
 const ClientPortalApp = lazy(() => import('./portal/ClientPortalApp'));
 const AdminPortalApp = lazy(() => import('./admin/AdminPortalApp'));
 
@@ -131,7 +133,7 @@ const PublicCorporateView: React.FC<{
   // Update active nav highlight on scroll
   useEffect(() => {
     const handleScroll = () => {
-      const sections = ['hero', 'about', 'services', 'portfolio', 'architecture', 'contact'];
+      const sections = ['hero', 'about', 'services', 'portfolio', 'architecture', 'resources', 'contact'];
       const scrollY = window.scrollY;
 
       for (const section of sections) {
@@ -242,6 +244,9 @@ const PublicCorporateView: React.FC<{
           onOpenPortalTab={handleOpenEnterpriseModal}
         />
 
+        {/* Corporate Resources & Downloadable Services Brochure */}
+        <CorporateResourcesSection />
+
         {/* Enterprise Consultation & Service Inquiry Form */}
         <ContactSection
           selectedServiceId={selectedServiceIdForInquiry}
@@ -306,8 +311,20 @@ export default function App() {
           }
         />
 
+        {/* Dedicated Corporate Resources & Download Center Page (Clean Permanent Public URL) */}
+        <Route
+          path={ROUTES.RESOURCES}
+          element={
+            <Suspense fallback={<RouteLoaderFallback label="Loading DESTRIA TECH INC Corporate Resources..." />}>
+              <ResourcesPage />
+            </Suspense>
+          }
+        />
+
         {/* Public Corporate Website Canonical Clean Routes */}
-        {PUBLIC_STATIC_ROUTES.filter((routePath) => routePath !== ROUTES.CORPORATE_PROFILE).map((routePath) => (
+        {PUBLIC_STATIC_ROUTES.filter(
+          (routePath) => routePath !== ROUTES.CORPORATE_PROFILE && routePath !== ROUTES.RESOURCES
+        ).map((routePath) => (
           <Route key={routePath} path={routePath} element={<PublicCorporateView />} />
         ))}
 

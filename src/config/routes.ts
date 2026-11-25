@@ -9,6 +9,7 @@ export const ROUTES = {
   HOME: '/',
   ABOUT: '/about',
   CORPORATE_PROFILE: '/corporate-profile',
+  RESOURCES: '/resources',
   SOLUTIONS: '/solutions',
   PORTFOLIO: '/portfolio',
   ENTERPRISE_SUITE: '/enterprise-suite',
@@ -72,6 +73,7 @@ export const PUBLIC_SECTION_ROUTE_MAP: Record<string, string> = {
   hero: ROUTES.HOME,
   about: ROUTES.ABOUT,
   'corporate-profile': ROUTES.CORPORATE_PROFILE,
+  resources: ROUTES.RESOURCES,
   services: ROUTES.SOLUTIONS,
   portfolio: ROUTES.PORTFOLIO,
   architecture: ROUTES.ENTERPRISE_SUITE,
@@ -524,6 +526,14 @@ export function getRouteSeoMeta(pathname: string): RouteSeoMeta {
           'View and download the official DESTRIA TECH INC Corporate Profile. Explore our enterprise technology solutions, corporate leadership, governance and digital innovation capabilities.',
         canonicalUrl: buildCanonicalPublicUrl(ROUTES.CORPORATE_PROFILE),
         ogImage: `${CANONICAL_ORIGIN}/branding/corporate-profile-cover.webp`,
+      };
+    case ROUTES.RESOURCES:
+      return {
+        title: 'Corporate Resources & Services Brochure | DESTRIA TECH INC',
+        description:
+          'Access and download official DESTRIA TECH INC corporate resources, including our 8-page Corporate Summary and Enterprise Technology Services brochure and 17-page Corporate Profile PDF.',
+        canonicalUrl: buildCanonicalPublicUrl(ROUTES.RESOURCES),
+        ogImage: `${CANONICAL_ORIGIN}/resources/thumbnails/destria-tech-line-of-services-cover.webp`,
       };
     case ROUTES.ABOUT:
       return {

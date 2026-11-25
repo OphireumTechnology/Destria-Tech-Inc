@@ -77,6 +77,42 @@ function buildRouteSpecificHtml(baseHtml, routePath, manifest) {
         /<meta\s+name="twitter:image"\s+content="[^"]*"\s*\/?>/i,
         `<meta name="twitter:image" content="${coverImageUrl}" />`
       );
+  } else if (routePath === '/resources') {
+    const resourcesTitle = 'Corporate Resources & Services Brochure | DESTRIA TECH INC';
+    const resourcesDesc =
+      'Access and download official DESTRIA TECH INC corporate resources, including our 8-page Corporate Summary and Enterprise Technology Services brochure and 17-page Corporate Profile PDF.';
+    const coverImageUrl = `${canonicalOrigin}/resources/thumbnails/destria-tech-line-of-services-cover.webp`;
+
+    html = html
+      .replace(/<title>[^<]*<\/title>/i, `<title>${resourcesTitle}</title>`)
+      .replace(
+        /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/i,
+        `<meta name="description" content="${resourcesDesc}" />`
+      )
+      .replace(
+        /<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/i,
+        `<meta property="og:title" content="${resourcesTitle}" />`
+      )
+      .replace(
+        /<meta\s+property="og:description"\s+content="[^"]*"\s*\/?>/i,
+        `<meta property="og:description" content="${resourcesDesc}" />`
+      )
+      .replace(
+        /<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/i,
+        `<meta property="og:image" content="${coverImageUrl}" />`
+      )
+      .replace(
+        /<meta\s+name="twitter:title"\s+content="[^"]*"\s*\/?>/i,
+        `<meta name="twitter:title" content="${resourcesTitle}" />`
+      )
+      .replace(
+        /<meta\s+name="twitter:description"\s+content="[^"]*"\s*\/?>/i,
+        `<meta name="twitter:description" content="${resourcesDesc}" />`
+      )
+      .replace(
+        /<meta\s+name="twitter:image"\s+content="[^"]*"\s*\/?>/i,
+        `<meta name="twitter:image" content="${coverImageUrl}" />`
+      );
   }
 
   if (isPrivateRoute && !/<meta\s+name="robots"/i.test(html)) {

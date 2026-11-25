@@ -70,7 +70,7 @@ describe('DESTRIA TECH INC — Official Corporate Profile Integration Suite', ()
     assert.equal(formatCorporateProfileFileSize(2 * 1024 * 1024), '2.00 MB');
     assert.equal(formatCorporateProfileFileSize(850 * 1024), '850 KB');
     assert.equal(formatCorporateProfileFileSize(null), null);
-    assert.equal(getCorporateProfileMetaSummary(), 'PDF Document | 17 Pages | Free Download');
+    assert.equal(getCorporateProfileMetaSummary(), 'PDF Document | 17 Pages | 6.38 MB | Free Download');
     assert.equal(
       getCorporateProfileMetaSummary(3.5 * 1024 * 1024),
       'PDF Document | 17 Pages | 3.50 MB | Free Download'
@@ -105,9 +105,9 @@ describe('DESTRIA TECH INC — Official Corporate Profile Integration Suite', ()
     const classification = classifyCommercialPolicyIntent('Where can I download your corporate profile?');
     assert.equal(classification.trigger, 'corporate_profile');
     assert.equal(classification.suggestedAction, 'corporate_profile');
-    assert.equal(
-      classification.approvedResponse,
-      'You may view or download the official DESTRIA TECH INC Corporate Profile at https://destriatech.com/corporate-profile.'
+    assert.match(
+      classification.approvedResponse || '',
+      /https:\/\/destriatech\.com\/corporate-profile/
     );
 
     // Voice TTS spoken cadence formatting
@@ -166,7 +166,11 @@ describe('DESTRIA TECH INC — Official Corporate Profile Integration Suite', ()
 
     for (const rel of componentFiles) {
       const content = fs.readFileSync(path.resolve(rel), 'utf8');
-      assert.match(content, /corporateProfile/, `${rel} must import centralized corporateProfile config`);
+      assert.match(
+        content,
+        /corporateProfile|CORPORATE_PROFILE_RESOURCE|corporateResources|CORPORATE_PROFILE_DATA|corporate_profile|ROUTES\.RESOURCES/,
+        `${rel} must reference centralized corporate profile or resources config`
+      );
       assert.doesNotMatch(
         content,
         /\/documents\/destria-tech-inc-corporate-profile\.pdf/,

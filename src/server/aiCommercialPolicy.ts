@@ -25,7 +25,9 @@ OFFICIAL CORPORATE INFORMATION:
 - Official Corporate Telephone: ${corporateIdentity.contact.telephone.display}
 - Official Corporate Email: info@destriatech.com
 - Official Website: https://destriatech.com/
-- Official 17-Page Corporate Profile PDF: Available for viewing and download on the About & Governance section of https://destriatech.com/
+- Official Corporate Resources Download Center: https://destriatech.com/resources
+- Official 8-Page Services Brochure ("Corporate Summary and Enterprise Technology Services", PDF): https://destriatech.com/resources/destria-tech-line-of-services.pdf
+- Official 17-Page Corporate Profile PDF: https://destriatech.com/documents/destria-tech-inc-corporate-profile.pdf (Dedicated page: https://destriatech.com/corporate-profile)
 - 8-Layer Enterprise Technology Architecture: 1. Digital Experience Layer, 2. Application Layer, 3. Artificial Intelligence Layer, 4. Integration Layer, 5. Data Layer, 6. Infrastructure Layer, 7. Security Layer, 8. Governance Layer.
 - Corporate Core Values: 6.1 Integrity and Accountability, 6.2 Technological Excellence, 6.3 Innovation and Adaptability, 6.4 Security and Confidentiality, 6.5 Client-Centered Engineering, 6.6 Responsible Artificial Intelligence, 6.7 Commercial Transparency.
 - Responsible AI Governance: AI assistants are NOT authorized corporate signatories; all final commercial proposals, contractual commitments, and approvals require authorized human review.
@@ -63,11 +65,51 @@ export const APPROVED_AI_RESPONSES = {
   cto: `${corporateIdentity.leadership.cto.name} is the Co-Founder and Chief Technology Officer of ${corporateIdentity.legalName}.`,
 
   corporateProfile:
-    'The official 17-page DESTRIA TECH INC Corporate Profile covers our executive leadership (Founder & CEO Desmond Hines and Co-Founder & CTO Leodenis Languisan), corporate vision and mission, seven core values, 10 strategic objectives, 8-layer modular enterprise technology architecture, 15-stage engagement framework, and governance standards. You may view or download the complete Corporate Profile PDF directly from the About & Governance section on destriatech.com.',
+    'The official 17-page DESTRIA TECH INC Corporate Profile covers our executive leadership (Founder & CEO Desmond Hines and Co-Founder & CTO Leodenis Languisan), corporate vision and mission, seven core values, 10 strategic objectives, 8-layer modular enterprise technology architecture, 15-stage engagement framework, and governance standards. You may view or download it at https://destriatech.com/corporate-profile or browse all official publications at https://destriatech.com/resources.',
+
+  servicesBrochure:
+    'You may view or download our official 8-page Corporate Summary and Enterprise Technology Services brochure directly at https://destriatech.com/resources/destria-tech-line-of-services.pdf, or explore all official DESTRIA TECH INC publications at https://destriatech.com/resources. The brochure details all nine enterprise technology service divisions, our customized consultation-first approach, and official corporate communications.',
+
+  corporateResources:
+    'DESTRIA TECH INC provides public access to our official executive publications at https://destriatech.com/resources — including our 8-page Corporate Summary and Enterprise Technology Services brochure (https://destriatech.com/resources/destria-tech-line-of-services.pdf) and our 17-page Official Corporate Profile (https://destriatech.com/corporate-profile). All services are customized following consultation and formal technical assessment.',
 
   consultation:
     'We would be glad to coordinate an initial consultation with DESTRIA TECH INC. Please share your name, organization, contact details, and a brief summary of your technology objectives, or reach our corporate team directly at +1 (307) 419-4277 or info@destriatech.com.',
 } as const;
+
+export interface CorporateResourceLink {
+  id: string;
+  title: string;
+  category: string;
+  fileUrl: string;
+  canonicalUrl: string;
+  downloadFilename: string;
+  pagePath: string;
+  pageCount: number;
+}
+
+export const VERIFIED_CORPORATE_RESOURCE_LINKS: readonly CorporateResourceLink[] = [
+  {
+    id: 'destria-line-of-services',
+    title: 'Corporate Summary and Enterprise Technology Services',
+    category: 'Corporate Services & Capabilities',
+    fileUrl: '/resources/destria-tech-line-of-services.pdf',
+    canonicalUrl: 'https://destriatech.com/resources/destria-tech-line-of-services.pdf',
+    downloadFilename: 'DESTRIA-TECH-INC-Corporate-Services-and-Capabilities.pdf',
+    pagePath: '/resources',
+    pageCount: 8,
+  },
+  {
+    id: 'destria-corporate-profile',
+    title: 'Official Corporate Profile',
+    category: 'Corporate Profile & Governance',
+    fileUrl: '/documents/destria-tech-inc-corporate-profile.pdf',
+    canonicalUrl: 'https://destriatech.com/documents/destria-tech-inc-corporate-profile.pdf',
+    downloadFilename: 'DESTRIA-TECH-INC-Corporate-Profile.pdf',
+    pagePath: '/corporate-profile',
+    pageCount: 17,
+  },
+] as const;
 
 export type CommercialPolicyTrigger =
   | 'prompt_injection_pricing'
@@ -81,6 +123,8 @@ export type CommercialPolicyTrigger =
   | 'ceo'
   | 'cto'
   | 'corporate_profile'
+  | 'services_brochure'
+  | 'corporate_resources'
   | 'consultation'
   | null;
 
@@ -88,8 +132,9 @@ export interface PolicyClassificationResult {
   trigger: CommercialPolicyTrigger;
   isPricingRestricted: boolean;
   approvedResponse: string | null;
-  suggestedAction: 'book_consultation' | 'talk_to_human' | 'none';
+  suggestedAction: 'book_consultation' | 'talk_to_human' | 'corporate_profile' | 'none';
   quickReplies: string[];
+  resourceLinks?: CorporateResourceLink[];
 }
 
 /**
@@ -273,18 +318,41 @@ export function classifyCommercialPolicyIntent(userMessage: string): PolicyClass
     };
   }
 
-  // 9b. Official Corporate Profile Document Inquiry
+  // 9b. Services Brochure, Service Catalog, Capabilities List & Corporate Presentation Inquiries
+  const asksServicesBrochure =
+    /\b(services?\s+brochure|corporate\s+brochure|service\s+catalog|services?\s+catalog|list\s+of\s+services|line\s+of\s+services|technology\s+capabilities|capabilities\s+brochure|capabilities\s+overview|corporate\s+presentation|company\s+deck|download\s+.*(brochure|catalog|services)|brochure)\b/i.test(
+      normalized
+    );
+  if (asksServicesBrochure) {
+    return {
+      trigger: 'services_brochure',
+      isPricingRestricted: false,
+      approvedResponse: APPROVED_AI_RESPONSES.servicesBrochure,
+      suggestedAction: 'corporate_profile',
+      quickReplies: ['Request an Enterprise Consultation', 'Explore Technology Solutions'],
+      resourceLinks: [...VERIFIED_CORPORATE_RESOURCE_LINKS],
+    };
+  }
+
+  // 9c. Official Corporate Profile & General Company Information / Resources Inquiry
   const asksCorporateProfile =
-    /\b(corporate\s+profile|company\s+profile|brochure|download\s+.*profile|pdf\s+profile)\b/i.test(
+    /\b(corporate\s+profile|company\s+profile|download\s+.*profile|pdf\s+profile|company\s+information|corporate\s+resources|download\s+center|company\s+overview|corporate\s+documentation)\b/i.test(
       normalized
     );
   if (asksCorporateProfile) {
+    const isGeneralResources =
+      /\b(corporate\s+resources|download\s+center|company\s+information|corporate\s+documentation|company\s+overview)\b/i.test(
+        normalized
+      );
     return {
-      trigger: 'corporate_profile',
+      trigger: isGeneralResources ? 'corporate_resources' : 'corporate_profile',
       isPricingRestricted: false,
-      approvedResponse: APPROVED_AI_RESPONSES.corporateProfile,
-      suggestedAction: 'none',
+      approvedResponse: isGeneralResources
+        ? APPROVED_AI_RESPONSES.corporateResources
+        : APPROVED_AI_RESPONSES.corporateProfile,
+      suggestedAction: 'corporate_profile',
       quickReplies: ['Explore Technology Solutions', 'Request an Enterprise Consultation'],
+      resourceLinks: [...VERIFIED_CORPORATE_RESOURCE_LINKS],
     };
   }
 
@@ -441,6 +509,10 @@ export function formatTextForVoiceSpeech(text: string): string {
     // Standalone state abbreviation WY -> Wyoming
     .replace(/\bWY\b/g, 'Wyoming')
     // URL & email readability
+    .replace(/https?:\/\/destriatech\.com\/resources\/destria-tech-line-of-services\.pdf/gi, 'destriatech dot com slash resources')
+    .replace(/https?:\/\/destriatech\.com\/documents\/destria-tech-inc-corporate-profile\.pdf/gi, 'destriatech dot com slash corporate dash profile')
+    .replace(/https?:\/\/destriatech\.com\/resources\/?/gi, 'destriatech dot com slash resources')
+    .replace(/https?:\/\/destriatech\.com\/corporate-profile\/?/gi, 'destriatech dot com slash corporate dash profile')
     .replace(/https?:\/\/destriatech\.com\/?/gi, 'destriatech dot com')
     .replace(/info@destriatech\.com/gi, 'info at destriatech dot com')
     // Collapse extra whitespace/newlines into clean pauses

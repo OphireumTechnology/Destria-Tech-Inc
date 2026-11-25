@@ -44,6 +44,12 @@ async function startServer() {
   const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
   if (process.env.NODE_ENV !== 'production') {
+    const publicDir = path.resolve(__dirname, 'public');
+    const staticAssetOpts = { redirect: false, index: false };
+    app.use('/resources', express.static(path.join(publicDir, 'resources'), staticAssetOpts));
+    app.use('/documents', express.static(path.join(publicDir, 'documents'), staticAssetOpts));
+    app.use('/branding', express.static(path.join(publicDir, 'branding'), staticAssetOpts));
+
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true, port: PORT },

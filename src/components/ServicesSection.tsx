@@ -10,6 +10,7 @@ import {
   EMERGING_TECH_FEASIBILITY_NOTICE,
 } from '../data/serviceCatalog';
 import { corporateIdentity } from '../data/companyConfig';
+import { SERVICES_BROCHURE_RESOURCE } from '../data/corporateResources';
 import { CatalogCategoryId, CatalogService } from '../types';
 import { ServiceTechIcon } from './animations/ServiceTechIcon';
 import { BlockchainNetworkCanvas } from './animations/BlockchainNetworkCanvas';
@@ -26,6 +27,7 @@ import {
   Check,
   Sparkles,
   Phone,
+  Download,
 } from 'lucide-react';
 
 interface ServicesSectionProps {
@@ -223,6 +225,16 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
               <Bot className="w-4 h-4" />
               <span>Consult AI Corporate Solutions Advisor</span>
             </button>
+
+            <a
+              href={SERVICES_BROCHURE_RESOURCE.fileUrl}
+              download={SERVICES_BROCHURE_RESOURCE.downloadFilename}
+              aria-label="Download DESTRIA TECH INC Services Brochure (8-Page PDF)"
+              className="inline-flex items-center gap-2 px-5 py-3 text-xs sm:text-sm font-semibold text-[#D4AF37] hover:text-[#0B1220] bg-[#111827] hover:bg-[#D4AF37] border border-[#D4AF37]/60 rounded-lg transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]"
+            >
+              <Download className="w-4 h-4 shrink-0" />
+              <span>Download Services Brochure</span>
+            </a>
           </div>
         </div>
 
@@ -597,6 +609,14 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
             >
               Speak With Our AI Solutions Consultant
             </button>
+            <a
+              href={SERVICES_BROCHURE_RESOURCE.fileUrl}
+              download={SERVICES_BROCHURE_RESOURCE.downloadFilename}
+              className="px-5 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-[#D4AF37]/50 text-[#D4AF37] hover:text-white text-xs sm:text-sm font-semibold transition-colors inline-flex items-center gap-2 whitespace-nowrap"
+            >
+              <Download className="w-4 h-4 shrink-0" />
+              <span>Download Services Brochure</span>
+            </a>
           </div>
 
           <div className="pt-4 border-t border-slate-800/80 text-xs text-slate-400">

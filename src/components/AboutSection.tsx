@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Building,
   Phone,
@@ -14,6 +15,7 @@ import {
   Download,
   Cpu,
   Globe2,
+  ArrowUpRight,
 } from 'lucide-react';
 import { GlobalDigitalGlobe } from './animations/GlobalDigitalGlobe';
 import {
@@ -24,6 +26,12 @@ import {
   ENTERPRISE_ENGAGEMENT_WORKFLOW,
   CORPORATE_PROFILE_DATA,
 } from '../data/companyConfig';
+import {
+  CORPORATE_PROFILE_RESOURCE,
+  SERVICES_BROCHURE_RESOURCE,
+  formatResourceFileSize,
+} from '../data/corporateResources';
+import { ROUTES } from '../config/routes';
 
 interface AboutSectionProps {
   onOpenPortal: () => void;
@@ -107,6 +115,14 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onOpenPortal }) => {
                   <FileText className="w-3.5 h-3.5" />
                   <span>Corporate Profile (PDF)</span>
                 </button>
+                <a
+                  href={SERVICES_BROCHURE_RESOURCE.fileUrl}
+                  download={SERVICES_BROCHURE_RESOURCE.downloadFilename}
+                  className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-[#0B1F3B] border border-[#00C2C7]/45 text-[#00C2C7] hover:border-[#00C2C7] hover:text-white transition-all"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Services Brochure (PDF)</span>
+                </a>
                 <a
                   href={`mailto:${corporateIdentity.contact.email}`}
                   className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 hover:border-[#00C2C7] hover:text-[#00C2C7] transition-all"
@@ -268,23 +284,26 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onOpenPortal }) => {
           </div>
         </div>
 
-        {/* Official 17-Page Corporate Profile PDF Publication Banner */}
-        <div className="mt-10 rounded-2xl bg-gradient-to-r from-[#0B1F3B] via-[#111827] to-[#0B1F3B] border border-[#D4AF37]/40 p-6 sm:p-8 flex flex-col lg:flex-row items-center justify-between gap-6">
+        {/* Official Corporate Publications Banner (Corporate Profile + Services & Capabilities) */}
+        <div className="mt-10 rounded-2xl bg-gradient-to-r from-[#0B1F3B] via-[#111827] to-[#0B1F3B] border border-[#D4AF37]/40 p-6 sm:p-8 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
           <div className="flex items-start sm:items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] shrink-0">
               <FileText className="w-6 h-6" />
             </div>
             <div>
               <span className="text-xs font-mono text-[#D4AF37] uppercase">
-                Official Corporate Publication · {CORPORATE_PROFILE_DATA.pageCount} Pages
+                Official Corporate Publications · {CORPORATE_PROFILE_RESOURCE.pageCount}-Page Profile &amp;{' '}
+                {SERVICES_BROCHURE_RESOURCE.pageCount}-Page Services Brochure
               </span>
               <h4 className="text-base sm:text-lg font-bold text-white mt-0.5">
-                {CORPORATE_PROFILE_DATA.documentTitle}
+                Corporate Profile &amp; Enterprise Technology Services Documentation
               </h4>
               <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-                Complete executive overview covering corporate identity, leadership, core values, 10 strategic
-                objectives, 8-layer modular enterprise architecture, 15-stage engagement framework, IP &amp;
-                information security governance, and Responsible AI standards.
+                Download our {CORPORATE_PROFILE_RESOURCE.pageCount}-page Corporate Profile (
+                {formatResourceFileSize(CORPORATE_PROFILE_RESOURCE.fileSizeBytes)}) covering executive
+                leadership and governance, or our {SERVICES_BROCHURE_RESOURCE.pageCount}-page Corporate
+                Summary and Enterprise Technology Services brochure (
+                {formatResourceFileSize(SERVICES_BROCHURE_RESOURCE.fileSizeBytes)}).
               </p>
             </div>
           </div>
@@ -299,13 +318,28 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onOpenPortal }) => {
               <span>View Profile</span>
             </button>
             <a
-              href={CORPORATE_PROFILE_DATA.pdfUrl}
-              download={CORPORATE_PROFILE_DATA.downloadFilename}
+              href={CORPORATE_PROFILE_RESOURCE.fileUrl}
+              download={CORPORATE_PROFILE_RESOURCE.downloadFilename}
               className="px-4 py-2 text-xs font-semibold text-slate-200 hover:text-white border border-[#D4AF37]/60 hover:border-[#D4AF37] rounded-lg transition-colors flex items-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5 text-[#D4AF37]" />
-              <span>Download PDF</span>
+              <span>Corporate Profile PDF</span>
             </a>
+            <a
+              href={SERVICES_BROCHURE_RESOURCE.fileUrl}
+              download={SERVICES_BROCHURE_RESOURCE.downloadFilename}
+              className="px-4 py-2 text-xs font-semibold text-[#D4AF37] hover:text-white border border-[#D4AF37]/60 hover:border-[#D4AF37] bg-[#0B1F3B] rounded-lg transition-colors flex items-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5 text-[#D4AF37]" />
+              <span>Services &amp; Capabilities PDF</span>
+            </a>
+            <Link
+              to={ROUTES.RESOURCES}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-300 hover:text-[#00C2C7] transition-colors inline-flex items-center gap-1"
+            >
+              <span>All Resources</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </div>
 
@@ -532,8 +566,8 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onOpenPortal }) => {
               </div>
               <div className="flex items-center gap-2">
                 <a
-                  href={CORPORATE_PROFILE_DATA.pdfUrl}
-                  download={CORPORATE_PROFILE_DATA.downloadFilename}
+                  href={CORPORATE_PROFILE_RESOURCE.fileUrl}
+                  download={CORPORATE_PROFILE_RESOURCE.downloadFilename}
                   className="px-3 py-1.5 text-xs font-semibold text-[#111827] bg-[#00C2C7] hover:bg-[#00d6dc] rounded-md flex items-center gap-1.5 transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -550,7 +584,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onOpenPortal }) => {
             </div>
             <div className="flex-1 bg-[#0B1F3B] overflow-hidden">
               <iframe
-                src={CORPORATE_PROFILE_DATA.pdfUrl}
+                src={CORPORATE_PROFILE_RESOURCE.fileUrl}
                 title={CORPORATE_PROFILE_DATA.documentTitle}
                 className="w-full h-full border-0"
               />

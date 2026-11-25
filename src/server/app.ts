@@ -1857,6 +1857,7 @@ export function createApp(deps: AppDependencies = {}): {
         recommendedServiceIds: [],
         suggestedAction: mappedAction,
         quickReplies: policyDecision.quickReplies,
+        resourceLinks: policyDecision.resourceLinks,
         policyEnforced: policyDecision.isPricingRestricted,
         provider: 'DESTRIA Corporate Governance Policy Engine',
         timestamp: new Date().toISOString(),

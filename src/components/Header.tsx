@@ -40,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
     { id: 'services', label: 'Solutions', to: ROUTES.SOLUTIONS },
     { id: 'portfolio', label: 'Portfolio', to: ROUTES.PORTFOLIO },
     { id: 'architecture', label: 'Enterprise Suite', to: ROUTES.ENTERPRISE_SUITE },
+    { id: 'resources', label: 'Resources', to: ROUTES.RESOURCES },
     { id: 'contact', label: 'Consultation', to: ROUTES.CONSULTATION },
   ];
 
@@ -116,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
         </Link>
 
         {/* Zone 2: Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-4 xl:gap-7 text-[13px] xl:text-[13.5px] font-medium text-slate-300 shrink-0" aria-label="Primary Navigation">
+        <nav className="hidden lg:flex items-center gap-3.5 xl:gap-5 text-[13px] xl:text-[13.5px] font-medium text-slate-300 shrink-0" aria-label="Primary Navigation">
           {/* About Dropdown (Houses About & Governance + Corporate Profile without crowding header) */}
           <div
             ref={aboutMenuRef}

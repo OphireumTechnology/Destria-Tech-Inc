@@ -7,6 +7,7 @@ import {
 } from '../data/serviceCatalog';
 import { corporateIdentity } from '../data/companyConfig';
 import {
+  CorporateResourceLink,
   MANDATORY_AI_SYSTEM_INSTRUCTION,
   classifyCommercialPolicyIntent,
   enforceCommercialPolicyOnOutput,
@@ -60,6 +61,7 @@ export interface VoiceTurnResult {
   updatedContext: VoiceDiscoveryContext;
   recommendedServiceIds: string[];
   quickReplies: string[];
+  resourceLinks?: CorporateResourceLink[];
   provider: string;
   aiLatencyMs: number;
   language: string;
@@ -708,6 +710,7 @@ export async function processVoiceConversationTurn(params: {
       updatedContext: { ...session.context },
       recommendedServiceIds: [],
       quickReplies: policyDecision.quickReplies,
+      resourceLinks: policyDecision.resourceLinks,
       provider: 'DESTRIA Corporate Governance Policy Engine',
       aiLatencyMs: Date.now() - startedAt,
       language,

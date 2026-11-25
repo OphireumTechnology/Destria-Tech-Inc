@@ -4,6 +4,22 @@ import { ProjectBrief, ClientProfile, ProjectRequirements } from './supabaseServ
 import { apiUrl } from '../lib/apiClient';
 
 import { corporateProfile } from '../config/corporateProfile';
+import {
+  CORPORATE_PROFILE_RESOURCE,
+  SERVICES_BROCHURE_RESOURCE,
+} from '../data/corporateResources';
+import { ROUTES } from '../config/routes';
+
+export interface ChatResourceLink {
+  id: string;
+  title: string;
+  category: string;
+  fileUrl: string;
+  canonicalUrl: string;
+  downloadFilename: string;
+  pagePath: string;
+  pageCount: number;
+}
 
 export interface ChatMessage {
   id: string;
@@ -13,6 +29,7 @@ export interface ChatMessage {
   stage?: 'welcome' | 'category' | 'details' | 'recommendation' | 'brief' | 'schedule';
   quickReplies?: string[];
   recommendedServiceIds?: string[];
+  resourceLinks?: ChatResourceLink[];
   suggestedAction?: 'review_brief' | 'schedule_meeting' | 'talk_to_human' | 'corporate_profile';
 }
 
@@ -110,14 +127,37 @@ function getOfflineCommercialPolicyReply(userMessage: string): string | null {
     return `${corporateIdentity.leadership.cto.name} is the Chief Technology Officer of ${corporateIdentity.legalName}.`;
   }
   if (
-    /\b(corporate\s+profile|company\s+profile|company\s+brochure|corporate\s+brochure|company\s+background|corporate\s+documentation|company\s+overview|company\s+information)\b/i.test(
+    /\b(services?\s+brochure|corporate\s+brochure|service\s+catalog|services?\s+catalog|list\s+of\s+services|line\s+of\s+services|technology\s+capabilities|corporate\s+presentation|brochure|corporate\s+profile|company\s+profile|company\s+brochure|company\s+background|corporate\s+documentation|company\s+overview|company\s+information|corporate\s+resources|download\s+center)\b/i.test(
       normalized
     )
   ) {
-    return `You may view or download the official DESTRIA TECH INC Corporate Profile at ${corporateProfile.canonicalPageUrl}.`;
+    return `You may view or download our official 8-page Corporate Summary and Enterprise Technology Services brochure at ${SERVICES_BROCHURE_RESOURCE.canonicalFileUrl}, our 17-page Corporate Profile at ${corporateProfile.canonicalPageUrl}, or browse all publications at https://destriatech.com${ROUTES.RESOURCES}.`;
   }
   return null;
 }
+
+const OFFLINE_RESOURCE_LINKS: ChatResourceLink[] = [
+  {
+    id: SERVICES_BROCHURE_RESOURCE.id,
+    title: SERVICES_BROCHURE_RESOURCE.title,
+    category: SERVICES_BROCHURE_RESOURCE.category,
+    fileUrl: SERVICES_BROCHURE_RESOURCE.fileUrl,
+    canonicalUrl: SERVICES_BROCHURE_RESOURCE.canonicalFileUrl,
+    downloadFilename: SERVICES_BROCHURE_RESOURCE.downloadFilename,
+    pagePath: SERVICES_BROCHURE_RESOURCE.detailPagePath,
+    pageCount: SERVICES_BROCHURE_RESOURCE.pageCount,
+  },
+  {
+    id: CORPORATE_PROFILE_RESOURCE.id,
+    title: CORPORATE_PROFILE_RESOURCE.title,
+    category: CORPORATE_PROFILE_RESOURCE.category,
+    fileUrl: CORPORATE_PROFILE_RESOURCE.fileUrl,
+    canonicalUrl: CORPORATE_PROFILE_RESOURCE.canonicalFileUrl,
+    downloadFilename: CORPORATE_PROFILE_RESOURCE.downloadFilename,
+    pagePath: CORPORATE_PROFILE_RESOURCE.detailPagePath,
+    pageCount: CORPORATE_PROFILE_RESOURCE.pageCount,
+  },
+];
 
 const synthesizeBriefFromState = (state: ConsultationState, recommendedIds: string[]): ProjectBrief => {
   const refCode = `DTI-BRF-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -283,6 +323,7 @@ export const aiConsultantService = {
             text: data.replyText,
             timestamp: now,
             recommendedServiceIds: recommendedIds,
+            resourceLinks: Array.isArray(data.resourceLinks) ? data.resourceLinks : undefined,
             suggestedAction: data.suggestedAction,
             quickReplies: Array.isArray(data.quickReplies)
               ? data.quickReplies
@@ -298,16 +339,18 @@ export const aiConsultantService = {
     // Offline Commercial Policy Guardrail
     const policyReply = getOfflineCommercialPolicyReply(trimmed);
     if (policyReply) {
-      const isCorporateProfileReply = policyReply.includes(corporateProfile.pagePath);
+      const isCorporateResourceReply =
+        policyReply.includes(corporateProfile.pagePath) || policyReply.includes(ROUTES.RESOURCES);
       return {
         aiMessage: {
           id: msgId,
           sender: 'ai',
           text: policyReply,
           timestamp: now,
-          suggestedAction: isCorporateProfileReply ? 'corporate_profile' : 'schedule_meeting',
-          quickReplies: isCorporateProfileReply
-            ? ['View Corporate Profile', 'Request an Enterprise Consultation']
+          suggestedAction: isCorporateResourceReply ? 'corporate_profile' : 'schedule_meeting',
+          resourceLinks: isCorporateResourceReply ? OFFLINE_RESOURCE_LINKS : undefined,
+          quickReplies: isCorporateResourceReply
+            ? ['Explore Technology Solutions', 'Request an Enterprise Consultation']
             : ['Request an Enterprise Consultation', 'Direct Solutions Contact'],
         },
         updatedState,

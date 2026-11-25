@@ -69,6 +69,16 @@ export interface VoiceAiIntent {
   executivePreference?: 'ceo' | 'cto' | 'advisory';
   recommendedServiceIds?: string[];
   quickReplies?: string[];
+  resourceLinks?: Array<{
+    id: string;
+    title: string;
+    category: string;
+    fileUrl: string;
+    canonicalUrl: string;
+    downloadFilename: string;
+    pagePath: string;
+    pageCount: number;
+  }>;
   updatedContext?: VoiceSharedContext;
 }
 
@@ -1001,6 +1011,9 @@ export class AIVoiceService {
           : undefined,
         quickReplies: Array.isArray(responseData.quickReplies)
           ? responseData.quickReplies
+          : undefined,
+        resourceLinks: Array.isArray(responseData.resourceLinks)
+          ? responseData.resourceLinks
           : undefined,
         updatedContext: responseData.updatedContext,
       };
