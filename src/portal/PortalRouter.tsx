@@ -113,24 +113,10 @@ export function navigateToPortalPath(to: string, replace = false) {
   if (typeof window === 'undefined') return;
   const cleanTarget = to.startsWith('/') ? to : `/${to}`;
   const prefix = resolveGitHubPagesRepoPrefix(window.location.hostname, window.location.pathname);
-  const isStaticPagesHost =
-    window.location.hostname.endsWith('github.io') ||
-    ['destriatech.com', 'www.destriatech.com'].includes(window.location.hostname) ||
-    (window.location.pathname.includes('/OMPNETWORK/') && !cleanTarget.startsWith('/OMPNETWORK'));
-
-  if (isLoginTargetPath(cleanTarget)) {
-    const nextUrl = `${prefix}${normalizeLoginTarget(cleanTarget)}`;
-    if (replace) window.history.replaceState(null, '', nextUrl);
-    else window.history.pushState(null, '', nextUrl);
-  } else if (isStaticPagesHost && cleanTarget.startsWith('/portal')) {
-    const nextUrl = `${prefix}/#${cleanTarget}`;
-    if (replace) window.history.replaceState(null, '', nextUrl);
-    else window.history.pushState(null, '', nextUrl);
-  } else {
-    const nextUrl = `${prefix}${cleanTarget}`;
-    if (replace) window.history.replaceState(null, '', nextUrl);
-    else window.history.pushState(null, '', nextUrl);
-  }
+  if (!/^\/portal(?:\/|\?|$)/.test(cleanTarget)) return;
+  const nextUrl = prefix + normalizeLoginTarget(cleanTarget);
+  if (replace) window.history.replaceState(null, '', nextUrl);
+  else window.history.pushState(null, '', nextUrl);
   window.dispatchEvent(new Event('opm:routechange'));
 }
 
