@@ -41,6 +41,7 @@ const PUBLIC_PORTAL_ROUTES = new Set([
   '/portal/login',
   '/portal/register',
   '/portal/forgot-password',
+  '/portal/reset-password',
   '/portal/verify-email',
 ]);
 
@@ -91,7 +92,7 @@ const PortalRouteSwitch: React.FC = () => {
   // Public auth views
   if (normalized === '/portal/login') return <PortalLoginPage />;
   if (normalized === '/portal/register') return <PortalRegisterPage />;
-  if (normalized === '/portal/forgot-password') return <PortalForgotPasswordPage />;
+  if (normalized === '/portal/forgot-password' || normalized === '/portal/reset-password') return <PortalForgotPasswordPage />;
   if (normalized === '/portal/verify-email') return <PortalVerifyEmailPage />;
 
   if (!user) return null;
