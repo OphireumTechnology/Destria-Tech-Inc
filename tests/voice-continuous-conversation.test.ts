@@ -609,7 +609,7 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
             });
           }
         }
-        return null;
+        return new Response(null, { status: 404 });
       },
     });
 
@@ -654,7 +654,7 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
         if (url.includes('/api/voice/speak')) {
           return new Response(JSON.stringify({ success: false }), { status: 503 });
         }
-        return null;
+        return new Response(null, { status: 404 });
       },
     });
     await h1.service.startSession();
@@ -678,7 +678,7 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
             { status: 200, headers: { 'Content-Type': 'application/json' } }
           );
         }
-        return null;
+        return new Response(null, { status: 404 });
       },
     });
     await h2.service.startSession();
@@ -694,7 +694,7 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
         if (url.includes('/api/voice/speak')) {
           return new Response(JSON.stringify({ success: false }), { status: 503 });
         }
-        return null;
+        return new Response(null, { status: 404 });
       },
     });
     await h3.service.startSession();
