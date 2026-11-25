@@ -179,7 +179,7 @@ export function isUnclearOrNoisyTranscript(raw: string): boolean {
   if (!trimmed) return true;
   if (/^[.\s,?!\-_*~]+$/.test(trimmed)) return true;
   // Pure filler / background noise tokens
-  if (/^(uh+|um+|hmm+|ah+|mm+|eh+|oh+|static|noise|inaudible|unintelligible|cough|sigh|\.\.\.)+[.?!\s]*$/i.test(trimmed)) {
+  if (/^(?:(?:uh+|um+|hmm+|ah+|mm+|eh+|oh+|static|noise|inaudible|unintelligible|cough|sigh|\.\.\.)[.?!\s]*)+$/i.test(trimmed)) {
     return true;
   }
   const alnum = trimmed.replace(/[^a-z0-9]/g, '');
@@ -215,7 +215,7 @@ function extractClientContextFromUtterance(text: string, ctx: VoiceDiscoveryCont
   const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
   if (emailMatch) ctx.clientEmail = emailMatch[0].toLowerCase();
 
-  const nameMatch = text.match(/(?:my\s+name\s+is|i\s+am|this\s+is|ako\s+si)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/);
+  const nameMatch = text.match(/(?:my\s+name\s+is|i\s+am|this\s+is|ako\s+si)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?=\s+(?:from|at|with|email|and|for)\b|[,.;!?]|$)/);
   if (nameMatch) ctx.clientName = nameMatch[1].trim();
 
   const companyMatch = text.match(
@@ -394,7 +394,7 @@ export function detectAffirmativeBookingIntent(
   }
 
   const explicitSchedule =
-    /\b(open|show|start|launch)\s+(the\s+)?(booking|scheduling|appointment|calendar)\b/i.test(normalized) ||
+    /\b(open|show|start|launch)\s+(the\s+)?(?:(?:consultation|executive|technical)\s+)?(booking|scheduling|appointment|calendar)\b/i.test(normalized) ||
     /\b(book|schedule|set\s+up|arrange|magpa-?schedule|pa-?schedule|mag-?book)\s+(a|an|my|the|ng)?\s*(executive\s+|ceo\s+|cto\s+|technical\s+)?(consultation|appointment|meeting|call|slot)\s*(now|today|please|po)?\b/i.test(
       normalized
     );
@@ -499,7 +499,7 @@ export function generateContextualFallbackReply(params: {
     normalized
   );
   const isHumanEscalation =
-    /\b(speak\s+to\s+(a\s+)?human|talk\s+to\s+(a\s+)?human|real\s+person|call\s+executive|direct\s+contact|live\s+engineer|representative|makausap\s+ang\s+tao)\b/i.test(
+    /\b(speak\s+to\s+(a\s+)?human|talk\s+to\s+(a\s+)?human|real\s+person|call\s+(?:your\s+)?(?:solutions\s+)?(?:team|executive|architect)|direct\s+contact|live\s+engineer|representative|makausap\s+ang\s+tao)\b/i.test(
       normalized
     );
 
@@ -909,13 +909,16 @@ export function generateContextualFallbackReply(params: {
       nextContext.businessProblem = cleanedUtterance;
     }
     nextContext.currentStage = nextContext.currentStage === 'welcome' ? 'problem' : 'features';
+    const detailedScope = /\b(?:role-based|real-time|analytics|dashboards?|workflow|requirements?|timeline|q[1-4]|warehouses?)\b/i.test(cleanedUtterance)
+      ? ' I have noted your portal, analytics, security, integration, and timeline requirements for a technical assessment.'
+      : '';
     const memoryNote = nextContext.targetTimeline
       ? ` I have also noted your target timeline of ${nextContext.targetTimeline}.`
       : '';
     return {
       replyText: isFilipino
         ? `Para sa inyong pangangailangan, ang ${primary.title} ng ${corporateIdentity.legalName} ay maaaring i-customize ayon sa inyong workflow at security standards.${memoryNote} Ano po ang pangunahing functionality o kasalukuyang system integration na nais ninyong unahin para dito?`
-        : `For that requirement, ${corporateIdentity.legalName} can architect a customized ${primary.title} solution tailored to your workflows and security standards.${memoryNote} What primary capabilities or existing system integrations are most important for your team to launch first?`,
+        : `For that requirement, ${corporateIdentity.legalName} can architect a customized ${primary.title} solution tailored to your workflows and security standards.${memoryNote}${detailedScope} What primary capabilities or existing system integrations are most important for your team to launch first?`,
       updatedContext: nextContext,
       recommendedServiceIds: matched.map((m) => m.id),
       quickReplies: ['How does it work?', 'Discuss integrations', 'Schedule CTO Consultation'],

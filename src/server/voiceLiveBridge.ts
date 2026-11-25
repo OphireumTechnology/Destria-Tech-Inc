@@ -381,57 +381,51 @@ export function attachVoiceLiveBridge(
               : {}),
           };
 
+          // Some supported Live SDK adapters complete connect() without invoking onopen.
+          // Initialize readiness once after connect resolves, with a guard against a later onopen.
+          let readySent = false;
+          const markReady = () => {
+            if (readySent || isClosing) return;
+            readySent = true;
+            runtimeConfig.registerSession({
+              sessionId,
+              channel: 'gemini_live',
+              model: activeModel,
+              voiceName: activeVoice,
+              language: activeLanguage,
+              onTerminate: () => {
+                sendJsonSafe(clientWs, { type: 'session_terminated', reason: 'Session terminated by administrator.' });
+                cleanup();
+                if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1000, 'Terminated by administrator');
+              },
+            });
+            sessionRegistered = true;
+            sessionTtlTimer = setTimeout(() => {
+              sendJsonSafe(clientWs, {
+                type: 'session_expired',
+                reason: `Maximum session duration (${settings.sessionTtlMinutes} minutes) reached.`,
+              });
+              cleanup();
+              if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1000, 'Session TTL reached');
+            }, settings.sessionTtlMinutes * 60 * 1000);
+            sendJsonSafe(clientWs, {
+              type: 'ready',
+              sessionId,
+              model: activeModel,
+              voice: activeVoice,
+              language: activeLanguage,
+              bargeInEnabled: settings.bargeInEnabled,
+              transcriptionEnabled: settings.transcriptionEnabled,
+              inputSampleRate: 16000,
+              outputSampleRate: 24000,
+            });
+          };
+
           liveSession = await ai.live.connect({
             model: activeModel,
             config: liveConfig as any,
             callbacks: {
-              onopen: () => {
-                runtimeConfig.registerSession({
-                  sessionId,
-                  channel: 'gemini_live',
-                  model: activeModel,
-                  voiceName: activeVoice,
-                  language: activeLanguage,
-                  onTerminate: () => {
-                    sendJsonSafe(clientWs, {
-                      type: 'session_terminated',
-                      reason: 'Session terminated by administrator.',
-                    });
-                    cleanup();
-                    try {
-                      clientWs.close(1000, 'Terminated by administrator');
-                    } catch {
-                      // Ignore
-                    }
-                  },
-                });
-                sessionRegistered = true;
-
-                sessionTtlTimer = setTimeout(() => {
-                  sendJsonSafe(clientWs, {
-                    type: 'session_expired',
-                    reason: `Maximum session duration (${settings.sessionTtlMinutes} minutes) reached.`,
-                  });
-                  cleanup();
-                  try {
-                    clientWs.close(1000, 'Session TTL reached');
-                  } catch {
-                    // Ignore
-                  }
-                }, settings.sessionTtlMinutes * 60 * 1000);
-
-                sendJsonSafe(clientWs, {
-                  type: 'ready',
-                  sessionId,
-                  model: activeModel,
-                  voice: activeVoice,
-                  language: activeLanguage,
-                  bargeInEnabled: settings.bargeInEnabled,
-                  transcriptionEnabled: settings.transcriptionEnabled,
-                  inputSampleRate: 16000,
-                  outputSampleRate: 24000,
-                });
-              },
+              onopen: () => { markReady(); },
               onmessage: async (message: LiveServerMessage) => {
                 if (isClosing) return;
 
@@ -645,6 +639,7 @@ export function attachVoiceLiveBridge(
               },
             },
           });
+          markReady();
         } catch (err: any) {
           logStructured('warn', 'voice_live_connect_failed', {
             sessionId,
