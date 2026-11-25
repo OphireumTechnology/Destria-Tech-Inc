@@ -142,9 +142,10 @@ export class ResendEmailTransport implements EmailTransport {
       }
 
       const acceptedAt = new Date().toISOString();
+      if (typeof body.id !== 'string' || !body.id.trim()) return { status: 'failed', error: 'Resend response missing message ID.' };
       return {
         status: 'sent',
-        providerReference: body.id || `resend_${Date.now()}`,
+        providerReference: body.id,
         providerAcceptedAt: acceptedAt,
       };
     } catch (err: any) {
@@ -940,7 +941,7 @@ export class TransactionalEmailService {
             entityReference: record.referenceCode,
             recipientEmail,
             replyTo: safeClientReplyTo,
-            idempotencyKey: `sol-${record.referenceCode}-recipient-${idx + 1}`,
+            idempotencyKey: crypto.createHash('sha256').update(`sol:${record.referenceCode}:recipient:${recipientEmail}`).digest('hex'),
             requestSource: templates.requestSource,
             notificationType: 'admin_alert',
             subject: templates.internalSubject,
@@ -1029,7 +1030,7 @@ export class TransactionalEmailService {
       entityReference: appointment.referenceCode,
       recipientEmail: appointment.email,
       replyTo: corporateIdentity.contact.email,
-      idempotencyKey: `apt-${appointment.referenceCode}-customer-${kind}`,
+      idempotencyKey: crypto.createHash('sha256').update(`apt:${appointment.referenceCode}:customer:${dedupeSuffix}`).digest('hex'),
       requestSource: templates.requestSource,
       notificationType,
       subject: templates.customerSubject,
@@ -1061,7 +1062,7 @@ export class TransactionalEmailService {
             entityReference: appointment.referenceCode,
             recipientEmail,
             replyTo: safeClientReplyTo,
-            idempotencyKey: `apt-${appointment.referenceCode}-recipient-${idx + 1}-${kind}`,
+            idempotencyKey: crypto.createHash('sha256').update(`apt:${appointment.referenceCode}:recipient:${recipientEmail}:${dedupeSuffix}`).digest('hex'),
             requestSource: templates.requestSource,
             notificationType: 'admin_alert',
             subject: templates.internalSubject,
