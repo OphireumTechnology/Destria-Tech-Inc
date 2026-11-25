@@ -51,7 +51,7 @@ test('1. Centralized Corporate Identity, International Telephone, Wyoming HQ & Z
   assert.equal(corporateIdentity.legalName, 'DESTRIA TECH INC');
   assert.equal(corporateIdentity.networkName, 'DESTRIA NETWORK');
   assert.equal(corporateIdentity.abbreviation, 'DTI');
-  assert.equal(corporateIdentity.leadership.ceo.name, 'Desmond Hines');
+  assert.equal(corporateIdentity.leadership.ceo.name, 'Desmond Hinds');
   assert.ok(corporateIdentity.leadership.cto.name.length > 5);
   assert.equal(corporateIdentity.jurisdiction, 'Wyoming, United States of America');
   assert.equal(
@@ -200,7 +200,7 @@ test('3. All 14 Section 19 AI Validation Prompts across Chat & Voice Enforce Zer
 
       // Specific corporate accuracy checks
       if (prompt.includes('CEO')) {
-        assert.ok(chatJson.replyText.includes('Desmond Hines'));
+        assert.ok(chatJson.replyText.includes('Desmond Hinds'));
       }
       if (prompt.includes('CTO')) {
         assert.ok(chatJson.replyText.includes(corporateIdentity.leadership.cto.name));
