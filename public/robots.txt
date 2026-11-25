@@ -1,0 +1,9 @@
+# DESTRIA TECH INC — Crawler Guidance (https://destriatech.com/)
+# Note: robots.txt controls search-engine indexing only; access control is enforced server-side.
+User-agent: *
+Allow: /
+Disallow: /portal/
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: https://destriatech.com/sitemap.xml

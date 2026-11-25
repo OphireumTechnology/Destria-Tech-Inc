@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
+      - name: Verify clean URL routing architecture (source gate)
+        run: npm run verify:routing
+
       - name: Typecheck & lint
         run: npm run lint
 
@@ -67,11 +70,23 @@ jobs:
             exit 1
           fi
 
-      - name: Verify compiled entry
+      - name: Verify compiled clean URL entries, 404 fallback, CNAME, and SEO artifacts
         run: |
           test -f dist/index.html
+          test -f dist/404.html
+          test -f dist/CNAME
+          test -f dist/robots.txt
+          test -f dist/sitemap.xml
+          test -f dist/portal/login/index.html
+          test -f dist/portal/register/index.html
+          test -f dist/portal/forgot-password/index.html
+          test -f dist/portal/reset-password/index.html
+          test -f dist/portal/verify-email/index.html
+          test -f dist/portal/dashboard/index.html
+          test -f dist/admin/login/index.html
           test -d dist/assets
           if grep -q '/src/main.tsx' dist/index.html; then exit 1; fi
+          npm run verify:routing:dist
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

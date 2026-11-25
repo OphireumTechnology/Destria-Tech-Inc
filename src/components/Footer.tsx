@@ -1,10 +1,12 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Building, Shield, ArrowUpRight, Phone, Mail, Globe, Scale } from 'lucide-react';
 import {
   COMPANY_CONFIG,
   corporateIdentity,
   COMMERCIAL_ENGAGEMENT_STATEMENT,
 } from '../data/companyConfig';
+import { ROUTES } from '../config/routes';
 import { BrandLogo } from './BrandLogo';
 
 interface FooterProps {
@@ -105,44 +107,49 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenPortal, onOpen
             <h4 className="text-xs font-mono uppercase text-white tracking-wider">Navigation</h4>
             <ul className="space-y-2 text-xs">
               <li>
-                <button
+                <Link
+                  to={ROUTES.HOME}
                   onClick={() => onNavigate('hero')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Homepage
-                </button>
+                </Link>
               </li>
               <li>
-                <button
+                <Link
+                  to={ROUTES.ABOUT}
                   onClick={() => onNavigate('about')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   About &amp; Governance
-                </button>
+                </Link>
               </li>
               <li>
-                <button
+                <Link
+                  to={ROUTES.SOLUTIONS}
                   onClick={() => onNavigate('services')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Technology Solutions
-                </button>
+                </Link>
               </li>
               <li>
-                <button
+                <Link
+                  to={ROUTES.PORTFOLIO}
                   onClick={() => onNavigate('portfolio')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Portfolio Showcases
-                </button>
+                </Link>
               </li>
               <li>
-                <button
+                <Link
+                  to={ROUTES.CONSULTATION}
                   onClick={() => onNavigate('contact')}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Request a Consultation
-                </button>
+                </Link>
               </li>
             </ul>
           </div>
@@ -154,46 +161,50 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenPortal, onOpen
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
-                <button
-                  onClick={onOpenPortal}
+                <Link
+                  to={ROUTES.PORTAL.LOGIN}
                   className="hover:text-[#00C2C7] transition-colors cursor-pointer flex items-center gap-1"
                 >
                   <span>Client Engagement Portal</span>
                   <ArrowUpRight className="w-3 h-3 text-[#00C2C7]" />
-                </button>
+                </Link>
               </li>
               <li>
-                <button
+                <Link
+                  to={ROUTES.GOVERNANCE.COMMERCIAL_ENGAGEMENT_POLICY}
                   onClick={() => onOpenLegal?.('commercial-engagement-policy')}
                   className="hover:text-[#00C2C7] transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <Scale className="w-3 h-3 text-[#D4AF37]" />
                   <span>Commercial Engagement Policy</span>
-                </button>
+                </Link>
               </li>
               <li>
-                <button
+                <Link
+                  to={ROUTES.GOVERNANCE.AI_USAGE_DISCLAIMER}
                   onClick={() => onOpenLegal?.('ai-usage-disclaimer')}
                   className="hover:text-[#00C2C7] transition-colors cursor-pointer"
                 >
                   AI Usage Disclaimer
-                </button>
+                </Link>
               </li>
               <li>
-                <button
+                <Link
+                  to={ROUTES.GOVERNANCE.INFORMATION_SECURITY}
                   onClick={() => onOpenLegal?.('information-security-statement')}
                   className="hover:text-[#00C2C7] transition-colors cursor-pointer"
                 >
                   Information Security Statement
-                </button>
+                </Link>
               </li>
               <li>
-                <button
+                <Link
+                  to={ROUTES.GOVERNANCE.CONFIDENTIALITY}
                   onClick={() => onOpenLegal?.('confidentiality-notice')}
                   className="hover:text-[#00C2C7] transition-colors cursor-pointer"
                 >
                   Confidentiality &amp; NDA Governance
-                </button>
+                </Link>
               </li>
             </ul>
           </div>
@@ -205,37 +216,37 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenPortal, onOpen
             © 2026 {COMPANY_CONFIG.name}. All rights reserved. Registered in {corporateIdentity.jurisdiction}.
           </div>
           <div className="flex flex-wrap items-center gap-3 text-slate-400">
-            <button
-              type="button"
+            <Link
+              to={ROUTES.GOVERNANCE.TERMS_OF_SERVICE}
               onClick={() => onOpenLegal?.('terms-of-use')}
               className="hover:text-[#00C2C7] transition-colors cursor-pointer"
             >
               Terms of Use
-            </button>
+            </Link>
             <span aria-hidden="true">·</span>
-            <button
-              type="button"
+            <Link
+              to={ROUTES.GOVERNANCE.PRIVACY_POLICY}
               onClick={() => onOpenLegal?.('privacy-policy')}
               className="hover:text-[#00C2C7] transition-colors cursor-pointer"
             >
               Privacy Policy
-            </button>
+            </Link>
             <span aria-hidden="true">·</span>
-            <button
-              type="button"
+            <Link
+              to={ROUTES.GOVERNANCE.COOKIE_POLICY}
               onClick={() => onOpenLegal?.('cookie-policy')}
               className="hover:text-[#00C2C7] transition-colors cursor-pointer"
             >
               Cookie Policy
-            </button>
+            </Link>
             <span aria-hidden="true">·</span>
-            <button
-              type="button"
+            <Link
+              to={ROUTES.GOVERNANCE.TECHNOLOGY_SERVICES_DISCLAIMER}
               onClick={() => onOpenLegal?.('technology-services-disclaimer')}
               className="hover:text-[#00C2C7] transition-colors cursor-pointer"
             >
               Legal Notices (Draft)
-            </button>
+            </Link>
           </div>
         </div>
       </div>

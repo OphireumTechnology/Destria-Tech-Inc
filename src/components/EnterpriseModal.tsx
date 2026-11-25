@@ -21,9 +21,10 @@ import {
   FileCheck,
 } from 'lucide-react';
 import { AIProcessingVisualizer } from './animations/AIProcessingVisualizer';
+import { Link } from 'react-router-dom';
 import { COMPANY_CONFIG, corporateIdentity } from '../data/companyConfig';
 import { apiUrl } from '../lib/apiClient';
-import { navigateToPortalPath } from '../portal/PortalRouter';
+import { ROUTES } from '../config/routes';
 
 interface EnterpriseModalProps {
   isOpen: boolean;
@@ -289,17 +290,14 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
                     <Lock className="w-3.5 h-3.5 text-[#00C2C7]" />
                     <span>Tenant Isolation: Active</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      navigateToPortalPath('/portal/login');
-                    }}
+                  <Link
+                    to={ROUTES.PORTAL.LOGIN}
+                    onClick={onClose}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#00C2C7] hover:bg-[#00d8de] text-[#0B1220] text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span>Open Client Portal</span>
                     <ExternalLink className="w-3.5 h-3.5" />
-                  </button>
+                  </Link>
                 </div>
               </div>
 
@@ -476,24 +474,34 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
                   </p>
                 </div>
 
-                {adminProfile && (
-                  <div className="flex items-center gap-3">
-                    <div className="text-right text-xs">
-                      <div className="text-white font-semibold">{adminProfile.email}</div>
-                      <div className="text-[10px] font-mono text-emerald-400 uppercase">
-                        Role: {adminProfile.role}
+                <div className="flex items-center gap-2.5">
+                  <Link
+                    to={adminProfile ? ROUTES.ADMIN.DASHBOARD : ROUTES.ADMIN.LOGIN}
+                    onClick={onClose}
+                    className="px-3 py-1.5 rounded-lg border border-slate-700 hover:border-[#00C2C7]/60 text-slate-200 hover:text-white text-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>Full Console</span>
+                    <ExternalLink className="w-3 h-3 text-[#00C2C7]" />
+                  </Link>
+                  {adminProfile && (
+                    <div className="flex items-center gap-3">
+                      <div className="text-right text-xs">
+                        <div className="text-white font-semibold">{adminProfile.email}</div>
+                        <div className="text-[10px] font-mono text-emerald-400 uppercase">
+                          Role: {adminProfile.role}
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={handleAdminLogout}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sign Out</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAdminLogout}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Sign Out</span>
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               {!adminProfile ? (

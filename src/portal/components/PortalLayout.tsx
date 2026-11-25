@@ -26,8 +26,10 @@ import {
   Phone,
   Mail,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { BrandLogo } from '../../components/BrandLogo';
 import { corporateIdentity } from '../../data/companyConfig';
+import { ROUTES, buildStoreSearchRoute } from '../../config/routes';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
 
@@ -60,43 +62,43 @@ export const PortalLayout: React.FC<{
     {
       heading: 'Enterprise Workspace',
       items: [
-        { label: 'Overview', path: '/portal/dashboard', icon: LayoutDashboard },
-        { label: 'Solutions Directory', path: '/portal/store', icon: Layers, matchPrefixes: ['/portal/store'] },
-        { label: 'Inquiries & Proposals', path: '/portal/cart', icon: ClipboardCheck, matchPrefixes: ['/portal/checkout'] },
-        { label: 'My Engagements', path: '/portal/services', icon: Briefcase },
+        { label: 'Overview', path: ROUTES.PORTAL.DASHBOARD, icon: LayoutDashboard },
+        { label: 'Solutions Directory', path: ROUTES.PORTAL.STORE, icon: Layers, matchPrefixes: [ROUTES.PORTAL.STORE] },
+        { label: 'Inquiries & Proposals', path: ROUTES.PORTAL.CART, icon: ClipboardCheck, matchPrefixes: [ROUTES.PORTAL.CHECKOUT, ROUTES.PORTAL.PROPOSALS] },
+        { label: 'My Engagements', path: ROUTES.PORTAL.SERVICES, icon: Briefcase },
       ],
     },
     {
       heading: 'Delivery & Collaboration',
       items: [
-        { label: 'Project Workspaces', path: '/portal/projects', icon: FolderKanban, matchPrefixes: ['/portal/projects'] },
-        { label: 'Corporate Communications', path: '/portal/messages', icon: MessageSquare },
-        { label: 'Deliverables & Files', path: '/portal/files', icon: FolderOpen },
+        { label: 'Project Workspaces', path: ROUTES.PORTAL.PROJECTS, icon: FolderKanban, matchPrefixes: [ROUTES.PORTAL.PROJECTS] },
+        { label: 'Corporate Communications', path: ROUTES.PORTAL.MESSAGES, icon: MessageSquare },
+        { label: 'Deliverables & Files', path: ROUTES.PORTAL.FILES, icon: FolderOpen, matchPrefixes: [ROUTES.PORTAL.DELIVERABLES] },
       ],
     },
     {
       heading: 'Authorized Financials',
       items: [
-        { label: 'Authorized Orders', path: '/portal/orders', icon: ShoppingBag, matchPrefixes: ['/portal/orders'] },
-        { label: 'Authorized Invoices', path: '/portal/invoices', icon: FileText },
-        { label: 'Payment History', path: '/portal/payments', icon: CreditCard },
-        { label: 'Authorized Credits', path: '/portal/credits', icon: Coins },
-        { label: 'Authorized Subscriptions', path: '/portal/subscriptions', icon: RefreshCw },
+        { label: 'Authorized Orders', path: ROUTES.PORTAL.ORDERS, icon: ShoppingBag, matchPrefixes: [ROUTES.PORTAL.ORDERS] },
+        { label: 'Authorized Invoices', path: ROUTES.PORTAL.INVOICES, icon: FileText },
+        { label: 'Payment History', path: ROUTES.PORTAL.PAYMENTS, icon: CreditCard },
+        { label: 'Authorized Credits', path: ROUTES.PORTAL.CREDITS, icon: Coins },
+        { label: 'Authorized Subscriptions', path: ROUTES.PORTAL.SUBSCRIPTIONS, icon: RefreshCw },
       ],
     },
     {
       heading: 'Support & Account',
       items: [
-        { label: 'Support Center', path: '/portal/support', icon: LifeBuoy },
+        { label: 'Support Center', path: ROUTES.PORTAL.SUPPORT, icon: LifeBuoy },
         {
           label: 'Notifications',
-          path: '/portal/notifications',
+          path: ROUTES.PORTAL.NOTIFICATIONS,
           icon: Bell,
           badge: unreadNotifications > 0 ? unreadNotifications : undefined,
         },
-        { label: 'Profile & Account', path: '/portal/profile', icon: UserRound },
-        { label: 'Security Settings', path: '/portal/security', icon: ShieldCheck },
-        { label: 'Preferences', path: '/portal/settings', icon: Settings },
+        { label: 'Profile & Account', path: ROUTES.PORTAL.PROFILE, icon: UserRound },
+        { label: 'Security Settings', path: ROUTES.PORTAL.SECURITY, icon: ShieldCheck },
+        { label: 'Preferences', path: ROUTES.PORTAL.SETTINGS, icon: Settings },
       ],
     },
   ];
@@ -113,7 +115,7 @@ export const PortalLayout: React.FC<{
     e.preventDefault();
     const q = searchQuery.trim();
     if (!q) return;
-    navigate(`/portal/store?q=${encodeURIComponent(q)}`);
+    navigate(buildStoreSearchRoute(q));
     setMobileNavOpen(false);
   };
 
@@ -121,18 +123,16 @@ export const PortalLayout: React.FC<{
     setProfileMenuOpen(false);
     setMobileNavOpen(false);
     await logout();
-    navigate('/portal/login', { replace: true });
+    navigate(ROUTES.PORTAL.LOGIN, { replace: true });
   };
 
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full bg-[#0B1F3B] text-[#F3F4F6]">
       {/* Brand Lockup */}
       <div className="px-5 py-5 border-b border-white/10 flex items-center justify-between gap-3">
-        <button
-          onClick={() => {
-            navigate('/portal/dashboard');
-            setMobileNavOpen(false);
-          }}
+        <Link
+          to={ROUTES.PORTAL.DASHBOARD}
+          onClick={() => setMobileNavOpen(false)}
           className="flex items-center gap-3 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37] rounded-lg"
         >
           <BrandLogo
@@ -144,7 +144,7 @@ export const PortalLayout: React.FC<{
             subtitle={`${corporateIdentity.networkName} · Portal`}
             eager
           />
-        </button>
+        </Link>
         <button
           onClick={() => setMobileNavOpen(false)}
           className="lg:hidden p-1.5 rounded-md text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
@@ -166,12 +166,10 @@ export const PortalLayout: React.FC<{
                 const Icon = item.icon;
                 const active = isActivePath(item);
                 return (
-                  <button
+                  <Link
                     key={item.path}
-                    onClick={() => {
-                      navigate(item.path);
-                      setMobileNavOpen(false);
-                    }}
+                    to={item.path}
+                    onClick={() => setMobileNavOpen(false)}
                     className={`w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors cursor-pointer text-left ${
                       active
                         ? 'bg-[#112A4E] text-white font-semibold border-l-2 border-[#00C2C7]'
@@ -191,7 +189,7 @@ export const PortalLayout: React.FC<{
                         {item.badge}
                       </span>
                     )}
-                  </button>
+                  </Link>
                 );
               })}
             </div>
@@ -219,13 +217,14 @@ export const PortalLayout: React.FC<{
           </a>
         </div>
         <div className="space-y-1">
-          <button
-            onClick={exitToPublicSite}
+          <Link
+            to={ROUTES.HOME}
+            onClick={() => setMobileNavOpen(false)}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-slate-300 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4 text-slate-400 shrink-0" />
             <span>Back to Public Website</span>
-          </button>
+          </Link>
           <button
             onClick={handleSignOut}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-rose-200 hover:text-white hover:bg-rose-500/20 transition-colors cursor-pointer"
@@ -266,12 +265,12 @@ export const PortalLayout: React.FC<{
             <span>
               Your email address <strong className="font-semibold">{user.email}</strong> is awaiting verification.
             </span>
-            <button
-              onClick={() => navigate('/portal/verify-email')}
+            <Link
+              to={ROUTES.PORTAL.VERIFY_EMAIL}
               className="font-semibold text-[#0F4C3A] underline underline-offset-2 hover:text-[#0B3B2D] cursor-pointer whitespace-nowrap"
             >
               Verify Email Now
-            </button>
+            </Link>
           </div>
         )}
 
@@ -287,13 +286,13 @@ export const PortalLayout: React.FC<{
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <button
-                onClick={() => navigate('/portal/dashboard')}
+              <Link
+                to={ROUTES.PORTAL.DASHBOARD}
                 className="lg:hidden shrink-0 cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]"
                 aria-label="DESTRIA TECH INC Client Portal Dashboard"
               >
                 <BrandLogo variant="emblem" size="sm" ring="gold" eager decorative />
-              </button>
+              </Link>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-[#0F1D36] truncate">
                   Welcome, {firstName}
@@ -320,8 +319,8 @@ export const PortalLayout: React.FC<{
 
             {/* Right: Authorized Credits, Solutions CTA, Proposals, Notifications, Profile */}
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <button
-                onClick={() => navigate('/portal/credits')}
+              <Link
+                to={ROUTES.PORTAL.CREDITS}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E6E2D8] bg-[#FAF8F4] hover:border-[#B8923A] transition-colors cursor-pointer whitespace-nowrap"
                 title="Authorized service credits"
               >
@@ -330,27 +329,27 @@ export const PortalLayout: React.FC<{
                   {(wallet?.availableCredits ?? 0).toLocaleString()}
                 </span>
                 <span className="text-xs text-[#64748B]">credits</span>
-              </button>
+              </Link>
 
-              <button
-                onClick={() => navigate('/portal/store')}
+              <Link
+                to={ROUTES.PORTAL.STORE}
                 className="hidden xl:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>Solutions Directory</span>
-              </button>
+              </Link>
 
-              <button
-                onClick={() => navigate('/portal/cart')}
+              <Link
+                to={ROUTES.PORTAL.CART}
                 className="relative p-2 rounded-lg border border-[#E6E2D8] text-[#0F1D36] hover:bg-[#FAF8F4] transition-colors cursor-pointer"
                 aria-label="Inquiries and formal proposals"
                 title="Inquiries & Formal Proposals"
               >
                 <ClipboardCheck className="w-4 h-4" />
-              </button>
+              </Link>
 
-              <button
-                onClick={() => navigate('/portal/notifications')}
+              <Link
+                to={ROUTES.PORTAL.NOTIFICATIONS}
                 className="relative p-2 rounded-lg border border-[#E6E2D8] text-[#0F1D36] hover:bg-[#FAF8F4] transition-colors cursor-pointer"
                 aria-label="Notifications"
               >
@@ -360,7 +359,7 @@ export const PortalLayout: React.FC<{
                     {unreadNotifications}
                   </span>
                 )}
-              </button>
+              </Link>
 
               <div className="relative">
                 <button
@@ -381,33 +380,27 @@ export const PortalLayout: React.FC<{
                         <p className="font-semibold text-[#0F1D36] truncate">{profile?.fullName || firstName}</p>
                         <p className="text-xs text-[#64748B] truncate">{user?.email}</p>
                       </div>
-                      <button
-                        onClick={() => {
-                          setProfileMenuOpen(false);
-                          navigate('/portal/profile');
-                        }}
-                        className="w-full text-left px-3.5 py-2 text-[#334155] hover:bg-[#FAF8F4] cursor-pointer"
+                      <Link
+                        to={ROUTES.PORTAL.PROFILE}
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="block w-full text-left px-3.5 py-2 text-[#334155] hover:bg-[#FAF8F4] cursor-pointer"
                       >
-                        Profile & Billing
-                      </button>
-                      <button
-                        onClick={() => {
-                          setProfileMenuOpen(false);
-                          navigate('/portal/security');
-                        }}
-                        className="w-full text-left px-3.5 py-2 text-[#334155] hover:bg-[#FAF8F4] cursor-pointer"
+                        Profile &amp; Billing
+                      </Link>
+                      <Link
+                        to={ROUTES.PORTAL.SECURITY}
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="block w-full text-left px-3.5 py-2 text-[#334155] hover:bg-[#FAF8F4] cursor-pointer"
                       >
                         Security Settings
-                      </button>
-                      <button
-                        onClick={() => {
-                          setProfileMenuOpen(false);
-                          navigate('/portal/settings');
-                        }}
-                        className="w-full text-left px-3.5 py-2 text-[#334155] hover:bg-[#FAF8F4] cursor-pointer"
+                      </Link>
+                      <Link
+                        to={ROUTES.PORTAL.SETTINGS}
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="block w-full text-left px-3.5 py-2 text-[#334155] hover:bg-[#FAF8F4] cursor-pointer"
                       >
                         Preferences
-                      </button>
+                      </Link>
                       <div className="my-1 border-t border-[#E6E2D8]" />
                       <button
                         onClick={handleSignOut}

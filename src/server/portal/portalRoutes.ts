@@ -23,6 +23,7 @@ import {
   classifyCommercialPolicyIntent,
   enforceCommercialPolicyOnOutput,
 } from '../aiCommercialPolicy';
+import { ROUTES, buildOrderDetailRoute } from '../../config/routes';
 
 function sanitizeProductForPublicCatalog(product: ProductRecord) {
   return {
@@ -1137,7 +1138,7 @@ export function createPortalRouter(options: {
       currency: order.currency,
       customerEmail: email,
       idempotencyKey: payment.idempotencyKey,
-      returnUrl: `/portal/orders/${order.id}`,
+      returnUrl: buildOrderDetailRoute(order.id),
     });
 
     res.status(201).json({
@@ -1826,7 +1827,7 @@ export function createPortalRouter(options: {
       res.status(200).json({
         success: true,
         answer: policy.approvedResponse,
-        suggestedRoute: policy.isPricingRestricted ? '/portal/store' : '/portal/support',
+        suggestedRoute: policy.isPricingRestricted ? ROUTES.PORTAL.STORE : ROUTES.PORTAL.SUPPORT,
         policyEnforced: policy.isPricingRestricted,
         scopeNotice:
           'Read-only corporate guidance governed by DESTRIA TECH INC commercial policy. Informational only.',
@@ -1844,36 +1845,36 @@ export function createPortalRouter(options: {
 
     let answer =
       'I can help you explore customized technology solution frameworks, submit service inquiries, check your approved proposals, track active project workspaces, locate private files, or contact Support Center. For official commercial inquiries, email info@destriatech.com or call +1 (307) 419-4277.';
-    let suggestedRoute = '/portal/store';
+    let suggestedRoute: string = ROUTES.PORTAL.STORE;
 
     if (question.includes('proposal') || question.includes('inquiry')) {
       answer =
         proposals.length > 0
           ? `You have ${proposals.length} authorized commercial proposal(s) on file. Review them in the Service Inquiries & Proposals workspace.`
           : 'You can initiate a customized enterprise Service Inquiry directly from the Technology Solutions Directory to request a consultation and formal proposal.';
-      suggestedRoute = '/portal/cart';
+      suggestedRoute = ROUTES.PORTAL.CART;
     } else if (question.includes('order') || question.includes('payment') || question.includes('invoice')) {
       answer =
         orders.length > 0
           ? `You currently have ${orders.length} authorized engagement order(s). Your latest record is ${orders[0].orderNumber} (${orders[0].fulfillmentStatus.replace(/_/g, ' ')}, payment: ${orders[0].paymentStatus.replace(/_/g, ' ')}). Payments are confirmed exclusively via verified server webhooks.`
           : 'You do not have an authorized engagement order yet. Explore our Technology Solutions Directory and submit a Service Inquiry to coordinate a consultation and formal proposal.';
-      suggestedRoute = '/portal/orders';
+      suggestedRoute = ROUTES.PORTAL.ORDERS;
     } else if (question.includes('credit') || question.includes('balance')) {
       answer = `Your authorized account ledger currently shows ${wallet.availableCredits.toLocaleString()} available credits, ${wallet.pendingCredits.toLocaleString()} pending credits, and ${wallet.usedCredits.toLocaleString()} used credits.`;
-      suggestedRoute = '/portal/credits';
+      suggestedRoute = ROUTES.PORTAL.CREDITS;
     } else if (question.includes('project') || question.includes('brief') || question.includes('revision')) {
       answer =
         projects.length > 0
           ? `You have ${projects.length} project workspace(s). Latest: ${projects[0].referenceNumber} — "${projects[0].title}" (${projects[0].progressPercent}% progress, ${projects[0].revisionsUsed}/${projects[0].revisionLimit} revisions used).`
           : 'You can create or review project requirements inside Project Workspaces once an engagement is initiated.';
-      suggestedRoute = '/portal/projects';
+      suggestedRoute = ROUTES.PORTAL.PROJECTS;
     } else if (question.includes('file') || question.includes('deliverable') || question.includes('download')) {
       answer = `You have ${files.length} private file(s) stored in your Deliverables & File Vault. All downloads use time-limited signed URLs restricted strictly to your account.`;
-      suggestedRoute = '/portal/files';
+      suggestedRoute = ROUTES.PORTAL.FILES;
     } else if (question.includes('support') || question.includes('refund') || question.includes('help')) {
       answer =
         'For engagement support, authorized billing questions, or technical assistance, open a ticket in Support Center, email info@destriatech.com, or call +1 (307) 419-4277.';
-      suggestedRoute = '/portal/support';
+      suggestedRoute = ROUTES.PORTAL.SUPPORT;
     }
 
     const enforced = enforceCommercialPolicyOnOutput(answer, rawQuestion);

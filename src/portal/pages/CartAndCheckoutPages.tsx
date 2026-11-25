@@ -19,6 +19,11 @@ import { portalRequest, uploadPortalFile } from '../portalApi';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
 import {
+  ROUTES,
+  buildCheckoutWithProposalRoute,
+  buildOrderDetailRoute,
+} from '../../config/routes';
+import {
   COMMERCIAL_ENGAGEMENT_STATEMENT,
   CORPORATE_SERVICE_STATEMENT,
   corporateIdentity,
@@ -89,7 +94,7 @@ export const PortalCartPage: React.FC = () => {
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => navigate('/portal/store')}
+            onClick={() => navigate(ROUTES.PORTAL.STORE)}
             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
           >
             <Layers className="w-3.5 h-3.5" />
@@ -130,7 +135,7 @@ export const PortalCartPage: React.FC = () => {
                   </div>
                   <button
                     type="button"
-                    onClick={() => navigate('/portal/store')}
+                    onClick={() => navigate(ROUTES.PORTAL.STORE)}
                     className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
                   >
                     <span>Explore Solutions Directory</span>
@@ -184,7 +189,7 @@ export const PortalCartPage: React.FC = () => {
                           {canSettle ? (
                             <button
                               type="button"
-                              onClick={() => navigate(`/portal/checkout?proposalId=${encodeURIComponent(prop.id)}`)}
+                              onClick={() => navigate(buildCheckoutWithProposalRoute(prop.id))}
                               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
                             >
                               <span>Proceed to Authorized Settlement</span>
@@ -193,7 +198,11 @@ export const PortalCartPage: React.FC = () => {
                           ) : prop.acceptedOrderId ? (
                             <button
                               type="button"
-                              onClick={() => navigate(`/portal/orders/${prop.acceptedOrderId}`)}
+                              onClick={() => {
+                                if (prop.acceptedOrderId) {
+                                  navigate(buildOrderDetailRoute(prop.acceptedOrderId));
+                                }
+                              }}
                               className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
                             >
                               View Authorized Order →
@@ -269,7 +278,7 @@ export const PortalCartPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() =>
-                  navigate(`/portal/checkout?proposalId=${encodeURIComponent(activeApprovedProposals[0].id)}`)
+                  navigate(buildCheckoutWithProposalRoute(activeApprovedProposals[0].id))
                 }
                 className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
@@ -279,7 +288,7 @@ export const PortalCartPage: React.FC = () => {
             ) : (
               <button
                 type="button"
-                onClick={() => navigate('/portal/store')}
+                onClick={() => navigate(ROUTES.PORTAL.STORE)}
                 className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 <span>Request a Formal Proposal</span>
@@ -542,14 +551,14 @@ export const PortalCheckoutPage: React.FC = () => {
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <button
               type="button"
-              onClick={() => navigate('/portal/store')}
+              onClick={() => navigate(ROUTES.PORTAL.STORE)}
               className="px-4 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
             >
               Initiate Service Inquiry
             </button>
             <button
               type="button"
-              onClick={() => navigate('/portal/cart')}
+              onClick={() => navigate(ROUTES.PORTAL.CART)}
               className="px-4 py-2.5 rounded-lg border border-[#E6E2D8] text-[#0F1D36] hover:bg-[#FAF8F4] text-xs font-semibold cursor-pointer"
             >
               View Inquiries &amp; Proposals
@@ -627,7 +636,7 @@ export const PortalCheckoutPage: React.FC = () => {
                 <div className="flex justify-between pt-2">
                   <button
                     type="button"
-                    onClick={() => navigate('/portal/cart')}
+                    onClick={() => navigate(ROUTES.PORTAL.CART)}
                     className="inline-flex items-center gap-1.5 text-sm text-[#475569] hover:text-[#0F1D36] cursor-pointer"
                   >
                     <ArrowLeft className="w-4 h-4" />
@@ -958,14 +967,14 @@ export const PortalCheckoutPage: React.FC = () => {
                 <div className="flex flex-wrap gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={() => navigate(`/portal/orders/${confirmation.order.id}`)}
+                    onClick={() => navigate(buildOrderDetailRoute(confirmation.order.id))}
                     className="px-4 py-2.5 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
                   >
                     Open Authorized Order
                   </button>
                   <button
                     type="button"
-                    onClick={() => navigate('/portal/invoices')}
+                    onClick={() => navigate(ROUTES.PORTAL.INVOICES)}
                     className="px-4 py-2.5 rounded-lg border border-[#E6E2D8] text-[#0F1D36] hover:bg-[#FAF8F4] text-xs font-semibold cursor-pointer"
                   >
                     View Authorized Invoices

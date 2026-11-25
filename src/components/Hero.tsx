@@ -1,8 +1,10 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowUpRight, Shield, MapPin, Sparkles, Phone, CheckCircle, Mail } from 'lucide-react';
 import { BlockchainNetworkCanvas } from './animations/BlockchainNetworkCanvas';
 import { FloatingTechnologyIcons } from './animations/FloatingTechnologyIcons';
 import { COMPANY_CONFIG, corporateIdentity } from '../data/companyConfig';
+import { ROUTES } from '../config/routes';
 import { BrandLogo } from './BrandLogo';
 
 interface HeroProps {
@@ -59,20 +61,22 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, onOpenPortal }) => {
 
             {/* Primary Enterprise CTAs */}
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <button
+              <Link
+                to={ROUTES.CONSULTATION}
                 onClick={() => onNavigate('contact')}
                 className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-[#111827] bg-[#00C2C7] hover:bg-[#00d6dc] rounded-lg shadow-lg shadow-[#00C2C7]/20 hover:shadow-[#00C2C7]/30 transition-all cursor-pointer whitespace-nowrap"
               >
                 <span>Request an Enterprise Consultation</span>
                 <ArrowUpRight className="w-4 h-4" />
-              </button>
+              </Link>
 
-              <button
+              <Link
+                to={ROUTES.SOLUTIONS}
                 onClick={() => onNavigate('services')}
                 className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white bg-slate-800/90 hover:bg-slate-800 border border-slate-700 hover:border-[#00C2C7]/50 rounded-lg transition-all cursor-pointer whitespace-nowrap"
               >
                 <span>Explore Our Technology Solutions</span>
-              </button>
+              </Link>
 
               <button
                 onClick={onOpenPortal}

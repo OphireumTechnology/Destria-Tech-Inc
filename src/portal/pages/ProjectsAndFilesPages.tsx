@@ -17,6 +17,7 @@ import {
 import { PortalLayout } from '../components/PortalLayout';
 import { portalRequest, triggerSignedFileDownload, uploadPortalFile } from '../portalApi';
 import { usePortalRouter } from '../PortalRouter';
+import { ROUTES, buildProjectDetailRoute } from '../../config/routes';
 import {
   formatPortalDate,
   formatPortalDateTime,
@@ -92,7 +93,7 @@ export const PortalProjectsPage: React.FC = () => {
       setCreateOpen(false);
       setTitle('');
       setDescription('');
-      navigate(`/portal/projects/${res.project.id}`);
+      navigate(buildProjectDetailRoute(res.project.id));
     } catch (err: any) {
       setError(err?.message || 'Unable to submit project brief.');
     } finally {
@@ -134,7 +135,7 @@ export const PortalProjectsPage: React.FC = () => {
             <button
               key={p.id}
               type="button"
-              onClick={() => navigate(`/portal/projects/${p.id}`)}
+              onClick={() => navigate(buildProjectDetailRoute(p.id))}
               className="bg-white border border-[#E6E2D8] hover:border-[#0F4C3A] rounded-xl p-5 text-left transition-colors space-y-3 cursor-pointer"
             >
               <div className="flex items-start justify-between gap-3">
@@ -457,7 +458,7 @@ export const PortalProjectDetailPage: React.FC<{ projectId: string }> = ({ proje
     >
       <button
         type="button"
-        onClick={() => navigate('/portal/projects')}
+        onClick={() => navigate(ROUTES.PORTAL.PROJECTS)}
         className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-[#475569] hover:text-[#0F1D36] cursor-pointer"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
@@ -770,7 +771,7 @@ export const PortalMessagesPage: React.FC = () => {
             <p className="text-sm font-semibold text-[#0F1D36]">No project messages yet</p>
             <button
               type="button"
-              onClick={() => navigate('/portal/projects')}
+              onClick={() => navigate(ROUTES.PORTAL.PROJECTS)}
               className="px-4 py-2 rounded-lg bg-[#0F4C3A] text-white text-xs font-semibold cursor-pointer"
             >
               Open My Projects
@@ -782,7 +783,7 @@ export const PortalMessagesPage: React.FC = () => {
               <button
                 key={m.id}
                 type="button"
-                onClick={() => navigate(`/portal/projects/${m.projectId}`)}
+                onClick={() => navigate(buildProjectDetailRoute(m.projectId))}
                 className="w-full p-4 hover:bg-[#FAF8F4] text-left flex items-start justify-between gap-4 cursor-pointer"
               >
                 <div className="min-w-0">

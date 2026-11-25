@@ -20,6 +20,11 @@ import { portalRequest } from '../portalApi';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
 import {
+  ROUTES,
+  buildOrderDetailRoute,
+  buildProjectDetailRoute,
+} from '../../config/routes';
+import {
   formatMoney,
   formatPortalDate,
   formatPortalDateTime,
@@ -105,7 +110,7 @@ export const PortalOrdersPage: React.FC = () => {
             </select>
             <button
               type="button"
-              onClick={() => navigate('/portal/store')}
+              onClick={() => navigate(ROUTES.PORTAL.STORE)}
               className="px-3.5 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
             >
               Initiate Service Inquiry
@@ -121,7 +126,7 @@ export const PortalOrdersPage: React.FC = () => {
             <p className="text-sm font-semibold text-[#0F1D36]">No matching authorized orders found</p>
             <button
               type="button"
-              onClick={() => navigate('/portal/store')}
+              onClick={() => navigate(ROUTES.PORTAL.STORE)}
               className="px-4 py-2 rounded-lg bg-[#0F4C3A] text-white text-xs font-semibold cursor-pointer"
             >
               Explore Solutions Directory
@@ -170,7 +175,7 @@ export const PortalOrdersPage: React.FC = () => {
                     <td className="py-3.5 px-4 text-right">
                       <button
                         type="button"
-                        onClick={() => navigate(`/portal/orders/${order.id}`)}
+                        onClick={() => navigate(buildOrderDetailRoute(order.id))}
                         className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
                       >
                         View
@@ -250,7 +255,7 @@ export const PortalOrderDetailPage: React.FC<{ orderId: string }> = ({ orderId }
     >
       <button
         type="button"
-        onClick={() => navigate('/portal/orders')}
+        onClick={() => navigate(ROUTES.PORTAL.ORDERS)}
         className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-[#475569] hover:text-[#0F1D36] cursor-pointer"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
@@ -409,7 +414,7 @@ export const PortalOrderDetailPage: React.FC<{ orderId: string }> = ({ orderId }
                 </div>
                 <button
                   type="button"
-                  onClick={() => navigate('/portal/invoices')}
+                  onClick={() => navigate(ROUTES.PORTAL.INVOICES)}
                   className="w-full py-2 px-3 rounded-lg border border-[#E6E2D8] text-xs font-semibold text-[#0F1D36] hover:bg-[#FAF8F4] cursor-pointer"
                 >
                   Open Invoice Center
@@ -424,7 +429,7 @@ export const PortalOrderDetailPage: React.FC<{ orderId: string }> = ({ orderId }
                       <button
                         key={p.id}
                         type="button"
-                        onClick={() => navigate(`/portal/projects/${p.id}`)}
+                        onClick={() => navigate(buildProjectDetailRoute(p.id))}
                         className="w-full p-3 rounded-lg border border-[#E6E2D8] hover:border-[#0F4C3A] text-left cursor-pointer"
                       >
                         <p className="text-xs font-mono text-[#64748B]">{p.referenceNumber}</p>
@@ -548,7 +553,7 @@ export const PortalCreditsPage: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={() => navigate('/portal/store')}
+            onClick={() => navigate(ROUTES.PORTAL.STORE)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
           >
             <Coins className="w-3.5 h-3.5" />
@@ -650,7 +655,7 @@ export const PortalSubscriptionsPage: React.FC = () => {
       <div className="mb-5 flex justify-end">
         <button
           type="button"
-          onClick={() => navigate('/portal/store')}
+          onClick={() => navigate(ROUTES.PORTAL.STORE)}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
         >
           <span>Request a Formal Proposal</span>
@@ -702,7 +707,7 @@ export const PortalSubscriptionsPage: React.FC = () => {
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() => navigate('/portal/store')}
+                  onClick={() => navigate(ROUTES.PORTAL.STORE)}
                   className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
                 >
                   Request Scope Amendment

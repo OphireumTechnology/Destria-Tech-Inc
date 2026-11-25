@@ -1,5 +1,7 @@
 import React, { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { ROUTES } from '../../config/routes';
 import { PortalApiError } from '../portalApi';
 
 export interface LoginErrorPresentation {
@@ -235,13 +237,13 @@ export const ClientPortalLoginForm: React.FC<ClientPortalLoginFormProps> = ({
             >
               Password
             </label>
-            <button
-              type="button"
-              onClick={onNavigateForgotPassword}
+            <Link
+              to={ROUTES.PORTAL.FORGOT_PASSWORD}
+              onClick={() => onNavigateForgotPassword?.()}
               className="text-[13px] font-medium text-[#0B1F3B] hover:text-[#008C90] hover:underline underline-offset-4 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B1F3B] rounded whitespace-nowrap"
             >
               Forgot your password?
-            </button>
+            </Link>
           </div>
           <div className="relative">
             <input
@@ -306,13 +308,13 @@ export const ClientPortalLoginForm: React.FC<ClientPortalLoginFormProps> = ({
       {/* Registration Section */}
       <div className="mt-7 pt-6 border-t border-[#E2E8F0] text-center text-[14px] text-[#64748B]">
         <span>New to DESTRIA NETWORK?</span>{' '}
-        <button
-          type="button"
-          onClick={onNavigateRegister}
+        <Link
+          to={ROUTES.PORTAL.REGISTER}
+          onClick={() => onNavigateRegister?.()}
           className="font-semibold text-[#0B1F3B] hover:text-[#008C90] hover:underline underline-offset-4 transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B1F3B] rounded whitespace-nowrap"
         >
           Create a Client Account
-        </button>
+        </Link>
       </div>
 
       {/* Authentication Footer Notice */}

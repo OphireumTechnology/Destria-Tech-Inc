@@ -1,6 +1,7 @@
 import { COMPANY_CONFIG, COMMERCIAL_ENGAGEMENT_STATEMENT, corporateIdentity } from '../../data/companyConfig';
 import { BRAND_ASSETS } from '../../data/brandAssets';
 import { getCatalogServiceById } from '../../data/serviceCatalog';
+import { ROUTES, buildCanonicalPublicUrl } from '../../config/routes';
 import { AppointmentRecord, DatabaseRepository, SolutionRequestRecord } from '../db/types';
 import { logStructured } from '../logger';
 
@@ -144,7 +145,7 @@ function renderEmailShell(title: string, badge: string, bodyHtml: string): strin
               <strong style="color:#E2E8F0;">${escapeHtml(corporateIdentity.legalName)} (${escapeHtml(corporateIdentity.abbreviation)})</strong> &middot; ${escapeHtml(corporateIdentity.networkName)}<br/>
               Headquarters: ${officialAddress}<br/>
               Telephone: <a href="${officialPhoneHref}" style="color:#00C2C7;text-decoration:none;">${officialPhone}</a> &middot; Email: <a href="mailto:${officialEmail}" style="color:#00C2C7;text-decoration:none;">${officialEmail}</a><br/>
-              Website: <a href="${escapeHtml(corporateIdentity.contact.website)}" style="color:#00C2C7;text-decoration:none;">${escapeHtml(corporateIdentity.contact.website)}</a>
+              Website: <a href="${escapeHtml(buildCanonicalPublicUrl(ROUTES.HOME))}" style="color:#00C2C7;text-decoration:none;">${escapeHtml(buildCanonicalPublicUrl(ROUTES.HOME))}</a> &middot; Client Portal: <a href="${escapeHtml(buildCanonicalPublicUrl(ROUTES.PORTAL.LOGIN))}" style="color:#00C2C7;text-decoration:none;">${escapeHtml(buildCanonicalPublicUrl(ROUTES.PORTAL.LOGIN))}</a>
             </td>
           </tr>
         </table>

@@ -3,6 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import { corporateIdentity } from '../../data/companyConfig';
 import {
+  ROUTES,
+  buildOrderDetailRoute,
+  buildProjectDetailRoute,
+} from '../../config/routes';
+import {
   ApprovedProposalRecord,
   ClientActivityLogRecord,
   ClientAddressRecord,
@@ -263,7 +268,7 @@ export class LocalPortalRepository implements PortalRepository {
       type: 'account_verification',
       title: 'Welcome to DESTRIA TECH INC Client Portal',
       body: 'Please verify your email address to protect your account and receive order and project updates.',
-      linkPath: '/portal/verify-email',
+      linkPath: ROUTES.PORTAL.VERIFY_EMAIL,
     });
 
     await this.addActivity({
@@ -271,7 +276,7 @@ export class LocalPortalRepository implements PortalRepository {
       eventType: 'account_created',
       title: 'Client account created',
       detail: 'Registered for DESTRIA TECH INC Client Portal.',
-      relatedPath: '/portal/profile',
+      relatedPath: ROUTES.PORTAL.PROFILE,
     });
 
     this.persist();
@@ -293,7 +298,7 @@ export class LocalPortalRepository implements PortalRepository {
       eventType: 'email_verified',
       title: 'Email address verified',
       detail: `${user.email} has been verified.`,
-      relatedPath: '/portal/security',
+      relatedPath: ROUTES.PORTAL.SECURITY,
     });
     this.persist();
     return user;
@@ -385,7 +390,7 @@ export class LocalPortalRepository implements PortalRepository {
       eventType: 'account_closure_requested',
       title: 'Account closure request submitted',
       detail: reason || 'Submitted via Security Settings. Financial records retained per statutory law.',
-      relatedPath: '/portal/security',
+      relatedPath: ROUTES.PORTAL.SECURITY,
     });
     this.persist();
     return user;
@@ -607,14 +612,14 @@ export class LocalPortalRepository implements PortalRepository {
       type: 'order_created',
       title: `Custom Package Inquiry ${record.referenceNumber}`,
       body: 'Your enterprise package request has been logged for review by our operations team.',
-      linkPath: '/portal/store',
+      linkPath: ROUTES.PORTAL.STORE,
     });
     await this.addActivity({
       userId: input.userId,
       eventType: 'custom_inquiry_submitted',
       title: `Submitted custom inquiry ${record.referenceNumber}`,
       detail: `${input.companyName} — ${input.requiredServices.join(', ')}`,
-      relatedPath: '/portal/store',
+      relatedPath: ROUTES.PORTAL.STORE,
     });
     this.persist();
     return record;
@@ -687,7 +692,7 @@ export class LocalPortalRepository implements PortalRepository {
       type: 'order_created',
       title: `Formal Commercial Proposal ${record.proposalNumber}`,
       body: `Your approved customized enterprise proposal "${record.title}" is ready for review inside your Client Portal.`,
-      linkPath: '/portal/cart',
+      linkPath: ROUTES.PORTAL.CART,
     });
     this.persist();
     return record;
@@ -858,21 +863,21 @@ export class LocalPortalRepository implements PortalRepository {
       type: 'order_created',
       title: `Order ${orderNumber} Created`,
       body: `Invoice ${invoiceNumber} issued. Awaiting server-verified payment confirmation.`,
-      linkPath: `/portal/orders/${orderId}`,
+      linkPath: buildOrderDetailRoute(orderId),
     });
     await this.addNotification({
       userId: input.userId,
       type: 'invoice_generated',
       title: `Invoice ${invoiceNumber} Ready`,
       body: `View or download your itemized invoice for order ${orderNumber}.`,
-      linkPath: '/portal/invoices',
+      linkPath: ROUTES.PORTAL.INVOICES,
     });
     await this.addActivity({
       userId: input.userId,
       eventType: 'order_created',
       title: `Order ${orderNumber} placed`,
       detail: `${order.items.length} item(s) · Status: Pending Payment`,
-      relatedPath: `/portal/orders/${orderId}`,
+      relatedPath: buildOrderDetailRoute(orderId),
     });
 
     this.persist();
@@ -935,7 +940,7 @@ export class LocalPortalRepository implements PortalRepository {
       eventType: 'order_cancellation',
       title: `Cancellation submitted for ${order.orderNumber}`,
       detail: reason.trim() || 'Client cancellation request',
-      relatedPath: `/portal/orders/${order.id}`,
+      relatedPath: buildOrderDetailRoute(order.id),
     });
     this.persist();
     return order;
@@ -1113,7 +1118,7 @@ export class LocalPortalRepository implements PortalRepository {
         body: creditsAllocated > 0
           ? `Payment verified and ${creditsAllocated.toLocaleString()} credits added to your wallet.`
           : 'Your payment has been verified and production intake is now active.',
-        linkPath: `/portal/orders/${order.id}`,
+        linkPath: buildOrderDetailRoute(order.id),
       });
     } else if (input.eventStatus === 'failed') {
       if (!['unpaid', 'pending', 'processing'].includes(order.paymentStatus)) {
@@ -1145,7 +1150,7 @@ export class LocalPortalRepository implements PortalRepository {
         type: 'payment_failed',
         title: `Payment Failed for ${order.orderNumber}`,
         body: 'The payment provider reported an unsuccessful transaction. You may retry checkout.',
-        linkPath: `/portal/orders/${order.id}`,
+        linkPath: buildOrderDetailRoute(order.id),
       });
     } else if (input.eventStatus === 'refunded') {
       if (order.paymentStatus !== 'paid') {
@@ -1267,7 +1272,7 @@ export class LocalPortalRepository implements PortalRepository {
       type: 'subscription_update',
       title: `Subscription Cancelled — ${sub.planName}`,
       body: 'Your subscription cancellation has been recorded. No recurring charge will occur.',
-      linkPath: '/portal/subscriptions',
+      linkPath: ROUTES.PORTAL.SUBSCRIPTIONS,
     });
     this.persist();
     return sub;
@@ -1345,7 +1350,7 @@ export class LocalPortalRepository implements PortalRepository {
       type: 'project_update',
       title: `Project Workspace ${referenceNumber} Ready`,
       body: `"${project.title}" has been created. You can now message the production desk and upload briefs.`,
-      linkPath: `/portal/projects/${projectId}`,
+      linkPath: buildProjectDetailRoute(projectId),
     });
 
     await this.addActivity({
@@ -1353,7 +1358,7 @@ export class LocalPortalRepository implements PortalRepository {
       eventType: 'project_created',
       title: `Created project ${referenceNumber}`,
       detail: project.title,
-      relatedPath: `/portal/projects/${projectId}`,
+      relatedPath: buildProjectDetailRoute(projectId),
     });
 
     this.persist();
@@ -1417,7 +1422,7 @@ export class LocalPortalRepository implements PortalRepository {
       eventType: 'project_message',
       title: `Message posted in ${project.referenceNumber}`,
       detail: input.body.trim().slice(0, 90),
-      relatedPath: `/portal/projects/${project.id}`,
+      relatedPath: buildProjectDetailRoute(project.id),
     });
     this.persist();
     return message;
@@ -1499,7 +1504,7 @@ export class LocalPortalRepository implements PortalRepository {
       type: 'revision_update',
       title: `Revision ${revision.revisionNumber} Submitted`,
       body: `Logged for ${project.referenceNumber} (${project.revisionsUsed}/${project.revisionLimit} revisions used).`,
-      linkPath: `/portal/projects/${project.id}`,
+      linkPath: buildProjectDetailRoute(project.id),
     });
 
     await this.addActivity({
@@ -1507,7 +1512,7 @@ export class LocalPortalRepository implements PortalRepository {
       eventType: 'revision_requested',
       title: `Revision ${revision.revisionNumber} requested`,
       detail: `${project.referenceNumber}: ${input.description.trim().slice(0, 90)}`,
-      relatedPath: `/portal/projects/${project.id}`,
+      relatedPath: buildProjectDetailRoute(project.id),
     });
 
     this.persist();
@@ -1575,7 +1580,7 @@ export class LocalPortalRepository implements PortalRepository {
       eventType: 'file_uploaded',
       title: `Uploaded ${record.fileName}`,
       detail: `${(record.sizeBytes / 1024).toFixed(1)} KB · v${record.version}`,
-      relatedPath: record.projectId ? `/portal/projects/${record.projectId}` : '/portal/files',
+      relatedPath: record.projectId ? buildProjectDetailRoute(record.projectId) : ROUTES.PORTAL.FILES,
     });
     this.persist();
     return saved;
@@ -1650,14 +1655,14 @@ export class LocalPortalRepository implements PortalRepository {
       type: 'support_reply',
       title: `Support Ticket ${ticket.ticketNumber} Opened`,
       body: `${ticket.category} — Our client support team will review your request shortly.`,
-      linkPath: '/portal/support',
+      linkPath: ROUTES.PORTAL.SUPPORT,
     });
     await this.addActivity({
       userId: input.userId,
       eventType: 'support_ticket_created',
       title: `Opened support ticket ${ticket.ticketNumber}`,
       detail: ticket.subject,
-      relatedPath: '/portal/support',
+      relatedPath: ROUTES.PORTAL.SUPPORT,
     });
     this.persist();
     return ticket;

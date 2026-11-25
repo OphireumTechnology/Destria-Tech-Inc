@@ -1,0 +1,68 @@
+{
+  "canonicalOrigin": "https://destriatech.com",
+  "customDomain": "destriatech.com",
+  "githubPagesHost": "ophireumtechnology.github.io",
+  "githubPagesRepoPrefix": "/Destria-Tech-Inc",
+  "publicRoutes": [
+    "/",
+    "/about",
+    "/solutions",
+    "/portfolio",
+    "/enterprise-suite",
+    "/consultation",
+    "/contact"
+  ],
+  "governanceRoutes": [
+    { "path": "/governance", "sectionId": "commercial-engagement-policy", "title": "Corporate Governance & Legal Statements" },
+    { "path": "/commercial-engagement-policy", "sectionId": "commercial-engagement-policy", "title": "Commercial Engagement Policy" },
+    { "path": "/terms-of-service", "sectionId": "terms-of-use", "title": "Terms of Service" },
+    { "path": "/privacy-policy", "sectionId": "privacy-policy", "title": "Privacy Policy" },
+    { "path": "/cookie-policy", "sectionId": "cookie-policy", "title": "Cookie Policy" },
+    { "path": "/technology-services-disclaimer", "sectionId": "technology-services-disclaimer", "title": "Technology Services Disclaimer" },
+    { "path": "/ai-usage-disclaimer", "sectionId": "ai-usage-disclaimer", "title": "Artificial Intelligence Usage Disclaimer" },
+    { "path": "/intellectual-property", "sectionId": "intellectual-property-notice", "title": "Intellectual Property Notice" },
+    { "path": "/information-security", "sectionId": "information-security-statement", "title": "Information Security Statement" },
+    { "path": "/acceptable-use-policy", "sectionId": "acceptable-use-policy", "title": "Acceptable Use Policy" },
+    { "path": "/confidentiality", "sectionId": "confidentiality-notice", "title": "Confidentiality & Non-Disclosure" }
+  ],
+  "portalStaticRoutes": [
+    "/portal",
+    "/portal/login",
+    "/portal/register",
+    "/portal/forgot-password",
+    "/portal/reset-password",
+    "/portal/verify-email",
+    "/portal/dashboard",
+    "/portal/services",
+    "/portal/store",
+    "/portal/cart",
+    "/portal/proposals",
+    "/portal/checkout",
+    "/portal/orders",
+    "/portal/projects",
+    "/portal/messages",
+    "/portal/credits",
+    "/portal/subscriptions",
+    "/portal/invoices",
+    "/portal/payments",
+    "/portal/files",
+    "/portal/deliverables",
+    "/portal/support",
+    "/portal/notifications",
+    "/portal/profile",
+    "/portal/security",
+    "/portal/settings"
+  ],
+  "portalDynamicPrefixes": [
+    "/portal/store/",
+    "/portal/orders/",
+    "/portal/projects/"
+  ],
+  "adminStaticRoutes": [
+    "/admin",
+    "/admin/login",
+    "/admin/dashboard",
+    "/admin/appointments",
+    "/admin/audit-logs"
+  ]
+}

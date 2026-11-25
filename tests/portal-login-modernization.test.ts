@@ -88,13 +88,39 @@ test('Portal Login Clean URL: canonicalizes legacy #/portal/login and trailing s
     null
   );
 
-  // Must NEVER strip or rewrite OAuth/recovery/anchor/other-portal hash fragments
+  // Enterprise-wide legacy hash URLs migrate cleanly to History API routes
+  assert.equal(
+    resolveCanonicalPortalLoginUrl({
+      hostname: 'destriatech.com',
+      pathname: '/',
+      search: '',
+      hash: '#/portal/verify-email?token=verify_123',
+    }),
+    '/portal/verify-email?token=verify_123'
+  );
+  assert.equal(
+    resolveCanonicalPortalLoginUrl({
+      hostname: 'destriatech.com',
+      pathname: '/',
+      search: '',
+      hash: '#/portal/forgot-password',
+    }),
+    '/portal/forgot-password'
+  );
+  assert.equal(
+    resolveCanonicalPortalLoginUrl({
+      hostname: 'destriatech.com',
+      pathname: '/',
+      search: '',
+      hash: '#/portal/register',
+    }),
+    '/portal/register'
+  );
+
+  // Must NEVER strip or rewrite OAuth/recovery/document-anchor hash fragments
   for (const preservedHash of [
     '#access_token=eyJhbGciOiJIUzI1NiJ9&type=recovery',
     '#recovery_token=abc123',
-    '#/portal/verify-email?token=verify_123',
-    '#/portal/forgot-password',
-    '#/portal/register',
     '#about',
     '#services',
   ]) {
@@ -347,13 +373,14 @@ test('Portal Login Scope, Branding, Revised Copy, Legal Restraint, and Public We
   }
 });
 
-test('Production Build Refresh-Safe Entry: vite.config.ts emits dist/portal/login/index.html with resolved ../../ relative asset paths', () => {
+test('Production Build Refresh-Safe Entry: vite.config.ts emits dist clean route entries with root-resolved /assets/ and /branding/ paths', () => {
   const viteConfigSource = fs.readFileSync(path.join(ROOT, 'vite.config.ts'), 'utf8');
-  assert.match(viteConfigSource, /portalLoginEntryPlugin/);
-  assert.match(viteConfigSource, /'portal', 'login'/);
+  assert.match(viteConfigSource, /enterpriseCleanRoutesPlugin/);
+  assert.match(viteConfigSource, /generateStaticPagesRoutes/);
 
   const rootDistHtmlPath = path.join(ROOT, 'dist', 'index.html');
   const loginDistHtmlPath = path.join(ROOT, 'dist', 'portal', 'login', 'index.html');
+  const registerDistHtmlPath = path.join(ROOT, 'dist', 'portal', 'register', 'index.html');
 
   if (fs.existsSync(rootDistHtmlPath)) {
     assert.equal(
@@ -361,15 +388,24 @@ test('Production Build Refresh-Safe Entry: vite.config.ts emits dist/portal/logi
       true,
       'Expected dist/portal/login/index.html to be emitted alongside dist/index.html'
     );
+    assert.equal(
+      fs.existsSync(registerDistHtmlPath),
+      true,
+      'Expected dist/portal/register/index.html to be emitted alongside dist/index.html'
+    );
 
     const rootHtml = fs.readFileSync(rootDistHtmlPath, 'utf8');
     const loginHtml = fs.readFileSync(loginDistHtmlPath, 'utf8');
+    const registerHtml = fs.readFileSync(registerDistHtmlPath, 'utf8');
 
-    assert.match(rootHtml, /src="\.\/assets\//);
-    assert.match(loginHtml, /src="\.\.\/\.\.\/assets\//);
-    assert.match(loginHtml, /href="\.\.\/\.\.\/assets\//);
-    assert.match(loginHtml, /href="\.\.\/\.\.\/branding\//);
+    assert.match(rootHtml, /src="\/assets\//);
+    assert.match(loginHtml, /src="\/assets\//);
+    assert.match(loginHtml, /href="\/assets\//);
+    assert.match(loginHtml, /href="\/branding\//);
+    assert.match(registerHtml, /src="\/assets\//);
     assert.equal(loginHtml.includes('src="./assets/'), false, 'Nested login HTML must not retain single-dot ./assets/ paths');
     assert.equal(loginHtml.includes('/src/main.tsx'), false, 'Production login HTML must not reference dev /src/main.tsx');
+    assert.equal(loginHtml.includes('/#/'), false, 'Production login HTML must not contain hash-routing /#/ links');
+    assert.equal(registerHtml.includes('/#/'), false, 'Production register HTML must not contain hash-routing /#/ links');
   }
 });

@@ -429,20 +429,26 @@ test('Deployment configuration & frontend secret isolation checks pass', () => {
   }
 });
 
-test('Pages portal recovery preserves nested paths and query strings on both hosting origins', () => {
+test('GitHub Pages static hosting uses clean History API routing without hash-based /#/ redirects', () => {
   const html = fs.readFileSync('public/404.html', 'utf8');
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
-  assert.ok(script);
-  for (const [hostname, prefix] of [['destriatech.com', ''], ['www.destriatech.com', ''], ['ophireumtechnology.github.io', '/Destria-Tech-Inc']]) {
-    let destination = '';
-    const location = { hostname, pathname: prefix + '/portal/login', search: '?next=dashboard', replace: (v: string) => { destination = v; } };
-    new Function('location', script)(location);
-    assert.equal(destination, prefix + '/#/portal/login?next=dashboard');
-    destination = '';
-    location.pathname = prefix + '/missing';
-    new Function('location', script)(location);
-    assert.equal(destination, '');
-  }
+  assert.equal(html.includes('/#/'), false, 'public/404.html must not emit legacy /#/ hash redirects');
+  assert.ok(html.includes('/portal/login'), 'public/404.html must preserve clean Client Portal navigation');
+
+  const cname = fs.readFileSync('public/CNAME', 'utf8').trim();
+  assert.equal(cname, 'destriatech.com');
+
+  const robots = fs.readFileSync('public/robots.txt', 'utf8');
+  assert.ok(robots.includes('Disallow: /portal/'));
+  assert.ok(robots.includes('Disallow: /admin/'));
+  assert.ok(robots.includes('Sitemap: https://destriatech.com/sitemap.xml'));
+
+  const sitemap = fs.readFileSync('public/sitemap.xml', 'utf8');
+  assert.ok(sitemap.includes('https://destriatech.com/'));
+  assert.equal(sitemap.includes('/#/'), false, 'sitemap.xml must never contain hash URLs');
+  assert.equal(sitemap.includes('/portal/'), false, 'sitemap.xml must exclude private /portal/ routes');
+  assert.equal(sitemap.includes('/admin/'), false, 'sitemap.xml must exclude private /admin/ routes');
+
   const router = fs.readFileSync('src/portal/PortalRouter.tsx', 'utf8');
-  assert.ok(router.includes("['destriatech.com', 'www.destriatech.com'].includes(window.location.hostname)"));
+  assert.equal(router.includes('/#/'), false, 'PortalRouter.tsx must never generate /#/ hash URLs');
+  assert.equal(router.includes('HashRouter'), false, 'PortalRouter.tsx must not use HashRouter');
 });

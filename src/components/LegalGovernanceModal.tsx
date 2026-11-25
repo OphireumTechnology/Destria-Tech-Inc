@@ -9,12 +9,14 @@ import {
 interface LegalGovernanceModalProps {
   isOpen: boolean;
   initialSectionId?: string;
+  onSelectSection?: (sectionId: string) => void;
   onClose: () => void;
 }
 
 export const LegalGovernanceModal: React.FC<LegalGovernanceModalProps> = ({
   isOpen,
   initialSectionId,
+  onSelectSection,
   onClose,
 }) => {
   const [activeId, setActiveId] = useState<string>(
@@ -100,7 +102,10 @@ export const LegalGovernanceModal: React.FC<LegalGovernanceModalProps> = ({
                 <button
                   key={section.id}
                   type="button"
-                  onClick={() => setActiveId(section.id)}
+                  onClick={() => {
+                    setActiveId(section.id);
+                    onSelectSection?.(section.id);
+                  }}
                   className={`w-full text-left px-3 py-2.5 rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-2 ${
                     isSelected
                       ? 'bg-[#00C2C7]/15 text-[#00C2C7] border border-[#00C2C7]/40 font-semibold'

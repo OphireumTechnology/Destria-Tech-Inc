@@ -12,6 +12,12 @@ import { PortalLayout } from '../components/PortalLayout';
 import { portalRequest } from '../portalApi';
 import { usePortalRouter } from '../PortalRouter';
 import {
+  ROUTES,
+  buildOrderDetailRoute,
+  buildProjectDetailRoute,
+  buildStoreItemRoute,
+} from '../../config/routes';
+import {
   formatMoney,
   formatPortalDate,
   formatPortalDateTime,
@@ -75,12 +81,12 @@ export const PortalDashboardPage: React.FC = () => {
       {/* 6 Overview Metric Cards */}
       <section aria-label="Account summary metrics" className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
         {[
-          { label: 'Active Engagements', value: data?.metrics.activeOrders ?? 0, to: '/portal/orders' },
-          { label: 'Active Projects', value: data?.metrics.activeProjects ?? 0, to: '/portal/projects' },
-          { label: 'Approved Proposals', value: data?.metrics.approvedProposalsCount ?? 0, to: '/portal/cart' },
-          { label: 'Service Inquiries', value: data?.metrics.serviceInquiriesCount ?? 0, to: '/portal/cart' },
-          { label: 'Authorized Credits', value: data?.metrics.availableCredits ?? 0, to: '/portal/credits' },
-          { label: 'Open Support', value: data?.metrics.openSupportRequests ?? 0, to: '/portal/support' },
+          { label: 'Active Engagements', value: data?.metrics.activeOrders ?? 0, to: ROUTES.PORTAL.ORDERS },
+          { label: 'Active Projects', value: data?.metrics.activeProjects ?? 0, to: ROUTES.PORTAL.PROJECTS },
+          { label: 'Approved Proposals', value: data?.metrics.approvedProposalsCount ?? 0, to: ROUTES.PORTAL.CART },
+          { label: 'Service Inquiries', value: data?.metrics.serviceInquiriesCount ?? 0, to: ROUTES.PORTAL.CART },
+          { label: 'Authorized Credits', value: data?.metrics.availableCredits ?? 0, to: ROUTES.PORTAL.CREDITS },
+          { label: 'Open Support', value: data?.metrics.openSupportRequests ?? 0, to: ROUTES.PORTAL.SUPPORT },
         ].map((card) => (
           <button
             key={card.label}
@@ -103,12 +109,12 @@ export const PortalDashboardPage: React.FC = () => {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
-            { label: 'Solutions Directory', icon: Layers, to: '/portal/store', primary: true },
-            { label: 'Inquiries & Proposals', icon: ClipboardCheck, to: '/portal/cart' },
-            { label: 'Project Workspaces', icon: FolderKanban, to: '/portal/projects' },
-            { label: 'Submit Project Brief', icon: FilePlus2, to: '/portal/projects?new=1' },
-            { label: 'Authorized Orders', icon: ShoppingBag, to: '/portal/orders' },
-            { label: 'Support Center', icon: LifeBuoy, to: '/portal/support?new=1' },
+            { label: 'Solutions Directory', icon: Layers, to: ROUTES.PORTAL.STORE, primary: true },
+            { label: 'Inquiries & Proposals', icon: ClipboardCheck, to: ROUTES.PORTAL.CART },
+            { label: 'Project Workspaces', icon: FolderKanban, to: ROUTES.PORTAL.PROJECTS },
+            { label: 'Submit Project Brief', icon: FilePlus2, to: `${ROUTES.PORTAL.PROJECTS}?new=1` },
+            { label: 'Authorized Orders', icon: ShoppingBag, to: ROUTES.PORTAL.ORDERS },
+            { label: 'Support Center', icon: LifeBuoy, to: `${ROUTES.PORTAL.SUPPORT}?new=1` },
           ].map((action) => {
             const Icon = action.icon;
             return (
@@ -136,7 +142,7 @@ export const PortalDashboardPage: React.FC = () => {
           <div className="px-5 py-4 border-b border-[#E6E2D8] flex items-center justify-between">
             <h2 className="text-base font-semibold text-[#0F1D36]">Recent Authorized Orders</h2>
             <button
-              onClick={() => navigate('/portal/orders')}
+              onClick={() => navigate(ROUTES.PORTAL.ORDERS)}
               className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer inline-flex items-center gap-1"
             >
               <span>View all</span>
@@ -152,7 +158,7 @@ export const PortalDashboardPage: React.FC = () => {
                 Explore the Technology Solutions Directory to initiate a consultation and receive a formal proposal.
               </p>
               <button
-                onClick={() => navigate('/portal/store')}
+                onClick={() => navigate(ROUTES.PORTAL.STORE)}
                 className="mt-4 px-4 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
               >
                 Explore Solutions Directory
@@ -196,7 +202,7 @@ export const PortalDashboardPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
-                          onClick={() => navigate(`/portal/orders/${order.id}`)}
+                          onClick={() => navigate(buildOrderDetailRoute(order.id))}
                           className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
                         >
                           View
@@ -215,7 +221,7 @@ export const PortalDashboardPage: React.FC = () => {
           <div className="px-5 py-4 border-b border-[#E6E2D8] flex items-center justify-between">
             <h2 className="text-base font-semibold text-[#0F1D36]">Active Project Workspaces</h2>
             <button
-              onClick={() => navigate('/portal/projects')}
+              onClick={() => navigate(ROUTES.PORTAL.PROJECTS)}
               className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer inline-flex items-center gap-1"
             >
               <span>All projects</span>
@@ -231,7 +237,7 @@ export const PortalDashboardPage: React.FC = () => {
                 Submit a project brief or execute an approved formal proposal to open a collaborative workspace.
               </p>
               <button
-                onClick={() => navigate('/portal/projects?new=1')}
+                onClick={() => navigate(`${ROUTES.PORTAL.PROJECTS}?new=1`)}
                 className="mt-4 px-4 py-2 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-xs font-semibold cursor-pointer"
               >
                 Create Project Brief
@@ -260,7 +266,7 @@ export const PortalDashboardPage: React.FC = () => {
                     </div>
                   </div>
                   <button
-                    onClick={() => navigate(`/portal/projects/${prj.id}`)}
+                    onClick={() => navigate(buildProjectDetailRoute(prj.id))}
                     className="px-3 py-1.5 rounded-lg border border-[#E6E2D8] text-xs font-semibold text-[#0F1D36] hover:border-[#0F4C3A] hover:text-[#0F4C3A] cursor-pointer whitespace-nowrap"
                   >
                     Open Project
@@ -305,7 +311,7 @@ export const PortalDashboardPage: React.FC = () => {
           <div className="px-5 py-4 border-b border-[#E6E2D8] flex items-center justify-between">
             <h2 className="text-base font-semibold text-[#0F1D36]">Customized Solution Frameworks</h2>
             <button
-              onClick={() => navigate('/portal/store')}
+              onClick={() => navigate(ROUTES.PORTAL.STORE)}
               className="text-xs font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
             >
               Explore Solutions Directory
@@ -328,7 +334,7 @@ export const PortalDashboardPage: React.FC = () => {
                       {pkg?.engagementLabel || 'Customized Enterprise Solution'}
                     </span>
                     <button
-                      onClick={() => navigate(`/portal/store/${product.slug}`)}
+                      onClick={() => navigate(buildStoreItemRoute(product.slug))}
                       className="text-xs font-semibold text-[#0F1D36] hover:text-[#0F4C3A] hover:underline cursor-pointer whitespace-nowrap"
                     >
                       Explore Solution →

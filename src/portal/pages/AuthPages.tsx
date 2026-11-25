@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, Mail, Phone, ShieldCheck } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
 import { corporateIdentity } from '../../data/companyConfig';
+import { ROUTES, scrubSensitiveAuthParamsFromUrl } from '../../config/routes';
+import { supabase } from '../../services/supabaseService';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
 import { portalRequest } from '../portalApi';
@@ -12,20 +15,18 @@ const AuthShell: React.FC<{
   subtitle: string;
   children: React.ReactNode;
 }> = ({ title, subtitle, children }) => {
-  const { exitToPublicSite } = usePortalRouter();
-
   return (
     <div className="min-h-screen bg-[#F3F4F6] text-[#111827] grid lg:grid-cols-[440px_1fr]">
       {/* Left Brand Panel */}
       <aside className="hidden lg:flex flex-col justify-between bg-[#0B1F3B] text-[#F3F4F6] p-10">
         <div>
-          <button
-            onClick={exitToPublicSite}
+          <Link
+            to={ROUTES.HOME}
             className="inline-flex items-center gap-2 text-xs text-slate-300 hover:text-white transition-colors cursor-pointer mb-10"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Return to DESTRIA TECH INC Website</span>
-          </button>
+          </Link>
           <div className="mb-8">
             <BrandLogo
               variant="horizontal"
@@ -78,12 +79,12 @@ const AuthShell: React.FC<{
               subtitle="DESTRIA NETWORK"
               eager
             />
-            <button
-              onClick={exitToPublicSite}
+            <Link
+              to={ROUTES.HOME}
               className="text-xs font-medium text-[#0B1F3B] hover:underline cursor-pointer"
             >
               Public Website
-            </button>
+            </Link>
           </div>
 
           <div className="bg-white border border-[#E6E2D8] rounded-xl p-6 sm:p-8">
@@ -96,7 +97,6 @@ const AuthShell: React.FC<{
     </div>
   );
 };
-
 
 export const PortalRegisterPage: React.FC = () => {
   const { register } = usePortalAuth();
@@ -121,7 +121,7 @@ export const PortalRegisterPage: React.FC = () => {
     setBusy(true);
     try {
       await register({ firstName, lastName, companyName, phone, email, password });
-      navigate('/portal/verify-email', { replace: true });
+      navigate(ROUTES.PORTAL.VERIFY_EMAIL, { replace: true });
     } catch (err: any) {
       setError(err?.message || 'Registration failed.');
     } finally {
@@ -233,12 +233,12 @@ export const PortalRegisterPage: React.FC = () => {
 
       <div className="mt-6 pt-5 border-t border-[#E6E2D8] text-center text-sm text-[#475569]">
         Already have an account?{' '}
-        <button
-          onClick={() => navigate('/portal/login')}
+        <Link
+          to={ROUTES.PORTAL.LOGIN}
           className="font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
         >
           Sign in
-        </button>
+        </Link>
       </div>
     </AuthShell>
   );
@@ -246,11 +246,20 @@ export const PortalRegisterPage: React.FC = () => {
 
 export const PortalVerifyEmailPage: React.FC = () => {
   const { user, devVerificationToken, setDevVerificationToken, refreshSession } = usePortalAuth();
-  const { navigate, query } = usePortalRouter();
+  const { query } = usePortalRouter();
   const [token, setToken] = useState(query.get('token') || devVerificationToken || '');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  // Capture incoming verification token from clean URL query and remove it from the address bar
+  useEffect(() => {
+    const incomingToken = query.get('token');
+    if (incomingToken) {
+      setToken(incomingToken);
+      scrubSensitiveAuthParamsFromUrl();
+    }
+  }, [query]);
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,6 +273,7 @@ export const PortalVerifyEmailPage: React.FC = () => {
         skipAuth: true,
       });
       setDevVerificationToken(null);
+      scrubSensitiveAuthParamsFromUrl();
       await refreshSession();
       setMessage('Email address verified successfully.');
     } catch (err: any) {
@@ -307,12 +317,13 @@ export const PortalVerifyEmailPage: React.FC = () => {
               Your email address is verified. You can now use all client portal features.
             </div>
           </div>
-          <button
-            onClick={() => navigate('/portal/dashboard', { replace: true })}
-            className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-sm font-semibold cursor-pointer"
+          <Link
+            to={ROUTES.PORTAL.DASHBOARD}
+            replace
+            className="block text-center w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-sm font-semibold cursor-pointer"
           >
             Continue to Dashboard
-          </button>
+          </Link>
         </div>
       ) : (
         <form onSubmit={handleVerify} className="space-y-4">
@@ -363,13 +374,12 @@ export const PortalVerifyEmailPage: React.FC = () => {
             ) : (
               <span />
             )}
-            <button
-              type="button"
-              onClick={() => navigate(user ? '/portal/dashboard' : '/portal/login')}
+            <Link
+              to={user ? ROUTES.PORTAL.DASHBOARD : ROUTES.PORTAL.LOGIN}
               className="text-[#475569] hover:text-[#0F1D36] cursor-pointer"
             >
               {user ? 'Skip for now →' : 'Back to Sign In'}
-            </button>
+            </Link>
           </div>
         </form>
       )}
@@ -378,7 +388,6 @@ export const PortalVerifyEmailPage: React.FC = () => {
 };
 
 export const PortalForgotPasswordPage: React.FC = () => {
-  const { navigate } = usePortalRouter();
   const [step, setStep] = useState<'request' | 'reset' | 'done'>('request');
   const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
@@ -418,6 +427,7 @@ export const PortalForgotPasswordPage: React.FC = () => {
         body: { token: token.trim(), newPassword },
         skipAuth: true,
       });
+      scrubSensitiveAuthParamsFromUrl();
       setStep('done');
     } catch (err: any) {
       setError(err?.message || 'Unable to reset password.');
@@ -457,6 +467,12 @@ export const PortalForgotPasswordPage: React.FC = () => {
           >
             {busy ? 'Sending instructions...' : 'Send Reset Instructions'}
           </button>
+          <div className="text-center text-xs text-[#475569]">
+            Already received a recovery token?{' '}
+            <Link to={ROUTES.PORTAL.RESET_PASSWORD} className="font-semibold text-[#0F4C3A] hover:underline">
+              Enter Reset Token
+            </Link>
+          </div>
         </form>
       )}
 
@@ -505,22 +521,201 @@ export const PortalForgotPasswordPage: React.FC = () => {
           <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-[#14532D]">
             Your password has been reset and all prior sessions were revoked. Sign in with your new password.
           </div>
-          <button
-            onClick={() => navigate('/portal/login', { replace: true })}
-            className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-sm font-semibold cursor-pointer"
+          <Link
+            to={ROUTES.PORTAL.LOGIN}
+            replace
+            className="block text-center w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-sm font-semibold cursor-pointer"
           >
             Return to Sign In
-          </button>
+          </Link>
         </div>
       )}
 
       <div className="mt-6 pt-5 border-t border-[#E6E2D8] text-center text-sm">
-        <button
-          onClick={() => navigate('/portal/login')}
+        <Link
+          to={ROUTES.PORTAL.LOGIN}
           className="text-[#475569] hover:text-[#0F1D36] cursor-pointer"
         >
           Back to Sign In
-        </button>
+        </Link>
+      </div>
+    </AuthShell>
+  );
+};
+
+export const PortalResetPasswordPage: React.FC = () => {
+  const { query } = usePortalRouter();
+  const [token, setToken] = useState(() => query.get('token') || '');
+  const [supabaseRecoveryReady, setSupabaseRecoveryReady] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
+
+  // Capture query token OR allow Supabase Auth to exchange recovery callback parameters
+  // BEFORE scrubbing sensitive callback parameters from the browser address bar.
+  useEffect(() => {
+    const queryToken = query.get('token');
+    if (queryToken) {
+      setToken(queryToken);
+      scrubSensitiveAuthParamsFromUrl();
+      return;
+    }
+
+    if (supabase && typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      const hasRecoveryFragment = /access_token=|recovery_token=|type=recovery/i.test(hash);
+      const hasCode = query.has('code');
+      if (hasRecoveryFragment || hasCode) {
+        void supabase.auth.getSession().then(({ data }) => {
+          if (data.session) {
+            setSupabaseRecoveryReady(true);
+            scrubSensitiveAuthParamsFromUrl();
+          }
+        });
+      }
+    }
+  }, [query]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      if (supabaseRecoveryReady && supabase && !token.trim()) {
+        const { error: supaErr } = await supabase.auth.updateUser({ password: newPassword });
+        if (supaErr) {
+          throw new Error(supaErr.message || 'Unable to update password.');
+        }
+      } else {
+        if (!token.trim()) {
+          throw new Error('A valid password recovery token is required.');
+        }
+        await portalRequest('/auth/reset-password', {
+          method: 'POST',
+          body: { token: token.trim(), newPassword },
+          skipAuth: true,
+        });
+      }
+      scrubSensitiveAuthParamsFromUrl();
+      setDone(true);
+    } catch (err: any) {
+      setError(err?.message || 'Unable to reset password.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <AuthShell
+      title="Reset Your Password"
+      subtitle="Set a new password for your DESTRIA TECH INC Client Portal account."
+    >
+      {error && (
+        <div
+          role="alert"
+          className="mb-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-[#B91C1C]"
+        >
+          {error}
+        </div>
+      )}
+
+      {done ? (
+        <div className="space-y-4">
+          <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200 flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-[#15803D] shrink-0 mt-0.5" />
+            <div className="text-sm text-[#14532D]">
+              Your password has been updated and prior sessions have been revoked. Please sign in with your new credentials.
+            </div>
+          </div>
+          <Link
+            to={ROUTES.PORTAL.LOGIN}
+            replace
+            className="block text-center w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] text-white text-sm font-semibold"
+          >
+            Return to Sign In
+          </Link>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {!supabaseRecoveryReady && (
+            <div>
+              <label htmlFor="reset-token-input" className="block text-xs font-semibold text-[#334155] mb-1.5">
+                Recovery Token
+              </label>
+              <input
+                id="reset-token-input"
+                type="text"
+                required
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="Paste recovery token"
+                className="w-full px-3.5 py-2.5 text-sm font-mono bg-white border border-[#D8D3C8] rounded-lg text-[#0F1D36] focus:outline-none focus:border-[#0F4C3A]"
+              />
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="reset-new-password" className="block text-xs font-semibold text-[#334155] mb-1.5">
+              New Password (8+ characters)
+            </label>
+            <input
+              id="reset-new-password"
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Enter new password"
+              className="w-full px-3.5 py-2.5 text-sm bg-white border border-[#D8D3C8] rounded-lg text-[#0F1D36] focus:outline-none focus:border-[#0F4C3A]"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="reset-confirm-password" className="block text-xs font-semibold text-[#334155] mb-1.5">
+              Confirm New Password
+            </label>
+            <input
+              id="reset-confirm-password"
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter new password"
+              className="w-full px-3.5 py-2.5 text-sm bg-white border border-[#D8D3C8] rounded-lg text-[#0F1D36] focus:outline-none focus:border-[#0F4C3A]"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] disabled:opacity-60 text-white text-sm font-semibold cursor-pointer"
+          >
+            {busy ? 'Updating password...' : 'Update Password'}
+          </button>
+        </form>
+      )}
+
+      <div className="mt-6 pt-5 border-t border-[#E6E2D8] flex items-center justify-between text-xs text-[#475569]">
+        <Link to={ROUTES.PORTAL.FORGOT_PASSWORD} className="hover:text-[#0F1D36]">
+          Request New Token
+        </Link>
+        <Link to={ROUTES.PORTAL.LOGIN} className="font-semibold text-[#0F4C3A] hover:underline">
+          Back to Sign In
+        </Link>
       </div>
     </AuthShell>
   );

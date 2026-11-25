@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { PortalLayout } from '../components/PortalLayout';
 import { corporateIdentity } from '../../data/companyConfig';
+import { ROUTES } from '../../config/routes';
 import { portalRequest } from '../portalApi';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
@@ -746,7 +747,7 @@ export const PortalSecurityPage: React.FC = () => {
 
   const handleLogoutAll = async () => {
     await logoutAll();
-    navigate('/portal/login', { replace: true });
+    navigate(ROUTES.PORTAL.LOGIN, { replace: true });
   };
 
   const handleRequestClosure = async (e: React.FormEvent) => {

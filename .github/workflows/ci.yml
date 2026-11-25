@@ -2,9 +2,9 @@ name: CI Security & Stabilization Checks
 
 on:
   push:
-    branches: [main, 'repair/**']
+    branches: [main, 'repair/**', 'fix/**']
   pull_request:
-    branches: [main, 'repair/**']
+    branches: [main, 'repair/**', 'fix/**']
 
 jobs:
   verify:
@@ -21,14 +21,20 @@ jobs:
       - name: Install dependencies
         run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
+      - name: Verify clean URL routing architecture (source regression gate)
+        run: npm run verify:routing
+
       - name: TypeScript typecheck & lint
         run: npm run lint
 
-      - name: Run unit, integration & security regression suite
-        run: npm test
-
       - name: Build production frontend bundle
         run: npm run build
+
+      - name: Verify compiled clean URL static routes, 404.html, CNAME, and SEO artifacts
+        run: npm run verify:routing:dist
+
+      - name: Run unit, integration, routing & security regression suite
+        run: npm test
 
       - name: Verify server bundle compilation
         run: npm run build:server

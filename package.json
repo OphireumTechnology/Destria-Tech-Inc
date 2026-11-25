@@ -7,11 +7,14 @@
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
     "build": "vite build",
+    "build:pages-routes": "node scripts/build-pages-routes.mjs",
     "build:server": "esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=/tmp/ophireum-server-check.mjs && rm -f /tmp/ophireum-server-check.mjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
+    "verify:routing": "node scripts/verify-clean-routing.mjs",
+    "verify:routing:dist": "node scripts/verify-clean-routing.mjs --dist",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:unit": "node --import tsx --test tests/*.test.ts",
     "test:security": "node --import tsx --test tests/*.test.ts"
@@ -27,6 +30,7 @@
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "react-router-dom": "^7.18.7",
     "vite": "^8.3.0"
   },
   "devDependencies": {

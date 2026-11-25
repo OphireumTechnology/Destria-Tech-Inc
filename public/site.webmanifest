@@ -2,19 +2,20 @@
   "name": "DESTRIA TECH INC",
   "short_name": "DTI",
   "description": "DESTRIA TECH INC (DTI) & DESTRIA NETWORK — Engineering Intelligent Solutions. Empowering Enterprise Transformation.",
-  "start_url": "./",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#111827",
   "theme_color": "#0B1F3B",
   "icons": [
     {
-      "src": "./branding/destria-logo-192.png",
+      "src": "/branding/destria-logo-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./branding/destria-logo-512.png",
+      "src": "/branding/destria-logo-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

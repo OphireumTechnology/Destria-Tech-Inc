@@ -1,11 +1,15 @@
-import React, { useEffect } from 'react';
+import React from 'react';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { BrandLogo } from '../components/BrandLogo';
+import { NotFoundPage } from '../components/NotFoundPage';
+import { ROUTES, buildLoginWithNextRoute } from '../config/routes';
 import { PortalAuthProvider, usePortalAuth } from './PortalAuthContext';
-import { PortalRouterProvider, usePortalRouter } from './PortalRouter';
+import { PortalRouterProvider } from './PortalRouter';
 import {
   PortalForgotPasswordPage,
   PortalLoginPage,
   PortalRegisterPage,
+  PortalResetPasswordPage,
   PortalVerifyEmailPage,
 } from './pages/AuthPages';
 import { PortalDashboardPage } from './pages/DashboardPage';
@@ -37,88 +41,273 @@ import {
   PortalSupportPage,
 } from './pages/SupportAccountPages';
 
-const PUBLIC_PORTAL_ROUTES = new Set([
-  '/portal/login',
-  '/portal/register',
-  '/portal/forgot-password',
-  '/portal/verify-email',
-]);
+const PortalLoadingScreen: React.FC = () => (
+  <div className="min-h-screen bg-[#F3F4F6] text-[#0B1F3B] flex items-center justify-center p-6">
+    <div className="text-center space-y-3 flex flex-col items-center">
+      <BrandLogo variant="emblem" size="lg" ring="gold" eager />
+      <div className="w-6 h-6 rounded-full border-2 border-[#00C2C7] border-t-transparent animate-spin" />
+      <p className="text-xs font-medium text-[#64748B]">Loading DESTRIA TECH INC Client Portal...</p>
+    </div>
+  </div>
+);
+
+const ProtectedPortalRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { loading, user } = usePortalAuth();
+  const location = useLocation();
+
+  if (loading) return <PortalLoadingScreen />;
+  if (!user) {
+    const requested = `${location.pathname}${location.search}`;
+    return <Navigate to={buildLoginWithNextRoute(requested)} replace />;
+  }
+  return <>{children}</>;
+};
+
+const GuestOnlyPortalRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { loading, user } = usePortalAuth();
+  if (loading) return <PortalLoadingScreen />;
+  if (user) {
+    return <Navigate to={ROUTES.PORTAL.DASHBOARD} replace />;
+  }
+  return <>{children}</>;
+};
+
+const PortalStoreDetailRoute: React.FC = () => {
+  const { slug = '' } = useParams<{ slug: string }>();
+  return <PortalProductDetailPage slug={decodeURIComponent(slug)} />;
+};
+
+const PortalOrderDetailRoute: React.FC = () => {
+  const { orderId = '' } = useParams<{ orderId: string }>();
+  return <PortalOrderDetailPage orderId={decodeURIComponent(orderId)} />;
+};
+
+const PortalProjectDetailRoute: React.FC = () => {
+  const { projectId = '' } = useParams<{ projectId: string }>();
+  return <PortalProjectDetailPage projectId={decodeURIComponent(projectId)} />;
+};
+
+const PortalRootRedirect: React.FC = () => {
+  const { loading, user } = usePortalAuth();
+  if (loading) return <PortalLoadingScreen />;
+  return <Navigate to={user ? ROUTES.PORTAL.DASHBOARD : ROUTES.PORTAL.LOGIN} replace />;
+};
 
 const PortalRouteSwitch: React.FC = () => {
-  const { loading, user } = usePortalAuth();
-  const { path, navigate } = usePortalRouter();
+  return (
+    <Routes>
+      <Route index element={<PortalRootRedirect />} />
 
-  const normalized = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
-  const isPublic = PUBLIC_PORTAL_ROUTES.has(normalized);
+      {/* Public authentication & account recovery routes */}
+      <Route
+        path="login"
+        element={
+          <GuestOnlyPortalRoute>
+            <PortalLoginPage />
+          </GuestOnlyPortalRoute>
+        }
+      />
+      <Route
+        path="register"
+        element={
+          <GuestOnlyPortalRoute>
+            <PortalRegisterPage />
+          </GuestOnlyPortalRoute>
+        }
+      />
+      <Route path="forgot-password" element={<PortalForgotPasswordPage />} />
+      <Route path="reset-password" element={<PortalResetPasswordPage />} />
+      <Route path="verify-email" element={<PortalVerifyEmailPage />} />
 
-  useEffect(() => {
-    if (loading) return;
-    if (normalized === '/portal') {
-      navigate(user ? '/portal/dashboard' : '/portal/login', { replace: true });
-      return;
-    }
-    if (!isPublic && !user) {
-      navigate(`/portal/login?next=${encodeURIComponent(normalized)}`, { replace: true });
-      return;
-    }
-    if ((normalized === '/portal/login' || normalized === '/portal/register') && user) {
-      navigate('/portal/dashboard', { replace: true });
-    }
-  }, [loading, user, normalized, isPublic, navigate]);
+      {/* Protected enterprise client routes */}
+      <Route
+        path="dashboard"
+        element={
+          <ProtectedPortalRoute>
+            <PortalDashboardPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="services"
+        element={
+          <ProtectedPortalRoute>
+            <PortalMyServicesPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="store"
+        element={
+          <ProtectedPortalRoute>
+            <PortalStorePage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="store/:slug"
+        element={
+          <ProtectedPortalRoute>
+            <PortalStoreDetailRoute />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="cart"
+        element={
+          <ProtectedPortalRoute>
+            <PortalCartPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="proposals"
+        element={
+          <ProtectedPortalRoute>
+            <PortalCartPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="checkout"
+        element={
+          <ProtectedPortalRoute>
+            <PortalCheckoutPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="orders"
+        element={
+          <ProtectedPortalRoute>
+            <PortalOrdersPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="orders/:orderId"
+        element={
+          <ProtectedPortalRoute>
+            <PortalOrderDetailRoute />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="projects"
+        element={
+          <ProtectedPortalRoute>
+            <PortalProjectsPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="projects/:projectId"
+        element={
+          <ProtectedPortalRoute>
+            <PortalProjectDetailRoute />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="messages"
+        element={
+          <ProtectedPortalRoute>
+            <PortalMessagesPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="credits"
+        element={
+          <ProtectedPortalRoute>
+            <PortalCreditsPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="subscriptions"
+        element={
+          <ProtectedPortalRoute>
+            <PortalSubscriptionsPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="invoices"
+        element={
+          <ProtectedPortalRoute>
+            <PortalInvoicesPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="payments"
+        element={
+          <ProtectedPortalRoute>
+            <PortalPaymentsPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="files"
+        element={
+          <ProtectedPortalRoute>
+            <PortalFilesPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="deliverables"
+        element={
+          <ProtectedPortalRoute>
+            <PortalFilesPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="support"
+        element={
+          <ProtectedPortalRoute>
+            <PortalSupportPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="notifications"
+        element={
+          <ProtectedPortalRoute>
+            <PortalNotificationsPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="profile"
+        element={
+          <ProtectedPortalRoute>
+            <PortalProfilePage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="security"
+        element={
+          <ProtectedPortalRoute>
+            <PortalSecurityPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="settings"
+        element={
+          <ProtectedPortalRoute>
+            <PortalSettingsPage />
+          </ProtectedPortalRoute>
+        }
+      />
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F3F4F6] text-[#0B1F3B] flex items-center justify-center p-6">
-        <div className="text-center space-y-3 flex flex-col items-center">
-          <BrandLogo variant="emblem" size="lg" ring="gold" eager />
-          <div className="w-6 h-6 rounded-full border-2 border-[#00C2C7] border-t-transparent animate-spin" />
-          <p className="text-xs font-medium text-[#64748B]">Loading DESTRIA TECH INC Client Portal...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Public auth views
-  if (normalized === '/portal/login') return <PortalLoginPage />;
-  if (normalized === '/portal/register') return <PortalRegisterPage />;
-  if (normalized === '/portal/forgot-password') return <PortalForgotPasswordPage />;
-  if (normalized === '/portal/verify-email') return <PortalVerifyEmailPage />;
-
-  if (!user) return null;
-
-  // Protected client routes
-  if (normalized === '/portal/dashboard') return <PortalDashboardPage />;
-  if (normalized === '/portal/services') return <PortalMyServicesPage />;
-  if (normalized === '/portal/store') return <PortalStorePage />;
-  if (normalized.startsWith('/portal/store/')) {
-    const slug = decodeURIComponent(normalized.slice('/portal/store/'.length));
-    return <PortalProductDetailPage slug={slug} />;
-  }
-  if (normalized === '/portal/cart') return <PortalCartPage />;
-  if (normalized === '/portal/checkout') return <PortalCheckoutPage />;
-  if (normalized === '/portal/orders') return <PortalOrdersPage />;
-  if (normalized.startsWith('/portal/orders/')) {
-    const orderId = decodeURIComponent(normalized.slice('/portal/orders/'.length));
-    return <PortalOrderDetailPage orderId={orderId} />;
-  }
-  if (normalized === '/portal/projects') return <PortalProjectsPage />;
-  if (normalized.startsWith('/portal/projects/')) {
-    const projectId = decodeURIComponent(normalized.slice('/portal/projects/'.length));
-    return <PortalProjectDetailPage projectId={projectId} />;
-  }
-  if (normalized === '/portal/messages') return <PortalMessagesPage />;
-  if (normalized === '/portal/credits') return <PortalCreditsPage />;
-  if (normalized === '/portal/subscriptions') return <PortalSubscriptionsPage />;
-  if (normalized === '/portal/invoices') return <PortalInvoicesPage />;
-  if (normalized === '/portal/payments') return <PortalPaymentsPage />;
-  if (normalized === '/portal/files') return <PortalFilesPage />;
-  if (normalized === '/portal/support') return <PortalSupportPage />;
-  if (normalized === '/portal/notifications') return <PortalNotificationsPage />;
-  if (normalized === '/portal/profile') return <PortalProfilePage />;
-  if (normalized === '/portal/security') return <PortalSecurityPage />;
-  if (normalized === '/portal/settings') return <PortalSettingsPage />;
-
-  return <PortalDashboardPage />;
+      <Route path="*" element={<NotFoundPage scope="portal" />} />
+    </Routes>
+  );
 };
 
 export const ClientPortalApp: React.FC = () => {

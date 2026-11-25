@@ -1,4 +1,14 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  ROUTES,
+  isPortalPathname,
+  migrateLegacyHashUrlBeforeBoot,
+  normalizeRoutePathname,
+  resolveApplicationBasePath,
+  resolveLegacyHashMigration,
+  type LocationLike,
+} from '../config/routes';
 
 interface PortalRouterContextValue {
   path: string;
@@ -9,168 +19,112 @@ interface PortalRouterContextValue {
 
 const PortalRouterContext = createContext<PortalRouterContextValue | null>(null);
 
-export interface PortalLocationLike {
-  hostname: string;
-  pathname: string;
-  search: string;
-  hash: string;
-}
-
-const GITHUB_PAGES_REPO_PREFIX = '/Destria-Tech-Inc';
+export type PortalLocationLike = LocationLike;
 
 export function resolveGitHubPagesRepoPrefix(hostname: string, pathname: string): string {
-  if (
-    hostname === 'ophireumtechnology.github.io' &&
-    (pathname === GITHUB_PAGES_REPO_PREFIX || pathname.startsWith(`${GITHUB_PAGES_REPO_PREFIX}/`))
-  ) {
-    return GITHUB_PAGES_REPO_PREFIX;
-  }
-  return '';
+  return resolveApplicationBasePath(hostname, pathname);
 }
 
 export function isLoginTargetPath(target: string): boolean {
   const [pathname] = target.split('?');
-  return pathname === '/portal/login' || pathname === '/portal/login/';
-}
-
-function normalizeLoginTarget(target: string): string {
-  const [pathname, search = ''] = target.split('?');
-  const cleanPath = pathname === '/portal/login/' ? '/portal/login' : pathname;
-  return search ? `${cleanPath}?${search}` : cleanPath;
-}
-
-function mergeQueryStrings(baseSearch: string, extraSearch: string): string {
-  const params = new URLSearchParams(baseSearch.startsWith('?') ? baseSearch.slice(1) : baseSearch);
-  const extra = new URLSearchParams(extraSearch.startsWith('?') ? extraSearch.slice(1) : extraSearch);
-  extra.forEach((value, key) => {
-    if (!params.has(key)) {
-      params.set(key, value);
-    }
-  });
-  const serialized = params.toString();
-  return serialized ? `?${serialized}` : '';
+  return normalizeRoutePathname(pathname) === ROUTES.PORTAL.LOGIN;
 }
 
 /**
- * Resolves a clean canonical `/portal/login` URL when visiting legacy hash login URLs
- * (`#/portal/login`, `#/portal/login?next=...`) or trailing-slash `/portal/login/`.
- * Preserves query parameters and never alters non-portal hashes (e.g. `#access_token=...`, `#about`)
- * or other portal routes (`#/portal/verify-email?token=...`).
+ * Resolves a clean canonical URL for recognized legacy hash URLs (including
+ * `#/portal/login`, `#/portal/register`, `#/portal/forgot-password`,
+ * `#/portal/reset-password`, `#/portal/verify-email`, etc.) and trailing slashes.
+ * Preserves query parameters and never alters OAuth/recovery/anchor hashes.
  */
 export function resolveCanonicalPortalLoginUrl(loc: PortalLocationLike): string | null {
-  const prefix = resolveGitHubPagesRepoPrefix(loc.hostname, loc.pathname);
-  const hash = loc.hash || '';
-
-  if (hash.startsWith('#/portal/login')) {
-    const remainder = hash.slice('#/portal/login'.length);
-    if (remainder === '' || remainder === '/' || remainder.startsWith('?') || remainder.startsWith('/?')) {
-      const qIndex = remainder.indexOf('?');
-      const hashSearch = qIndex >= 0 ? remainder.slice(qIndex) : '';
-      const mergedSearch = mergeQueryStrings(loc.search, hashSearch);
-      return `${prefix}/portal/login${mergedSearch}`;
-    }
-  }
-
-  if (loc.pathname === `${prefix}/portal/login/`) {
-    return `${prefix}/portal/login${loc.search}${hash}`;
-  }
-
-  return null;
+  return resolveLegacyHashMigration(loc);
 }
 
 export function canonicalizePortalLoginUrl(): boolean {
-  if (typeof window === 'undefined') return false;
-  const canonicalUrl = resolveCanonicalPortalLoginUrl(window.location);
-  if (!canonicalUrl) return false;
-  window.history.replaceState(null, '', canonicalUrl);
-  return true;
+  return migrateLegacyHashUrlBeforeBoot();
 }
 
 export function getCurrentPortalLocation(): { pathname: string; search: string } {
-  if (typeof window === 'undefined') return { pathname: '/', search: '' };
-  // Support hash fallback (#/portal/...) for static GitHub Pages deployments
-  const hash = window.location.hash || '';
-  if (hash.startsWith('#/portal')) {
-    const clean = hash.slice(1);
-    const [p, s = ''] = clean.split('?');
-    return { pathname: p, search: s ? `?${s}` : '' };
-  }
-  const prefix = resolveGitHubPagesRepoPrefix(window.location.hostname, window.location.pathname);
+  if (typeof window === 'undefined') return { pathname: ROUTES.HOME, search: '' };
+  const prefix = resolveApplicationBasePath(window.location.hostname, window.location.pathname);
   const rawPathname = window.location.pathname;
-  const pathname =
-    prefix && rawPathname.startsWith(`${prefix}/portal`)
-      ? rawPathname.slice(prefix.length)
-      : rawPathname;
-  return { pathname, search: window.location.search };
+  const stripped =
+    prefix && rawPathname.startsWith(prefix) ? rawPathname.slice(prefix.length) || '/' : rawPathname;
+  return {
+    pathname: normalizeRoutePathname(stripped),
+    search: window.location.search,
+  };
 }
 
 export function isPortalRoute(pathname?: string): boolean {
   const target = pathname ?? getCurrentPortalLocation().pathname;
-  return target === '/portal' || target.startsWith('/portal/');
+  return isPortalPathname(target);
 }
 
-export function navigateToPortalPath(to: string, replace = false) {
+/**
+ * Clean history-based portal navigation helper (never generates hash URLs).
+ */
+export function navigateToPortalPath(to: string, replace = false): void {
   if (typeof window === 'undefined') return;
   const cleanTarget = to.startsWith('/') ? to : `/${to}`;
-  const prefix = resolveGitHubPagesRepoPrefix(window.location.hostname, window.location.pathname);
-  const isStaticPagesHost =
-    window.location.hostname.endsWith('github.io') ||
-    ['destriatech.com', 'www.destriatech.com'].includes(window.location.hostname) ||
-    (window.location.pathname.includes('/OMPNETWORK/') && !cleanTarget.startsWith('/OMPNETWORK'));
+  const [rawPath, rawSearch = ''] = cleanTarget.split('?');
+  const normalizedPath = normalizeRoutePathname(rawPath);
+  const prefix = resolveApplicationBasePath(window.location.hostname, window.location.pathname);
+  const nextUrl = `${prefix}${normalizedPath}${rawSearch ? `?${rawSearch}` : ''}`;
 
-  if (isLoginTargetPath(cleanTarget)) {
-    const nextUrl = `${prefix}${normalizeLoginTarget(cleanTarget)}`;
-    if (replace) window.history.replaceState(null, '', nextUrl);
-    else window.history.pushState(null, '', nextUrl);
-  } else if (isStaticPagesHost && cleanTarget.startsWith('/portal')) {
-    const nextUrl = `${prefix}/#${cleanTarget}`;
-    if (replace) window.history.replaceState(null, '', nextUrl);
-    else window.history.pushState(null, '', nextUrl);
+  if (replace) {
+    window.history.replaceState(null, '', nextUrl);
   } else {
-    const nextUrl = `${prefix}${cleanTarget}`;
-    if (replace) window.history.replaceState(null, '', nextUrl);
-    else window.history.pushState(null, '', nextUrl);
+    window.history.pushState(null, '', nextUrl);
   }
-  window.dispatchEvent(new Event('opm:routechange'));
+  window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
 export const PortalRouterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [loc, setLoc] = useState(getCurrentPortalLocation);
+  const location = useLocation();
+  const rrNavigate = useNavigate();
 
   useEffect(() => {
-    const sync = () => {
-      canonicalizePortalLoginUrl();
-      setLoc(getCurrentPortalLocation());
-    };
-    sync();
-    window.addEventListener('popstate', sync);
-    window.addEventListener('hashchange', sync);
-    window.addEventListener('opm:routechange', sync);
-    return () => {
-      window.removeEventListener('popstate', sync);
-      window.removeEventListener('hashchange', sync);
-      window.removeEventListener('opm:routechange', sync);
-    };
-  }, []);
+    const migrated = migrateLegacyHashUrlBeforeBoot();
+    if (migrated && typeof window !== 'undefined') {
+      const current = getCurrentPortalLocation();
+      rrNavigate(`${current.pathname}${current.search}`, { replace: true });
+    }
+  }, [location.pathname, location.search, location.hash, rrNavigate]);
 
-  const navigate = useCallback((to: string, options?: { replace?: boolean }) => {
-    navigateToPortalPath(to, Boolean(options?.replace));
-    window.scrollTo({ top: 0, behavior: 'auto' });
-  }, []);
+  const normalizedPath = useMemo(
+    () => normalizeRoutePathname(location.pathname),
+    [location.pathname]
+  );
+
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
+
+  const navigate = useCallback(
+    (to: string, options?: { replace?: boolean }) => {
+      const cleanTarget = to.startsWith('/') ? to : `/${to}`;
+      const [rawPath, rawSearch = ''] = cleanTarget.split('?');
+      const normalized = normalizeRoutePathname(rawPath);
+      const targetUrl = rawSearch ? `${normalized}?${rawSearch}` : normalized;
+      rrNavigate(targetUrl, { replace: Boolean(options?.replace) });
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      }
+    },
+    [rrNavigate]
+  );
 
   const exitToPublicSite = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    const prefix = resolveGitHubPagesRepoPrefix(window.location.hostname, window.location.pathname);
-    window.history.pushState(null, '', `${prefix}/`);
-    window.dispatchEvent(new Event('opm:routechange'));
-    window.scrollTo({ top: 0, behavior: 'auto' });
-  }, []);
+    rrNavigate(ROUTES.HOME);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }, [rrNavigate]);
 
   return (
     <PortalRouterContext.Provider
       value={{
-        path: loc.pathname,
-        query: new URLSearchParams(loc.search),
+        path: normalizedPath,
+        query,
         navigate,
         exitToPublicSite,
       }}
