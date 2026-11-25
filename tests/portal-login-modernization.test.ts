@@ -347,29 +347,32 @@ test('Portal Login Scope, Branding, Revised Copy, Legal Restraint, and Public We
   }
 });
 
-test('Production Build Refresh-Safe Entry: vite.config.ts emits dist/portal/login/index.html with resolved ../../ relative asset paths', () => {
-  const viteConfigSource = fs.readFileSync(path.join(ROOT, 'vite.config.ts'), 'utf8');
-  assert.match(viteConfigSource, /portalLoginEntryPlugin/);
-  assert.match(viteConfigSource, /'portal', 'login'/);
-
-  const rootDistHtmlPath = path.join(ROOT, 'dist', 'index.html');
-  const loginDistHtmlPath = path.join(ROOT, 'dist', 'portal', 'login', 'index.html');
-
-  if (fs.existsSync(rootDistHtmlPath)) {
-    assert.equal(
-      fs.existsSync(loginDistHtmlPath),
-      true,
-      'Expected dist/portal/login/index.html to be emitted alongside dist/index.html'
-    );
-
-    const rootHtml = fs.readFileSync(rootDistHtmlPath, 'utf8');
-    const loginHtml = fs.readFileSync(loginDistHtmlPath, 'utf8');
-
-    assert.match(rootHtml, /src="\.\/assets\//);
-    assert.match(loginHtml, /src="\.\.\/\.\.\/assets\//);
-    assert.match(loginHtml, /href="\.\.\/\.\.\/assets\//);
-    assert.match(loginHtml, /href="\.\.\/\.\.\/branding\//);
-    assert.equal(loginHtml.includes('src="./assets/'), false, 'Nested login HTML must not retain single-dot ./assets/ paths');
-    assert.equal(loginHtml.includes('/src/main.tsx'), false, 'Production login HTML must not reference dev /src/main.tsx');
+test('Production Build Refresh-Safe Entry: static generator emits portal entries with a root-aware base', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { tmpdir } = await import('node:os');
+  const dir = fs.mkdtempSync(path.join(tmpdir(), 'destria-pages-'));
+  try {
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+    assert.ok(script);
+    const fixture = html.replace('/src/main.tsx', './assets/main.js');
+    fs.mkdirSync(path.join(dir, 'dist'));
+    fs.writeFileSync(path.join(dir, 'dist', 'index.html'), fixture);
+    execFileSync(process.execPath, [path.join(ROOT, 'scripts/build-pages-routes.mjs')], { cwd: dir });
+    for (const route of ['login','register','forgot-password','reset-password','verify-email','dashboard','projects']) {
+      const generated = fs.readFileSync(path.join(dir, 'dist', 'portal', route, 'index.html'), 'utf8');
+      assert.equal(generated, fixture);
+      for (const [hostname, prefix] of [['destriatech.com',''], ['ophireumtechnology.github.io','/Destria-Tech-Inc']]) {
+        const base = { href: '' };
+        new Function('location','document','history',script)({hostname, pathname: prefix + '/portal/' + route, hash: '', search: ''}, {querySelector: () => base}, {});
+        assert.equal(base.href, prefix + '/');
+        assert.equal(new URL('./assets/main.js', 'https://' + hostname + base.href).pathname, prefix + '/assets/main.js');
+      }
+    }
+    assert.equal(fs.readFileSync(path.join(dir,'dist','404.html'),'utf8'), fixture);
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT,'package.json'),'utf8'));
+    assert.match(pkg.scripts.build, /build-pages-routes\.mjs/);
+  } finally {
+    fs.rmSync(dir, {recursive:true, force:true});
   }
 });
