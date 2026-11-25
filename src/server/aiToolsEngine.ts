@@ -709,6 +709,16 @@ export class AIToolsExecutor {
       ok: true,
       toolName: 'collect_project_requirements',
       data: {
+        // Keep the legacy consumer contract while retaining the richer capture payload.
+        requirements: {
+          category: state.category || null,
+          businessProblem: state.businessProblem || null,
+          targetUsers: state.targetUsers || null,
+          keyFeatures: state.keyFeatures,
+          existingSystems: state.existingSystems || null,
+          targetTimeline: state.targetTimeline || null,
+          industry: state.industry || null,
+        },
         capturedRequirements: {
           category: state.category || null,
           businessProblem: state.businessProblem || null,
