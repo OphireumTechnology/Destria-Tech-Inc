@@ -1016,6 +1016,6 @@ describe('DESTRIA AI Voice Continuous Conversation Regression Suite (25 Scenario
     });
     assert.equal(profileRes.status, 200);
     const profileBody = await profileRes.json();
-    assert.match(profileBody.replyText, /17-page|Corporate Profile|Desmond Hines|Leodenis Languisan/i);
+    assert.match(profileBody.replyText, /17-page|Corporate Profile|Desmond Hinds|Leodenis Languisan/i);
   });
 });
