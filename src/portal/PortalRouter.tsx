@@ -9,6 +9,83 @@ interface PortalRouterContextValue {
 
 const PortalRouterContext = createContext<PortalRouterContextValue | null>(null);
 
+export interface PortalLocationLike {
+  hostname: string;
+  pathname: string;
+  search: string;
+  hash: string;
+}
+
+const GITHUB_PAGES_REPO_PREFIX = '/Destria-Tech-Inc';
+
+export function resolveGitHubPagesRepoPrefix(hostname: string, pathname: string): string {
+  if (
+    hostname === 'ophireumtechnology.github.io' &&
+    (pathname === GITHUB_PAGES_REPO_PREFIX || pathname.startsWith(`${GITHUB_PAGES_REPO_PREFIX}/`))
+  ) {
+    return GITHUB_PAGES_REPO_PREFIX;
+  }
+  return '';
+}
+
+export function isLoginTargetPath(target: string): boolean {
+  const [pathname] = target.split('?');
+  return pathname === '/portal/login' || pathname === '/portal/login/';
+}
+
+function normalizeLoginTarget(target: string): string {
+  const [pathname, search = ''] = target.split('?');
+  const cleanPath = pathname === '/portal/login/' ? '/portal/login' : pathname;
+  return search ? `${cleanPath}?${search}` : cleanPath;
+}
+
+function mergeQueryStrings(baseSearch: string, extraSearch: string): string {
+  const params = new URLSearchParams(baseSearch.startsWith('?') ? baseSearch.slice(1) : baseSearch);
+  const extra = new URLSearchParams(extraSearch.startsWith('?') ? extraSearch.slice(1) : extraSearch);
+  extra.forEach((value, key) => {
+    if (!params.has(key)) {
+      params.set(key, value);
+    }
+  });
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : '';
+}
+
+/**
+ * Resolves a clean canonical `/portal/login` URL when visiting legacy hash login URLs
+ * (`#/portal/login`, `#/portal/login?next=...`) or trailing-slash `/portal/login/`.
+ * Preserves query parameters and never alters non-portal hashes (e.g. `#access_token=...`, `#about`)
+ * or other portal routes (`#/portal/verify-email?token=...`).
+ */
+export function resolveCanonicalPortalLoginUrl(loc: PortalLocationLike): string | null {
+  const prefix = resolveGitHubPagesRepoPrefix(loc.hostname, loc.pathname);
+  const hash = loc.hash || '';
+
+  if (hash.startsWith('#/portal/login')) {
+    const remainder = hash.slice('#/portal/login'.length);
+    if (remainder === '' || remainder === '/' || remainder.startsWith('?') || remainder.startsWith('/?')) {
+      const qIndex = remainder.indexOf('?');
+      const hashSearch = qIndex >= 0 ? remainder.slice(qIndex) : '';
+      const mergedSearch = mergeQueryStrings(loc.search, hashSearch);
+      return `${prefix}/portal/login${mergedSearch}`;
+    }
+  }
+
+  if (loc.pathname === `${prefix}/portal/login/`) {
+    return `${prefix}/portal/login${loc.search}${hash}`;
+  }
+
+  return null;
+}
+
+export function canonicalizePortalLoginUrl(): boolean {
+  if (typeof window === 'undefined') return false;
+  const canonicalUrl = resolveCanonicalPortalLoginUrl(window.location);
+  if (!canonicalUrl) return false;
+  window.history.replaceState(null, '', canonicalUrl);
+  return true;
+}
+
 export function getCurrentPortalLocation(): { pathname: string; search: string } {
   if (typeof window === 'undefined') return { pathname: '/', search: '' };
   // Support hash fallback (#/portal/...) for static GitHub Pages deployments
@@ -18,7 +95,13 @@ export function getCurrentPortalLocation(): { pathname: string; search: string }
     const [p, s = ''] = clean.split('?');
     return { pathname: p, search: s ? `?${s}` : '' };
   }
-  return { pathname: window.location.pathname, search: window.location.search };
+  const prefix = resolveGitHubPagesRepoPrefix(window.location.hostname, window.location.pathname);
+  const rawPathname = window.location.pathname;
+  const pathname =
+    prefix && rawPathname.startsWith(`${prefix}/portal`)
+      ? rawPathname.slice(prefix.length)
+      : rawPathname;
+  return { pathname, search: window.location.search };
 }
 
 export function isPortalRoute(pathname?: string): boolean {
@@ -29,18 +112,24 @@ export function isPortalRoute(pathname?: string): boolean {
 export function navigateToPortalPath(to: string, replace = false) {
   if (typeof window === 'undefined') return;
   const cleanTarget = to.startsWith('/') ? to : `/${to}`;
+  const prefix = resolveGitHubPagesRepoPrefix(window.location.hostname, window.location.pathname);
   const isStaticPagesHost =
     window.location.hostname.endsWith('github.io') ||
     ['destriatech.com', 'www.destriatech.com'].includes(window.location.hostname) ||
     (window.location.pathname.includes('/OMPNETWORK/') && !cleanTarget.startsWith('/OMPNETWORK'));
 
-  if (isStaticPagesHost && cleanTarget.startsWith('/portal')) {
-    const nextHash = `#${cleanTarget}`;
-    if (replace) window.history.replaceState(null, '', nextHash);
-    else window.history.pushState(null, '', nextHash);
+  if (isLoginTargetPath(cleanTarget)) {
+    const nextUrl = `${prefix}${normalizeLoginTarget(cleanTarget)}`;
+    if (replace) window.history.replaceState(null, '', nextUrl);
+    else window.history.pushState(null, '', nextUrl);
+  } else if (isStaticPagesHost && cleanTarget.startsWith('/portal')) {
+    const nextUrl = `${prefix}/#${cleanTarget}`;
+    if (replace) window.history.replaceState(null, '', nextUrl);
+    else window.history.pushState(null, '', nextUrl);
   } else {
-    if (replace) window.history.replaceState(null, '', cleanTarget);
-    else window.history.pushState(null, '', cleanTarget);
+    const nextUrl = `${prefix}${cleanTarget}`;
+    if (replace) window.history.replaceState(null, '', nextUrl);
+    else window.history.pushState(null, '', nextUrl);
   }
   window.dispatchEvent(new Event('opm:routechange'));
 }
@@ -49,7 +138,11 @@ export const PortalRouterProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loc, setLoc] = useState(getCurrentPortalLocation);
 
   useEffect(() => {
-    const sync = () => setLoc(getCurrentPortalLocation());
+    const sync = () => {
+      canonicalizePortalLoginUrl();
+      setLoc(getCurrentPortalLocation());
+    };
+    sync();
     window.addEventListener('popstate', sync);
     window.addEventListener('hashchange', sync);
     window.addEventListener('opm:routechange', sync);
@@ -67,11 +160,8 @@ export const PortalRouterProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const exitToPublicSite = useCallback(() => {
     if (typeof window === 'undefined') return;
-    if (window.location.hash.startsWith('#/portal')) {
-      window.history.pushState(null, '', window.location.pathname);
-    } else {
-      window.history.pushState(null, '', '/');
-    }
+    const prefix = resolveGitHubPagesRepoPrefix(window.location.hostname, window.location.pathname);
+    window.history.pushState(null, '', `${prefix}/`);
     window.dispatchEvent(new Event('opm:routechange'));
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, []);

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowLeft, CheckCircle2, Lock, Mail, Phone, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Mail, Phone, ShieldCheck } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
 import { corporateIdentity } from '../../data/companyConfig';
 import { usePortalAuth } from '../PortalAuthContext';
 import { usePortalRouter } from '../PortalRouter';
 import { portalRequest } from '../portalApi';
+export { ClientPortalLoginPage as PortalLoginPage } from '../login/ClientPortalLoginPage';
 
 const AuthShell: React.FC<{
   title: string;
@@ -96,103 +97,6 @@ const AuthShell: React.FC<{
   );
 };
 
-export const PortalLoginPage: React.FC = () => {
-  const { login } = usePortalAuth();
-  const { navigate, query } = usePortalRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const nextPath = query.get('next');
-  const safeNext =
-    nextPath &&
-    nextPath.startsWith('/portal/') &&
-    !nextPath.startsWith('//') &&
-    !nextPath.includes('://')
-      ? nextPath
-      : '/portal/dashboard';
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setBusy(true);
-    try {
-      await login(email, password);
-      navigate(safeNext, { replace: true });
-    } catch (err: any) {
-      setError(err?.message || 'Unable to sign in.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <AuthShell
-      title="Sign in to your account"
-      subtitle="Access your orders, projects, credits, invoices, and deliverables."
-    >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-[#B91C1C]">
-            {error}
-          </div>
-        )}
-        <div>
-          <label className="block text-xs font-semibold text-[#334155] mb-1.5">Email Address</label>
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            className="w-full px-3.5 py-2.5 text-sm bg-white border border-[#D8D3C8] rounded-lg text-[#0F1D36] focus:outline-none focus:border-[#0F4C3A]"
-          />
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-xs font-semibold text-[#334155]">Password</label>
-            <button
-              type="button"
-              onClick={() => navigate('/portal/forgot-password')}
-              className="text-xs font-medium text-[#0F4C3A] hover:underline cursor-pointer"
-            >
-              Forgot password?
-            </button>
-          </div>
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter your password"
-            className="w-full px-3.5 py-2.5 text-sm bg-white border border-[#D8D3C8] rounded-lg text-[#0F1D36] focus:outline-none focus:border-[#0F4C3A]"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full py-2.5 px-4 rounded-lg bg-[#0F4C3A] hover:bg-[#0B3B2D] disabled:opacity-60 text-white text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-2"
-        >
-          <Lock className="w-4 h-4" />
-          <span>{busy ? 'Signing in...' : 'Sign In'}</span>
-        </button>
-      </form>
-
-      <div className="mt-6 pt-5 border-t border-[#E6E2D8] text-center text-sm text-[#475569]">
-        New to Destria Tech Inc?{' '}
-        <button
-          onClick={() => navigate('/portal/register')}
-          className="font-semibold text-[#0F4C3A] hover:underline cursor-pointer"
-        >
-          Create a client account
-        </button>
-      </div>
-    </AuthShell>
-  );
-};
 
 export const PortalRegisterPage: React.FC = () => {
   const { register } = usePortalAuth();

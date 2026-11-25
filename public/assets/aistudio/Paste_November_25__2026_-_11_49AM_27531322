@@ -1,0 +1,1087 @@
+# DESTRIA TECH INC
+## MASTER DEVELOPMENT INSTRUCTION
+### Client Portal Login — Enterprise UI/UX Modernization, Corporate Content Refinement and Clean URL Architecture
+
+**Repository:** https://github.com/OphireumTechnology/Destria-Tech-Inc
+
+**Official production website:** https://destriatech.com/
+
+**Development environment:** Google AI Studio
+
+**Target page:** https://destriatech.com/#/portal/login
+
+**Required canonical URL:** https://destriatech.com/portal/login
+
+**Development classification:** Restricted Client Portal Login Modernization.
+
+---
+
+# 1. MANDATORY DEVELOPMENT SCOPE RESTRICTION
+
+Perform a comprehensive modernization exclusively within the DESTRIA TECH INC Client Portal login interface.
+
+This instruction supersedes all previous application-wide content revision and redesign instructions for this development task.
+
+The primary objective is to transform the existing Client Portal login page into an ultra-professional, minimalist, sophisticated enterprise authentication interface that reflects the corporate identity and technological capabilities of DESTRIA TECH INC.
+
+The public-facing website must remain completely unchanged.
+
+## 1.1 Authorized development scope
+
+Only modify components, styles, wording, and routing logic directly associated with:
+
+- Client Portal login page.
+- Client Portal login layout.
+- Client Portal login corporate information panel.
+- Client authentication form presentation.
+- Login-specific responsive behavior.
+- Login-specific accessibility.
+- Login-specific navigation and URL canonicalization.
+- Login-specific corporate contact information.
+- Login-specific visual technology animations.
+- Necessary route infrastructure changes that preserve all existing public website behavior.
+
+## 1.2 Strictly prohibited modifications
+
+Do not modify, redesign, replace, remove, or restructure:
+
+- Public website homepage.
+- Public website navigation and header.
+- Public website footer.
+- Public corporate profile.
+- Public technology service catalog.
+- Public artificial intelligence consultant.
+- Public AI voice assistant.
+- Public AI chat functionality.
+- Public service descriptions.
+- Public website animations.
+- Public technology graphics.
+- Public multimedia content.
+- Public website images.
+- Public corporate logo.
+- Public branding and color palette.
+- Public website SEO metadata.
+- Existing consultation and appointment systems.
+- Administrative portal interfaces.
+- Existing authenticated customer dashboards.
+- Existing payment and invoicing systems.
+- Existing registration and password recovery page designs.
+- Existing customer records.
+- Existing database schemas.
+- Existing production infrastructure settings.
+
+Do not apply global CSS changes that affect the public website.
+
+Do not perform repository-wide content replacement.
+
+Do not introduce application-wide routing changes unless strictly necessary for the target login URL and demonstrated to preserve all other routes.
+
+---
+
+# 2. CLEAN AND PROFESSIONAL URL ARCHITECTURE
+
+Correct the existing Client Portal login URL.
+
+## Existing incorrect URL
+
+```text
+https://destriatech.com/#/portal/login
+```
+
+## Required canonical URL
+
+```text
+https://destriatech.com/portal/login
+```
+
+Remove the hash-routing fragment from the visible login URL.
+
+The login route must use a professional, readable, browser-history-compatible URL.
+
+## 2.1 Mandatory routing requirements
+
+The corrected login URL must support:
+
+- Direct browser navigation.
+- Browser refresh.
+- Browser bookmarks.
+- Browser back and forward navigation.
+- Opening in a new browser tab.
+- Desktop browsers.
+- Mobile browsers.
+- Existing authentication workflows.
+- Existing session management.
+- Existing login redirects.
+- GitHub Pages custom-domain deployment.
+
+## 2.2 Legacy URL compatibility
+
+The previous URL must remain functional for existing bookmarks and previously distributed links.
+
+When a user accesses:
+
+```text
+https://destriatech.com/#/portal/login
+```
+
+Automatically normalize the browser address to:
+
+```text
+https://destriatech.com/portal/login
+```
+
+Use history replacement or an equivalent safe routing mechanism to prevent duplicate navigation history entries.
+
+Do not indiscriminately remove URL fragments or query parameters used by authentication providers, password recovery, email verification, or security callbacks.
+
+## 2.3 GitHub Pages compatibility
+
+Inspect the existing routing and deployment architecture, including applicable files such as:
+
+```text
+src/portal/PortalRouter.tsx
+src/App.tsx
+vite.config.ts
+public/404.html
+.github/workflows/deploy-pages.yml
+```
+
+Determine whether the existing build process already generates static portal entry pages.
+
+Ensure that the production build provides a refresh-safe entry point equivalent to:
+
+```text
+dist/portal/login/index.html
+```
+
+Use the existing build architecture wherever possible.
+
+Ensure that JavaScript, CSS, images, fonts, and other assets resolve correctly from nested portal routes.
+
+Do not introduce blank screens, redirect loops, broken assets, or GitHub Pages 404 errors.
+
+Do not replace the entire application's router solely to correct this individual login route.
+
+---
+
+# 3. ENTERPRISE DESIGN OBJECTIVE
+
+Redesign the Client Portal login page to reflect the visual standards of a sophisticated international technology enterprise.
+
+The design must communicate:
+
+- Corporate authority.
+- Advanced technology.
+- Professional accountability.
+- Digital intelligence.
+- Operational reliability.
+- Visual sophistication.
+- Enterprise-grade presentation.
+- Responsible technology governance.
+- Premium user experience.
+
+Use a clean, restrained and technically advanced design language.
+
+Avoid excessive visual decoration, unnecessary wording, oversized text blocks, crowded elements, aggressive gradients, distracting animations, or generic template aesthetics.
+
+---
+
+# 4. PROPOSED VISUAL ARCHITECTURE
+
+Retain the existing two-panel desktop layout while significantly improving its proportions, spacing, alignment, visual hierarchy, and overall presentation.
+
+## 4.1 Left corporate identity panel
+
+The left panel shall contain:
+
+1. Return to Corporate Website navigation.
+2. Official DESTRIA TECH INC corporate emblem.
+3. Official corporate name.
+4. DESTRIA NETWORK identification.
+5. Client Portal designation.
+6. Concise enterprise positioning headline.
+7. Short corporate supporting statement.
+8. Subtle advanced technology visualization.
+9. Corporate contact information.
+10. Appropriate account-access notice.
+
+Use a sophisticated deep navy background.
+
+The left panel should occupy approximately 35% to 40% of the desktop viewport, subject to responsive design requirements.
+
+## 4.2 Right authentication panel
+
+The right panel shall contain:
+
+1. Client Portal authentication heading.
+2. Concise sign-in instructions.
+3. Email address input.
+4. Password input.
+5. Show or hide password control.
+6. Forgot Password navigation.
+7. Primary Sign In button.
+8. Client registration navigation.
+9. Appropriate account security information.
+
+The authentication card should be centered vertically and horizontally within its available area.
+
+Use a premium white or subtle off-white surface with refined borders and restrained shadows.
+
+The authentication form must remain the primary functional focus.
+
+---
+
+# 5. OFFICIAL CORPORATE DESIGN SYSTEM
+
+Use the existing corporate brand assets.
+
+Apply the following proposed colors exclusively within the Client Portal login interface:
+
+```css
+--portal-navy: #0B1F3B;
+--portal-deep-navy: #081529;
+--portal-graphite: #111827;
+--portal-gold: #D4AF37;
+--portal-cyan: #00C2C7;
+--portal-background: #F5F7FA;
+--portal-surface: #FFFFFF;
+--portal-border: #E2E8F0;
+--portal-text-primary: #0F172A;
+--portal-text-secondary: #64748B;
+--portal-success: #047857;
+--portal-error: #B91C1C;
+```
+
+Use metallic gold and technology cyan as restrained accent colors.
+
+Use deep navy for the primary authentication button unless the existing approved portal design system provides a more appropriate accessible brand color.
+
+Do not modify the global corporate theme or public website color configuration.
+
+Scope all new styles to the login page.
+
+---
+
+# 6. OFFICIAL CORPORATE IDENTITY PRESENTATION
+
+Use the existing official corporate emblem without distortion, replacement, recoloring, or modification.
+
+Display the corporate identity as:
+
+**DESTRIA TECH INC**
+
+**DESTRIA NETWORK | CLIENT PORTAL**
+
+The corporate name must be correctly aligned with the emblem.
+
+Ensure consistent typography, spacing, capitalization, and visual proportions.
+
+Do not introduce unofficial logos, obsolete corporate names, or inaccurate corporate identifiers.
+
+---
+
+# 7. REVISED CORPORATE WORDING
+
+Replace the existing lengthy and visually crowded login-page wording with the following concise, sophisticated corporate content.
+
+## 7.1 Return navigation
+
+**Return to Corporate Website**
+
+Link directly to:
+
+```text
+https://destriatech.com/
+```
+
+## 7.2 Corporate positioning label
+
+**ENTERPRISE DIGITAL WORKSPACE**
+
+## 7.3 Primary corporate headline
+
+**Intelligent Technology.  
+Connected Enterprise.**
+
+## 7.4 Supporting corporate statement
+
+"Your dedicated digital workspace for enterprise technology engagements, formal proposals, project collaboration, and authorized deliverables."
+
+## 7.5 Secondary corporate statement
+
+"Access DESTRIA NETWORK to coordinate customized technology solutions and manage your organization's digital transformation engagements."
+
+## 7.6 Corporate capability identifiers
+
+Present these as understated visual labels where appropriate:
+
+- Artificial Intelligence
+- Enterprise Engineering
+- Digital Transformation
+
+Do not add extensive service descriptions to the login page.
+
+Do not advertise service prices, discounts, packages, or predetermined commercial rates.
+
+---
+
+# 8. AUTHENTICATION FORM WORDING
+
+Replace the existing login card content with the following approved wording.
+
+## Primary heading
+
+**Welcome to DESTRIA NETWORK**
+
+## Supporting description
+
+"Sign in to access your enterprise workspace."
+
+## Email field label
+
+**Registered Email Address**
+
+Placeholder:
+
+```text
+name@company.com
+```
+
+## Password field label
+
+**Password**
+
+Placeholder:
+
+```text
+Enter your password
+```
+
+## Password recovery link
+
+**Forgot your password?**
+
+## Primary authentication button
+
+**Sign In**
+
+## Registration section
+
+"New to DESTRIA NETWORK?"
+
+**Create a Client Account**
+
+## Authentication footer notice
+
+"Access is restricted to authorized users. Account activity is subject to applicable platform policies."
+
+Only reference specific monitoring or security controls if those controls have been implemented and verified.
+
+---
+
+# 9. LEGALLY RESPONSIBLE CORPORATE LANGUAGE
+
+All wording within the Client Portal login page must be professional, technically accurate, commercially responsible, and legally cautious.
+
+Do not make unsupported representations regarding:
+
+- Absolute security.
+- Guaranteed data protection.
+- Guaranteed confidentiality.
+- Independent security certification.
+- Regulatory approval.
+- Government accreditation.
+- ISO certification.
+- SOC 2 certification or attestation.
+- HIPAA compliance.
+- PCI DSS compliance.
+- Guaranteed service availability.
+- Guaranteed financial performance.
+
+Replace unsupported security claims with accurate account-access statements.
+
+Do not claim that information is server-verified, encrypted, independently audited, or fully isolated unless the relevant controls are demonstrably implemented.
+
+Do not introduce new binding legal terms or modify existing legal policies.
+
+Any new substantive legal statement must be identified for qualified legal counsel review.
+
+---
+
+# 10. ADVANCED TECHNOLOGY VISUALIZATION
+
+Enhance the left corporate identity panel with a subtle animated technology environment.
+
+The visualization should represent DESTRIA TECH INC's principal technology capabilities without overwhelming the authentication interface.
+
+## 10.1 Visual concepts
+
+Incorporate a restrained combination of:
+
+- Intelligent neural network connections.
+- Blockchain-inspired interconnected nodes.
+- Abstract enterprise data pathways.
+- Digital infrastructure grids.
+- Soft cyan illumination.
+- Minimal metallic gold accents.
+- Slowly moving network particles.
+- Subtle digital depth effects.
+- Enterprise system connectivity patterns.
+
+## 10.2 Animation requirements
+
+Animations must be:
+
+- Smooth.
+- Minimalist.
+- Professional.
+- Low intensity.
+- Non-distracting.
+- Performance-conscious.
+- Responsive.
+- Accessible.
+
+Avoid excessive neon effects, flashing elements, aggressive particle movement, gaming-style graphics, and heavy visual effects.
+
+The animation must remain behind or separate from readable corporate text.
+
+Use CSS, lightweight SVG, Canvas, or an existing optimized animation component where appropriate.
+
+Do not introduce unnecessary large dependencies.
+
+Support the user's reduced-motion accessibility preference.
+
+If the animation fails, the login form and corporate content must remain fully functional.
+
+---
+
+# 11. TYPOGRAPHY AND VISUAL ALIGNMENT
+
+Establish a consistent enterprise typography system.
+
+Use the existing approved corporate font family where appropriate.
+
+Apply:
+
+- Consistent heading weights.
+- Balanced line spacing.
+- Professional text hierarchy.
+- Consistent form label sizes.
+- Aligned text baselines.
+- Uniform icon positioning.
+- Controlled paragraph widths.
+- Balanced whitespace.
+- Consistent border radii.
+- Predictable vertical spacing.
+
+The corporate headline must not wrap awkwardly.
+
+The corporate contact information must be properly aligned and readable.
+
+The authentication card must not appear disproportionately small or excessively large.
+
+Use approximately:
+
+```text
+Desktop login card width: 420–460px
+Desktop login card padding: 32–40px
+Input field height: 48–52px
+Primary button height: 48–52px
+Card border radius: 16–20px
+Form field spacing: 16–20px
+```
+
+Adapt these dimensions to the existing design system and responsive requirements.
+
+---
+
+# 12. CORPORATE CONTACT INFORMATION
+
+Display the following official information within the login page corporate panel.
+
+**DESTRIA TECH INC**
+
+**DESTRIA NETWORK**
+
+**Corporate Headquarters**
+
+SUITE 6082 - 30 N Gould St #6082  
+Sheridan, Sheridan County, WY 82801 USA
+
+**International Telephone**
+
++1 (307) 419-4277
+
+**Corporate Email**
+
+info@destriatech.com
+
+## 12.1 Telephone implementation
+
+Use the existing centralized corporate configuration.
+
+Required display format:
+
+```text
++1 (307) 419-4277
+```
+
+International spacing format:
+
+```text
++1 307 419 4277
+```
+
+E.164 format:
+
+```text
++13074194277
+```
+
+Click-to-call:
+
+```html
+<a href="tel:+13074194277">
+  +1 (307) 419-4277
+</a>
+```
+
+## 12.2 Email implementation
+
+```html
+<a href="mailto:info@destriatech.com">
+  info@destriatech.com
+</a>
+```
+
+## 12.3 Contact layout
+
+Display the telephone and email using consistently aligned icons.
+
+Present the headquarters address on two readable lines.
+
+Do not compress the contact information into an excessively small font.
+
+Do not modify shared corporate configuration values if they already contain the correct information.
+
+Do not alter public website contact presentation.
+
+---
+
+# 13. AUTHENTICATION FUNCTIONALITY PRESERVATION
+
+The modernization must not compromise existing authentication functionality.
+
+Preserve:
+
+- Existing login API integration.
+- Existing authentication provider.
+- Existing registered customer accounts.
+- Existing password verification.
+- Existing session management.
+- Existing access controls.
+- Existing role-based authorization.
+- Existing MFA requirements, where applicable.
+- Existing password recovery functionality.
+- Existing email verification functionality.
+- Existing registration functionality.
+- Existing authenticated redirects.
+- Existing logout behavior.
+
+Do not replace actual authentication with simulated or mock functionality.
+
+Do not introduce hardcoded credentials.
+
+Do not bypass authentication or authorization checks.
+
+Do not store passwords, authentication secrets, or sensitive session information in insecure browser storage.
+
+Do not expose production API keys or server-side credentials.
+
+---
+
+# 14. LOGIN FORM EXPERIENCE
+
+Improve the authentication form presentation while retaining its existing functional integration.
+
+## 14.1 Email input
+
+Implement or preserve:
+
+- Proper email input type.
+- Accessible field label.
+- Email autocomplete.
+- Input validation.
+- Clear focus state.
+- Accessible error feedback.
+
+## 14.2 Password input
+
+Implement or preserve:
+
+- Password masking.
+- Show and hide password control.
+- Current-password autocomplete.
+- Keyboard accessibility.
+- Accessible validation feedback.
+
+## 14.3 Sign-in button
+
+Implement:
+
+- Normal state.
+- Hover state.
+- Focus state.
+- Loading state.
+- Disabled state.
+- Error recovery state.
+
+During authentication, display:
+
+```text
+Signing in...
+```
+
+Prevent duplicate authentication submissions while a request is pending.
+
+Do not indicate successful authentication unless the actual authentication system confirms success.
+
+---
+
+# 15. AUTHENTICATION ERROR HANDLING
+
+Use concise and professional error messages.
+
+## Invalid credentials
+
+"Unable to sign in. Please verify your credentials and try again."
+
+## Temporary service unavailability
+
+"The authentication service is temporarily unavailable. Please try again shortly."
+
+## Network connectivity error
+
+"Unable to connect to the authentication service. Please check your connection and try again."
+
+## Expired session
+
+"Your session has expired. Please sign in again."
+
+## Rate limiting
+
+"Too many sign-in attempts. Please try again later."
+
+Do not expose:
+
+- Database errors.
+- Internal stack traces.
+- API credentials.
+- Provider secrets.
+- Sensitive account information.
+- Whether an unverified email address belongs to an existing account.
+
+Preserve existing server-side security controls and privacy-safe error handling.
+
+---
+
+# 16. PASSWORD RECOVERY AND REGISTRATION LINKS
+
+Ensure that the Forgot Password and Create a Client Account links remain functional.
+
+Use the existing supported application routes.
+
+If clean routes already exist, use them.
+
+Do not redesign the password recovery or registration pages under this instruction.
+
+Do not modify password reset token handling.
+
+Do not remove required authentication callback parameters.
+
+Do not change existing recovery email configuration.
+
+Report any defects identified outside the login page as separate development items requiring approval.
+
+---
+
+# 17. MOBILE AND RESPONSIVE OPTIMIZATION
+
+Ensure the login page is fully responsive across:
+
+- Desktop computers.
+- Laptop computers.
+- Tablets.
+- Android smartphones.
+- iPhones.
+- Small mobile screens.
+
+On smaller screens:
+
+- Present a compact corporate identity section.
+- Keep the official corporate emblem visible.
+- Reduce unnecessary decorative content.
+- Position the authentication form prominently.
+- Preserve access to the public website.
+- Prevent horizontal scrolling.
+- Ensure readable corporate contact information.
+- Maintain comfortable touch targets.
+- Reduce animation complexity where necessary.
+
+The login form must remain usable without requiring excessive scrolling.
+
+Test representative viewport widths:
+
+```text
+320px
+375px
+390px
+430px
+768px
+1024px
+1440px
+1920px
+```
+
+---
+
+# 18. ACCESSIBILITY REQUIREMENTS
+
+Implement appropriate accessibility improvements within the target login interface.
+
+Include:
+
+- Semantic HTML.
+- Accessible input labels.
+- Visible keyboard focus.
+- Logical keyboard navigation.
+- Accessible password visibility controls.
+- Screen-reader-compatible validation.
+- Appropriate text contrast.
+- Reduced-motion support.
+- Accessible button labels.
+- Proper heading hierarchy.
+- Decorative animation isolation from assistive technologies.
+
+Target applicable WCAG 2.2 AA design criteria.
+
+Do not advertise formal accessibility compliance unless appropriate validation has been completed.
+
+---
+
+# 19. PERFORMANCE AND FAULT ISOLATION
+
+The redesigned login page must not introduce unnecessary performance degradation.
+
+Requirements:
+
+- Avoid oversized background assets.
+- Avoid unnecessary animation libraries.
+- Lazy-load nonessential visual components where appropriate.
+- Keep the authentication form immediately available.
+- Prevent animation failures from affecting authentication.
+- Minimize layout shifts.
+- Optimize image loading.
+- Prevent memory leaks.
+- Clean up animation timers and event listeners.
+- Avoid excessive CPU and GPU utilization.
+- Maintain usability on low-powered mobile devices.
+
+Do not increase the public website bundle unnecessarily.
+
+Where possible, isolate login-specific assets through route-level code splitting.
+
+---
+
+# 20. PUBLIC WEBSITE PRESERVATION GUARANTEE
+
+Before implementation, establish a baseline of the current public website.
+
+Record:
+
+- Current main branch commit.
+- Existing public homepage structure.
+- Existing public navigation.
+- Existing public service catalog.
+- Existing corporate content.
+- Existing visual assets.
+- Existing AI chat and voice components.
+- Existing consultation workflows.
+- Existing public website styles.
+- Existing production build behavior.
+
+Capture desktop and mobile baseline screenshots where browser tooling is available.
+
+After implementation, compare the public website against the baseline.
+
+The public website must retain its existing appearance, content, navigation, animations, service offerings, and functionality.
+
+Any unexpected public-facing difference must be investigated and corrected before the development is considered acceptable.
+
+Do not introduce new public website features.
+
+Do not apply the previously supplied enterprise-wide corporate content instruction to the public website.
+
+---
+
+# 21. SOURCE CODE CHANGE CONTROL
+
+Inspect the latest source code before implementing changes.
+
+Identify the actual login page component and its dependencies.
+
+Prefer isolated components with responsibilities equivalent to:
+
+```text
+ClientPortalLoginPage
+ClientPortalLoginLayout
+ClientPortalCorporatePanel
+ClientPortalLoginForm
+ClientPortalTechnologyBackground
+ClientPortalContactInformation
+```
+
+These are suggested component names only.
+
+Reuse existing components and established naming conventions where appropriate.
+
+Do not create duplicate components unnecessarily.
+
+Keep all login-specific styles isolated from shared public website styles.
+
+Only modify shared routing or deployment files where necessary to support the corrected login URL.
+
+Document the reason for every shared-file modification.
+
+---
+
+# 22. GITHUB DEVELOPMENT GOVERNANCE
+
+Create a dedicated development branch:
+
+```text
+feature/client-portal-login-modernization
+```
+
+Before implementation:
+
+1. Inspect the latest main branch.
+2. Record the exact baseline commit.
+3. Review existing open pull requests.
+4. Identify overlapping portal routing repairs.
+5. Preserve previously approved fixes.
+6. Identify the minimum required source-code modifications.
+
+Implement changes in independently reviewable commits.
+
+Suggested commit sequence:
+
+```text
+fix(portal): canonicalize client login URL
+
+refactor(portal): isolate enterprise login layout
+
+feat(portal): modernize client authentication interface
+
+feat(portal): add lightweight technology visualization
+
+refactor(portal): refine corporate wording and contact alignment
+
+fix(portal): improve responsive layout and accessibility
+
+test(portal): validate authentication and clean URL behavior
+
+test(regression): verify unchanged public website
+```
+
+Create a dedicated pull request containing only the authorized changes.
+
+Do not merge unrelated development branches.
+
+Do not overwrite existing Google AI Studio changes.
+
+Do not modify production credentials, DNS settings, database schemas, or unrelated infrastructure.
+
+---
+
+# 23. MANDATORY TESTING AND VALIDATION
+
+Execute all applicable automated and browser-based tests.
+
+## 23.1 Clean URL validation
+
+Verify:
+
+```text
+https://destriatech.com/portal/login
+```
+
+Expected behavior:
+
+- Login page loads correctly.
+- No hash fragment appears.
+- No blank screen.
+- No missing assets.
+- No redirect loop.
+- No unexpected 404 response.
+- Browser refresh works.
+- Direct navigation works.
+- Browser history works.
+
+Verify that the legacy hash URL automatically normalizes to the clean login URL.
+
+Use an isolated preview or staging deployment for candidate validation before changing production.
+
+## 23.2 Authentication validation
+
+Test:
+
+- Valid login using an authorized test account.
+- Invalid credentials.
+- Empty form submission.
+- Invalid email format.
+- Password visibility toggle.
+- Authentication loading state.
+- Duplicate submission prevention.
+- Network failure.
+- Session expiration.
+- Existing MFA behavior.
+- Existing post-login redirect.
+- Forgot Password navigation.
+- Create a Client Account navigation.
+
+Do not use unauthorized production accounts.
+
+## 23.3 Visual validation
+
+Verify:
+
+- Corporate emblem alignment.
+- Corporate name alignment.
+- Professional typography.
+- Balanced whitespace.
+- Corporate headline readability.
+- Contact information alignment.
+- Authentication card positioning.
+- Consistent button dimensions.
+- Form field alignment.
+- Animation performance.
+- Mobile responsiveness.
+- Keyboard accessibility.
+
+## 23.4 Public website regression validation
+
+Verify that the following remain unchanged:
+
+- Public homepage.
+- Public navigation.
+- Public corporate profile.
+- Public service catalog.
+- Public AI chat.
+- Public AI voice.
+- Public animations.
+- Public corporate branding.
+- Public contact information.
+- Consultation workflows.
+- Existing public route behavior.
+
+## 23.5 Engineering validation
+
+Run all applicable repository-defined commands, including:
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+Inspect package.json and use the actual configured scripts.
+
+Do not invent test results.
+
+Do not weaken or remove existing tests to achieve passing CI.
+
+---
+
+# 24. REQUIRED DEVELOPMENT COMPLETION REPORT
+
+After implementation, provide a detailed report containing:
+
+1. Exact development baseline commit.
+2. Development branch.
+3. Final implementation commit.
+4. Pull request reference.
+5. Complete list of modified files.
+6. Justification for every modified shared file.
+7. Login URL correction results.
+8. Legacy URL migration results.
+9. Corporate wording changes.
+10. Login interface design improvements.
+11. Animation implementation details.
+12. Contact information verification.
+13. Authentication regression results.
+14. Mobile responsiveness results.
+15. Accessibility validation results.
+16. Performance validation results.
+17. Automated test results.
+18. Production build results.
+19. Public website preservation evidence.
+20. Before-and-after login screenshots.
+21. Remaining defects or limitations.
+22. Deployment readiness assessment.
+
+Classify each requirement as:
+
+- VERIFIED
+- IMPLEMENTED — VALIDATION REQUIRED
+- FAILED
+- BLOCKED
+- NOT APPLICABLE
+
+Do not report untested functionality as verified.
+
+---
+
+# 25. FINAL ACCEPTANCE CRITERIA
+
+The development shall only be considered complete when:
+
+- The Client Portal login page has a clean, professional URL.
+- The legacy hash URL redirects safely to the canonical login route.
+- The login page presents an ultra-professional enterprise design.
+- Corporate wording is concise and legally responsible.
+- Official corporate information is accurate.
+- Corporate elements are properly aligned.
+- The authentication form remains fully functional.
+- Technology animations are subtle and performance-conscious.
+- Desktop and mobile layouts are validated.
+- Existing authentication and security controls are preserved.
+- Existing customer information remains unchanged.
+- All applicable automated tests pass.
+- The production build succeeds.
+- The entire public website remains unchanged.
+- No unrelated functionality has been modified.
+
+Do not merge or deploy to production until the implementation report and validation evidence have been presented for explicit approval.
+
+---
+
+# FINAL EXECUTION DIRECTIVE
+
+Proceed exclusively with the modernization of the DESTRIA TECH INC Client Portal login page.
+
+Transform the existing interface into a premium, minimalist, technologically advanced, professionally aligned enterprise authentication experience.
+
+Correct the visible login URL to:
+
+https://destriatech.com/portal/login
+
+Preserve the entire public website exactly as it currently exists.
+
+Do not interpret this instruction as authorization to redesign, rewrite, restructure, or modernize the public-facing website.
+
+The development must remain isolated, controlled, technically validated, and independently reviewable.
+
+**END OF DEVELOPMENT INSTRUCTION**
