@@ -32,7 +32,14 @@ import {
 } from './db/types';
 import { SupabaseDatabaseRepository } from './db/supabaseRepository';
 import { AdminAuthService, AuthenticatedAdminRequest } from './auth';
-import { EmailTransport, ResendEmailTransport, TransactionalEmailService } from './services/emailService';
+import {
+  DualRecipientDeliveryOutcome,
+  EmailTransport,
+  ResendEmailTransport,
+  TransactionalEmailService,
+  verifyResendWebhookSignature,
+} from './services/emailService';
+import { DualNotificationOverrides } from './config/notificationRecipients';
 import { GoogleCalendarService } from './services/calendarService';
 import { createCorrelationId, logStructured } from './logger';
 import {
@@ -42,6 +49,7 @@ import {
   validateAppointmentPayload,
   validateInquiryPayload,
 } from './validation';
+import { isValidIanaTimezone } from './utils/timezoneUtc';
 
 import path from 'path';
 import { PortalRepository } from './portal/types';
@@ -53,6 +61,7 @@ export interface AppDependencies {
   db?: DatabaseRepository;
   portalRepo?: PortalRepository;
   emailTransport?: EmailTransport;
+  dualNotificationOverrides?: DualNotificationOverrides;
   calendarService?: GoogleCalendarService;
   geminiClient?: GoogleGenAI | null;
   sessionSecret?: string;
@@ -163,7 +172,9 @@ export function createApp(deps: AppDependencies = {}): {
   const db = deps.db || new SupabaseDatabaseRepository();
   const emailService = new TransactionalEmailService(
     db,
-    deps.emailTransport || new ResendEmailTransport()
+    deps.emailTransport || new ResendEmailTransport(),
+    undefined,
+    deps.dualNotificationOverrides
   );
   const calendarService = deps.calendarService || new GoogleCalendarService();
   const authService = new AdminAuthService(db, deps.sessionSecret);
@@ -299,7 +310,11 @@ export function createApp(deps: AppDependencies = {}): {
   const strictJsonParser = express.json({
     limit: '100kb',
     verify: (req: any, _res, buf) => {
-      if (req.originalUrl && req.originalUrl.startsWith('/api/portal/webhooks/')) {
+      if (
+        req.originalUrl &&
+        (req.originalUrl.startsWith('/api/portal/webhooks/') ||
+          req.originalUrl.startsWith('/api/webhooks/'))
+      ) {
         req.rawBody = buf.toString('utf8');
       }
     },
@@ -731,22 +746,27 @@ export function createApp(deps: AppDependencies = {}): {
           estimatedOneTimeStartingUsd: data.estimatedOneTimeStartingUsd,
           estimatedMonthlyStartingUsd: data.estimatedMonthlyStartingUsd,
           estimatedBudget: data.estimatedBudget,
+          engagementScope: data.engagementScope,
+          submissionTimezone: data.submissionTimezone,
           preferredCurrency: data.preferredCurrency,
           phpConversionRate: data.phpConversionRate,
           projectDescription: data.projectDescription,
           fileName: data.fileName,
           privacyConsent: data.privacyConsent,
+          commercialPolicyConsent: data.commercialPolicyConsent,
+          sourceChannel: data.sourceChannel,
           clientIp,
         });
 
-        let emailOutcome: {
-          customerStatus: string;
-          adminStatus: string;
-          overallStatus: string;
-        } = {
-          customerStatus: record.emailDeliveryStatus,
-          adminStatus: record.emailDeliveryStatus,
-          overallStatus: record.emailDeliveryStatus,
+        let emailOutcome: DualRecipientDeliveryOutcome = {
+          customerStatus: record.emailDeliveryStatus === 'sent' ? 'sent' : record.emailDeliveryStatus === 'failed' ? 'failed' : 'unconfigured',
+          adminStatus: record.emailDeliveryStatus === 'sent' ? 'sent' : record.emailDeliveryStatus === 'failed' ? 'failed' : 'unconfigured',
+          overallStatus: record.emailDeliveryStatus === 'sent' ? 'sent' : record.emailDeliveryStatus === 'failed' ? 'failed' : 'unconfigured',
+          notifiedRecipientsCount: 0,
+          deliveredRecipientsCount: 0,
+          failedRecipientsCount: 0,
+          partialFailure: false,
+          notificationsEnabled: true,
         };
 
         if (created) {
@@ -765,6 +785,11 @@ export function createApp(deps: AppDependencies = {}): {
               customerStatus: 'failed',
               adminStatus: 'failed',
               overallStatus: 'failed',
+              notifiedRecipientsCount: 0,
+              deliveredRecipientsCount: 0,
+              failedRecipientsCount: 0,
+              partialFailure: false,
+              notificationsEnabled: true,
             };
           }
 
@@ -777,29 +802,40 @@ export function createApp(deps: AppDependencies = {}): {
             entityId: record.referenceCode,
             details: {
               type: record.type,
+              sourceChannel: record.sourceChannel,
               serviceCount: record.selectedServiceIds.length,
-              estimatedOneTimeStartingUsd: record.estimatedOneTimeStartingUsd,
+              notifiedRecipientsCount: emailOutcome.notifiedRecipientsCount,
+              deliveredRecipientsCount: emailOutcome.deliveredRecipientsCount,
               emailDeliveryStatus: emailOutcome.overallStatus,
             },
           });
         }
 
+        // SECURITY: Never expose internal notification recipient email addresses in public API responses
         res.status(created ? 201 : 200).json({
           success: true,
           deduplicated: !created,
           referenceId: record.referenceCode,
           timestamp: record.createdAt,
+          confirmationMessage:
+            'Your service inquiry has been successfully registered with DESTRIA TECH INC. Our authorized team will review your submitted requirements and coordinate further communication.',
           emailDelivery: {
             customerStatus: emailOutcome.customerStatus,
             adminStatus: emailOutcome.adminStatus,
             overallStatus: emailOutcome.overallStatus,
+            notifiedRecipientsCount: emailOutcome.notifiedRecipientsCount,
+            deliveredRecipientsCount: emailOutcome.deliveredRecipientsCount,
+            failedRecipientsCount: emailOutcome.failedRecipientsCount,
+            partialFailure: emailOutcome.partialFailure,
             emailConfigured: emailService.isConfigured(),
           },
           inquiry: {
             referenceId: record.referenceCode,
             type: record.type,
+            sourceChannel: record.sourceChannel,
             serviceTitle: record.serviceTitle,
             selectedServiceIds: record.selectedServiceIds,
+            engagementScope: record.engagementScope || 'Subject to Formal Assessment',
             commercialStatus: 'Subject to Formal Assessment',
             estimatedOneTimeStartingUsd: 0,
             estimatedMonthlyStartingUsd: 0,
@@ -818,25 +854,50 @@ export function createApp(deps: AppDependencies = {}): {
   // -----------------------------------------------------------------------
   // 5. SERVER-SIDE CONSULTATION AVAILABILITY & SCHEDULING (BLOCK 7)
   // -----------------------------------------------------------------------
-  app.get('/api/appointments/availability', async (req: Request, res: Response, next: NextFunction) => {
+  app.get('/api/appointments/availability', async (req: Request & { correlationId?: string }, res: Response) => {
+    const dateStr = typeof req.query.date === 'string' ? req.query.date.trim() : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      res.status(400).json({ success: false, error: 'Valid YYYY-MM-DD date query parameter is required.' });
+      return;
+    }
+
+    const requestedTz = typeof req.query.timezone === 'string' ? req.query.timezone.trim() : '';
+    const effectiveTimezone =
+      requestedTz && isValidIanaTimezone(requestedTz) ? requestedTz : 'America/Denver';
+
     try {
-      const dateStr = typeof req.query.date === 'string' ? req.query.date.trim() : '';
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        res.status(400).json({ success: false, error: 'Valid YYYY-MM-DD date query parameter is required.' });
-        return;
-      }
       const bookedSlots = await db.getBookedSlotsForDate(dateStr);
       const availableSlots = ALLOWED_APPOINTMENT_SLOTS.filter((slot) => !bookedSlots.includes(slot));
       res.json({
         success: true,
+        availabilityVerified: true,
+        availabilityStatus: 'verified',
         date: dateStr,
-        timezone: 'America/Denver',
+        timezone: effectiveTimezone,
         calendarConfigured: calendarService.isConfigured(),
         bookedSlots,
         availableSlots,
       });
-    } catch (err) {
-      next(err);
+    } catch (err: any) {
+      // Never fabricate availability; honestly disclose that live availability could not be verified
+      // while allowing prospective clients to submit a "Pending Scheduling Confirmation" request.
+      logStructured('warn', 'appointment_availability_unverified', {
+        correlationId: req.correlationId,
+        date: dateStr,
+        error: err?.message,
+      });
+      res.status(200).json({
+        success: true,
+        availabilityVerified: false,
+        availabilityStatus: 'unverified',
+        date: dateStr,
+        timezone: effectiveTimezone,
+        calendarConfigured: false,
+        bookedSlots: [],
+        availableSlots: [...ALLOWED_APPOINTMENT_SLOTS],
+        warning:
+          'Live scheduling availability could not be verified right now. You may submit your preferred window as Pending Scheduling Confirmation.',
+      });
     }
   });
 
@@ -853,7 +914,16 @@ export function createApp(deps: AppDependencies = {}): {
           return;
         }
 
-        const validated = validateAppointmentPayload(req.body);
+        const headerIdemp =
+          typeof req.headers['idempotency-key'] === 'string'
+            ? req.headers['idempotency-key']
+            : undefined;
+        const payloadWithHeader = {
+          ...(req.body && typeof req.body === 'object' ? req.body : {}),
+          idempotencyKey: req.body?.idempotencyKey || headerIdemp,
+        };
+
+        const validated = validateAppointmentPayload(payloadWithHeader);
         if (validated.ok === false) {
           res.status(400).json({ success: false, error: validated.error });
           return;
@@ -897,7 +967,8 @@ export function createApp(deps: AppDependencies = {}): {
         });
 
         // Strictly reflect real integration status: never confirm calendar or fabricate Meet links when unconfigured!
-        const status: 'confirmed' | 'pending_review' = calResult.synced ? 'confirmed' : 'pending_review';
+        const status: 'confirmed' | 'pending_review' =
+          calResult.synced && data.availabilityVerified ? 'confirmed' : 'pending_review';
 
         // Distinct Executive Consultation Routing (CEO vs. CTO vs. Solutions Architecture Team)
         const assignedConsultant =
@@ -917,8 +988,11 @@ export function createApp(deps: AppDependencies = {}): {
           briefReferenceCode: data.briefReferenceCode,
           executivePathway: data.executivePathway,
           consultationType: data.consultationType,
+          consultationPurpose: data.consultationPurpose,
+          selectedSolution: data.selectedSolution,
           scheduledDate: data.scheduledDate,
           scheduledTimeSlot: data.scheduledTimeSlot,
+          utcScheduledAt: data.utcScheduledAt,
           durationMinutes: 30,
           clientTimezone: data.clientTimezone,
           meetingLink: calResult.synced ? calResult.meetingLink : undefined,
@@ -928,10 +1002,22 @@ export function createApp(deps: AppDependencies = {}): {
           calendarSyncStatus: calResult.calendarSyncStatus,
           calendarEventId: calResult.eventId,
           managementTokenHash,
+          sourceChannel: data.sourceChannel,
+          availabilityVerified: data.availabilityVerified,
           notes: data.notes,
         });
 
-        let emailOutcome = { customerStatus: 'unconfigured', adminStatus: 'unconfigured' };
+        let emailOutcome: DualRecipientDeliveryOutcome = {
+          customerStatus: 'unconfigured',
+          adminStatus: 'unconfigured',
+          overallStatus: 'unconfigured',
+          notifiedRecipientsCount: 0,
+          deliveredRecipientsCount: 0,
+          failedRecipientsCount: 0,
+          partialFailure: false,
+          notificationsEnabled: true,
+        };
+
         if (created) {
           try {
             emailOutcome = await emailService.enqueueAndSendAppointmentEmails(
@@ -944,6 +1030,16 @@ export function createApp(deps: AppDependencies = {}): {
               referenceCode: record.referenceCode,
               error: emailErr?.message,
             });
+            emailOutcome = {
+              customerStatus: 'failed',
+              adminStatus: 'failed',
+              overallStatus: 'failed',
+              notifiedRecipientsCount: 0,
+              deliveredRecipientsCount: 0,
+              failedRecipientsCount: 0,
+              partialFailure: false,
+              notificationsEnabled: true,
+            };
           }
 
           await db.writeAuditLog({
@@ -954,22 +1050,118 @@ export function createApp(deps: AppDependencies = {}): {
             entityType: 'consultation_appointments',
             entityId: record.referenceCode,
             details: {
+              sourceChannel: record.sourceChannel || 'Public Website',
               scheduledDate: record.scheduledDate,
               scheduledTimeSlot: record.scheduledTimeSlot,
+              utcScheduledAt: record.utcScheduledAt,
               status: record.status,
               calendarSyncStatus: record.calendarSyncStatus,
+              notifiedRecipientsCount: emailOutcome.notifiedRecipientsCount,
+              deliveredRecipientsCount: emailOutcome.deliveredRecipientsCount,
             },
           });
         }
 
         const { managementTokenHash: _hidden, ...safeAppointment } = record;
+        // SECURITY: Never expose internal notification recipient email addresses in public API responses
         res.status(created ? 201 : 200).json({
           success: true,
           deduplicated: !created,
+          confirmationMessage:
+            record.status === 'confirmed'
+              ? 'Your executive consultation has been confirmed on our calendar.'
+              : 'Your consultation request has been successfully registered. The requested schedule remains subject to availability and formal confirmation by our authorized team.',
           appointment: safeAppointment,
           managementToken: created ? managementToken : undefined,
           calendarSynced: calResult.synced,
-          emailDelivery: emailOutcome,
+          emailDelivery: {
+            customerStatus: emailOutcome.customerStatus,
+            adminStatus: emailOutcome.adminStatus,
+            overallStatus: emailOutcome.overallStatus,
+            notifiedRecipientsCount: emailOutcome.notifiedRecipientsCount,
+            deliveredRecipientsCount: emailOutcome.deliveredRecipientsCount,
+            failedRecipientsCount: emailOutcome.failedRecipientsCount,
+            partialFailure: emailOutcome.partialFailure,
+            emailConfigured: emailService.isConfigured(),
+          },
+        });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
+  // -----------------------------------------------------------------------
+  // 5B. VERIFIED EMAIL DELIVERY WEBHOOK (RESEND / SVIX HMAC-SHA256)
+  // -----------------------------------------------------------------------
+  app.post(
+    '/api/webhooks/email/resend',
+    async (req: Request & { correlationId?: string; rawBody?: string }, res: Response, next: NextFunction) => {
+      try {
+        const webhookSecret = emailService.getDualNotificationConfig().webhookSecret;
+        if (!webhookSecret) {
+          res.status(503).json({
+            success: false,
+            error: 'Email delivery webhook verification secret is not configured.',
+          });
+          return;
+        }
+
+        const rawBody =
+          typeof req.rawBody === 'string' ? req.rawBody : JSON.stringify(req.body || {});
+        const svixId = typeof req.headers['svix-id'] === 'string' ? req.headers['svix-id'] : undefined;
+        const svixTimestamp =
+          typeof req.headers['svix-timestamp'] === 'string'
+            ? req.headers['svix-timestamp']
+            : undefined;
+        const svixSignature =
+          typeof req.headers['svix-signature'] === 'string'
+            ? req.headers['svix-signature']
+            : undefined;
+
+        const verification = verifyResendWebhookSignature({
+          rawBody,
+          svixId,
+          svixTimestamp,
+          svixSignature,
+          secret: webhookSecret,
+        });
+
+        if (!verification.ok) {
+          logStructured('warn', 'resend_webhook_signature_rejected', {
+            correlationId: req.correlationId,
+            reason: verification.reason,
+          });
+          res.status(401).json({
+            success: false,
+            error: verification.reason || 'Invalid webhook signature.',
+          });
+          return;
+        }
+
+        const outcome = await emailService.handleResendWebhookEvent(
+          req.body || {},
+          req.correlationId
+        );
+
+        await db.writeAuditLog({
+          correlationId: req.correlationId,
+          actor: 'resend_webhook',
+          actorRole: 'system',
+          action: 'email_delivery_webhook_processed',
+          entityType: 'notification_records',
+          entityId: outcome.outboxId || req.body?.data?.email_id,
+          details: {
+            eventType: req.body?.type,
+            matched: outcome.matched,
+            status: outcome.status,
+          },
+        });
+
+        res.status(200).json({
+          success: true,
+          matched: outcome.matched,
+          status: outcome.status || 'ignored',
         });
       } catch (err) {
         next(err);

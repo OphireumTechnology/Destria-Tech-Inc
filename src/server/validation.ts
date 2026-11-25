@@ -4,8 +4,25 @@ import {
 } from '../data/serviceCatalog';
 import { AVAILABLE_SLOTS } from '../services/supabaseService';
 import { CatalogService } from '../types';
+import { isValidEmailAddress } from './config/notificationRecipients';
+import { RequestSourceChannel } from './db/types';
+import { computeEquivalentUtcSlot, isValidIanaTimezone } from './utils/timezoneUtc';
 
 export const ALLOWED_APPOINTMENT_SLOTS = AVAILABLE_SLOTS;
+
+const ALLOWED_DOCUMENT_EXTENSIONS = new Set([
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.txt',
+  '.md',
+  '.csv',
+  '.xlsx',
+  '.pptx',
+  '.png',
+  '.jpg',
+  '.jpeg',
+]);
 
 export interface ValidatedInquiryPayload {
   idempotencyKey?: string;
@@ -25,11 +42,15 @@ export interface ValidatedInquiryPayload {
   estimatedOneTimeStartingUsd: number;
   estimatedMonthlyStartingUsd: number;
   estimatedBudget: string;
+  engagementScope?: string;
+  submissionTimezone: string;
   preferredCurrency: 'USD' | 'PHP';
   phpConversionRate: number;
   projectDescription: string;
   fileName?: string;
   privacyConsent: boolean;
+  commercialPolicyConsent: boolean;
+  sourceChannel: RequestSourceChannel;
 }
 
 export interface ValidatedAppointmentPayload {
@@ -41,14 +62,18 @@ export interface ValidatedAppointmentPayload {
   briefReferenceCode?: string;
   executivePathway: 'ceo' | 'cto' | 'advisory';
   consultationType: 'video' | 'phone' | 'in_person';
+  consultationPurpose?: string;
+  selectedSolution?: string;
   scheduledDate: string;
   scheduledTimeSlot: string;
+  utcScheduledAt: string;
   durationMinutes: number;
   clientTimezone: string;
+  sourceChannel: RequestSourceChannel;
+  availabilityVerified: boolean;
   notes?: string;
 }
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const ALLOWED_CONSULTATION_TYPES = new Set(['video', 'phone', 'in_person']);
 const ALLOWED_EXECUTIVE_PATHWAYS = new Set(['ceo', 'cto', 'advisory']);
@@ -64,7 +89,82 @@ export function sanitizeText(value: unknown, maxLen: number): string {
 export const sanitizePlainText = sanitizeText;
 
 export function isValidEmail(email: string): boolean {
-  return email.length <= 254 && EMAIL_REGEX.test(email);
+  return isValidEmailAddress(email);
+}
+
+export function isValidInternationalPhone(phone: string): boolean {
+  const digits = phone.replace(/[^0-9]/g, '');
+  if (digits.length < 7 || digits.length > 18) return false;
+  return /^[0-9+\-().\s]+$/.test(phone);
+}
+
+export function normalizeSourceChannel(raw: unknown): RequestSourceChannel {
+  const cleaned = sanitizeText(raw, 40).toLowerCase();
+  if (cleaned === 'ai voice' || cleaned === 'ai_voice' || cleaned === 'voice') {
+    return 'AI Voice';
+  }
+  if (cleaned === 'ai chat' || cleaned === 'ai_chat' || cleaned === 'chat') {
+    return 'AI Chat';
+  }
+  return 'Public Website';
+}
+
+/**
+ * Sanitizes an optional client-supplied supporting document filename.
+ * Rejects path traversal, newline/header characters, and executable extensions.
+ */
+export function sanitizeDocumentFilename(raw: unknown): {
+  ok: true;
+  fileName?: string;
+} | {
+  ok: false;
+  error: string;
+} {
+  if (raw === undefined || raw === null || raw === '') {
+    return { ok: true, fileName: undefined };
+  }
+  if (typeof raw !== 'string') {
+    return { ok: false, error: 'Supporting document filename must be a text string.' };
+  }
+  if (/[\r\n\u0000-\u001f\u007f]/.test(raw)) {
+    return { ok: false, error: 'Supporting document filename contains invalid control characters.' };
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: true, fileName: undefined };
+
+  // Strip any client path prefix and reject traversal attempts
+  const baseName = trimmed.replace(/^.*[\\/]/, '');
+  if (!baseName || baseName.includes('..') || baseName.length > 160) {
+    return { ok: false, error: 'Supporting document filename is invalid or exceeds 160 characters.' };
+  }
+
+  const dotIdx = baseName.lastIndexOf('.');
+  if (dotIdx > 0) {
+    const ext = baseName.slice(dotIdx).toLowerCase();
+    if (!ALLOWED_DOCUMENT_EXTENSIONS.has(ext)) {
+      return {
+        ok: false,
+        error: `Unsupported supporting document extension "${ext}". Allowed formats: PDF, DOC, DOCX, TXT, MD, CSV, XLSX, PPTX, PNG, JPG.`,
+      };
+    }
+  }
+
+  const safeName = baseName.replace(/[^a-zA-Z0-9._\-\s()]/g, '_').trim();
+  return { ok: true, fileName: safeName || undefined };
+}
+
+/**
+ * Strips any currency figures from optional Engagement Scope labels so
+ * DESTRIA TECH INC's zero-public-pricing commercial policy is always respected.
+ */
+function sanitizeEngagementScope(raw: unknown): string | undefined {
+  const cleaned = sanitizeText(raw, 140);
+  if (!cleaned) return undefined;
+  if (/\$\s*\d|₱\s*\d|\bphp\s*\d|\busd\s*\d/i.test(cleaned)) {
+    return 'Subject to Formal Assessment';
+  }
+  return cleaned;
 }
 
 export function sanitizeChatInput(raw: unknown):
@@ -126,6 +226,7 @@ export function sanitizeChatInput(raw: unknown):
  *  - Verifies every requested service ID against the authoritative catalog.
  *  - Rejects client-submitted price figures or automated cost calculations.
  *  - Records engagement status strictly as "Subject to Formal Assessment".
+ *  - Never trusts or accepts client-supplied notification recipients.
  */
 export function validateInquiryPayload(raw: unknown): {
   ok: true;
@@ -155,27 +256,54 @@ export function validateInquiryPayload(raw: unknown): {
     };
   }
 
+  // Raw email check before sanitization to catch CR/LF header injection explicitly
+  const rawEmail = typeof body.email === 'string' ? body.email : '';
   const fullName = sanitizeText(body.fullName, 120);
-  const email = sanitizeText(body.email, 254).toLowerCase();
+  const email = sanitizeText(rawEmail, 254).toLowerCase();
   const contactNumber = sanitizeText(body.contactNumber, 40);
   const company = sanitizeText(body.company, 160);
   const industry = sanitizeText(body.industry, 120) || undefined;
   const targetTimeline = sanitizeText(body.targetTimeline, 120) || undefined;
   const projectDescription = sanitizeText(body.projectDescription, 4000);
-  const fileName = sanitizeText(body.fileName, 200) || undefined;
   const idempotencyKey = sanitizeText(body.idempotencyKey, 120) || undefined;
   const privacyConsent = body.privacyConsent === true;
+  const commercialPolicyConsent =
+    body.commercialPolicyConsent === undefined
+      ? privacyConsent
+      : body.commercialPolicyConsent === true;
+  const sourceChannel = normalizeSourceChannel(body.sourceChannel);
+
+  const rawTimezone = sanitizeText(body.submissionTimezone || body.clientTimezone, 64);
+  const submissionTimezone =
+    rawTimezone && isValidIanaTimezone(rawTimezone) ? rawTimezone : 'UTC';
+
+  const engagementScope = sanitizeEngagementScope(
+    body.engagementScope ?? body.estimatedBudget
+  );
+
+  const rawType = sanitizeText(body.type, 40).toLowerCase();
   const type: 'solution_builder' | 'contact_inquiry' =
-    body.type === 'contact_inquiry' ? 'contact_inquiry' : 'solution_builder';
+    rawType === 'contact_inquiry' || rawType === 'contact_form'
+      ? 'contact_inquiry'
+      : 'solution_builder';
 
   if (fullName.length < 2) errors.push('Full name must be at least 2 characters.');
-  if (!isValidEmail(email)) errors.push('A valid email address is required.');
-  if (contactNumber.length < 7) errors.push('A valid contact phone number is required.');
+  if (!isValidEmail(rawEmail) || !isValidEmail(email)) {
+    errors.push('A valid email address is required.');
+  }
+  if (!isValidInternationalPhone(contactNumber)) {
+    errors.push('A valid international contact phone number is required.');
+  }
   if (company.length < 2) errors.push('Company or organization name is required.');
   if (projectDescription.length < 10) {
     errors.push('Project description must be at least 10 characters.');
   }
-  if (!privacyConsent) errors.push('Privacy consent must be explicitly accepted.');
+  if (!privacyConsent) errors.push('Privacy and commercial policy consent must be explicitly accepted.');
+
+  const docCheck = sanitizeDocumentFilename(body.fileName);
+  if (docCheck.ok === false) {
+    errors.push(docCheck.error);
+  }
 
   // Resolve and verify service IDs strictly against authoritative catalog
   const requestedIds: string[] = [];
@@ -186,10 +314,15 @@ export function validateInquiryPayload(raw: unknown): {
     }
   }
   const singleServiceId = sanitizeText(body.serviceId, 80);
+  const generalContactAliases = new Set([
+    'enterprise-custom-assessment',
+    'general-consultation',
+    'custom-enterprise-solution',
+  ]);
   if (
     requestedIds.length === 0 &&
     singleServiceId &&
-    singleServiceId !== 'enterprise-custom-assessment'
+    !generalContactAliases.has(singleServiceId)
   ) {
     requestedIds.push(singleServiceId);
   }
@@ -204,7 +337,9 @@ export function validateInquiryPayload(raw: unknown): {
       getCatalogServiceById(sid) ||
       SERVICE_CATALOG.find((s) => s.legacyServiceId === sid);
     if (!found) {
-      errors.push(`Unknown or invalid service identifier: "${sid}".`);
+      if (type === 'solution_builder') {
+        errors.push(`Unknown or invalid service identifier: "${sid}".`);
+      }
     } else {
       validatedServices.push(found);
     }
@@ -267,18 +402,22 @@ export function validateInquiryPayload(raw: unknown): {
       selectedServiceIds: validatedServices.map((s) => s.id),
       matchedCatalogServices: validatedServices,
       selectedOptionsMap: sanitizedOptionsMap,
-      serviceId: validatedServices[0]?.id || 'enterprise-custom-assessment',
+      serviceId: validatedServices[0]?.id || singleServiceId || 'enterprise-custom-assessment',
       serviceTitle,
       // No public/automated service pricing or monetary totals are generated.
       // Retained as 0 / assessment label strictly for legacy DB schema compatibility.
       estimatedOneTimeStartingUsd: 0,
       estimatedMonthlyStartingUsd: 0,
       estimatedBudget: 'Subject to Formal Assessment',
+      engagementScope: engagementScope || 'Subject to Formal Assessment',
+      submissionTimezone,
       preferredCurrency: 'USD',
       phpConversionRate: 1,
       projectDescription,
-      fileName,
+      fileName: docCheck.ok ? docCheck.fileName : undefined,
       privacyConsent,
+      commercialPolicyConsent,
+      sourceChannel,
     },
   };
 }
@@ -310,22 +449,31 @@ export function validateAppointmentPayload(raw: unknown): {
     };
   }
 
+  const rawEmail = typeof body.email === 'string' ? body.email : '';
   const fullName = sanitizeText(body.fullName, 120);
-  const email = sanitizeText(body.email, 254).toLowerCase();
+  const email = sanitizeText(rawEmail, 254).toLowerCase();
   const phone = sanitizeText(body.phone, 40);
   const companyName = sanitizeText(body.companyName, 160) || 'Enterprise Client';
   const briefReferenceCode = sanitizeText(body.briefReferenceCode, 60) || undefined;
   const executivePathwayRaw = sanitizeText(body.executivePathway, 20).toLowerCase() || 'advisory';
   const consultationTypeRaw = sanitizeText(body.consultationType, 30);
+  const consultationPurpose = sanitizeText(body.consultationPurpose, 240) || undefined;
+  const selectedSolution = sanitizeText(body.selectedSolution, 200) || undefined;
   const scheduledDate = sanitizeText(body.scheduledDate, 20);
   const scheduledTimeSlot = sanitizeText(body.scheduledTimeSlot, 40);
-  const clientTimezone = sanitizeText(body.clientTimezone, 60) || 'America/Denver';
-  const notes = sanitizeText(body.notes, 1000) || undefined;
+  const requestedTimezone = sanitizeText(body.clientTimezone, 64) || 'America/Denver';
+  const sourceChannel = normalizeSourceChannel(body.sourceChannel);
+  const availabilityVerified = body.availabilityVerified !== false;
+  const notes = sanitizeText(body.notes, 2000) || undefined;
   const idempotencyKey = sanitizeText(body.idempotencyKey, 120) || undefined;
 
   if (fullName.length < 2) errors.push('Full name is required.');
-  if (!isValidEmail(email)) errors.push('A valid email address is required.');
-  if (phone.length < 7) errors.push('A valid phone number is required.');
+  if (!isValidEmail(rawEmail) || !isValidEmail(email)) {
+    errors.push('A valid email address is required.');
+  }
+  if (!isValidInternationalPhone(phone)) {
+    errors.push('A valid international phone number is required.');
+  }
 
   if (!ALLOWED_EXECUTIVE_PATHWAYS.has(executivePathwayRaw)) {
     errors.push('Executive consultation pathway must be one of: ceo, cto, advisory.');
@@ -333,6 +481,10 @@ export function validateAppointmentPayload(raw: unknown): {
 
   if (!ALLOWED_CONSULTATION_TYPES.has(consultationTypeRaw)) {
     errors.push('Consultation type must be one of: video, phone, in_person.');
+  }
+
+  if (!isValidIanaTimezone(requestedTimezone)) {
+    errors.push(`Invalid IANA timezone identifier: "${requestedTimezone}".`);
   }
 
   if (!ISO_DATE_REGEX.test(scheduledDate)) {
@@ -358,6 +510,12 @@ export function validateAppointmentPayload(raw: unknown): {
     return { ok: false, error: errors[0], errors };
   }
 
+  const utcComputed = computeEquivalentUtcSlot(
+    scheduledDate,
+    scheduledTimeSlot,
+    requestedTimezone
+  );
+
   return {
     ok: true,
     data: {
@@ -369,10 +527,15 @@ export function validateAppointmentPayload(raw: unknown): {
       briefReferenceCode,
       executivePathway: executivePathwayRaw as 'ceo' | 'cto' | 'advisory',
       consultationType: consultationTypeRaw as 'video' | 'phone' | 'in_person',
+      consultationPurpose,
+      selectedSolution,
       scheduledDate,
       scheduledTimeSlot,
+      utcScheduledAt: utcComputed?.formattedUtc || `${scheduledDate} ${scheduledTimeSlot} (${requestedTimezone})`,
       durationMinutes: 30,
-      clientTimezone,
+      clientTimezone: utcComputed?.validTimezone || requestedTimezone,
+      sourceChannel,
+      availabilityVerified,
       notes,
     },
   };

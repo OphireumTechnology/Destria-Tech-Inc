@@ -37,6 +37,8 @@ export interface SelectedServiceSnapshot {
   selectedOptionIds: string[];
 }
 
+export type RequestSourceChannel = 'Public Website' | 'AI Chat' | 'AI Voice';
+
 export interface SolutionRequestRecord {
   id: string;
   referenceCode: string;
@@ -56,11 +58,14 @@ export interface SolutionRequestRecord {
   estimatedOneTimeStartingUsd: number;
   estimatedMonthlyStartingUsd: number;
   estimatedBudget: string;
+  engagementScope?: string;
+  submissionTimezone?: string;
   preferredCurrency: 'USD' | 'PHP';
   phpConversionRate?: number;
   projectDescription: string;
   fileName?: string;
   privacyConsent: boolean;
+  commercialPolicyConsent?: boolean;
   status: 'submitted' | 'under_review' | 'proposal_sent' | 'archived';
   emailDeliveryStatus: 'pending' | 'sent' | 'failed' | 'unconfigured';
   sourceChannel: string;
@@ -79,8 +84,11 @@ export interface AppointmentRecord {
   briefReferenceCode?: string;
   executivePathway?: 'ceo' | 'cto' | 'advisory';
   consultationType: 'video' | 'phone' | 'in_person';
+  consultationPurpose?: string;
+  selectedSolution?: string;
   scheduledDate: string;
   scheduledTimeSlot: string;
+  utcScheduledAt?: string;
   durationMinutes: number;
   clientTimezone: string;
   meetingLink?: string;
@@ -90,6 +98,8 @@ export interface AppointmentRecord {
   calendarSyncStatus: 'synced' | 'pending' | 'failed' | 'unconfigured';
   calendarEventId?: string;
   managementTokenHash?: string;
+  sourceChannel?: string;
+  availabilityVerified?: boolean;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -101,6 +111,9 @@ export interface EmailOutboxRecord {
   entityType: 'solution_request' | 'appointment';
   entityReference: string;
   recipientEmail: string;
+  replyTo?: string;
+  idempotencyKey?: string;
+  requestSource?: string;
   notificationType:
     | 'customer_confirmation'
     | 'admin_alert'
@@ -109,12 +122,15 @@ export interface EmailOutboxRecord {
   subject: string;
   htmlBody: string;
   textBody: string;
-  status: 'queued' | 'sent' | 'failed' | 'unconfigured';
+  status: 'queued' | 'sent' | 'delivered' | 'failed' | 'unconfigured';
   provider: string;
   providerReference?: string;
   deliveryAttempts: number;
   lastError?: string;
   nextRetryAt?: string;
+  lastAttemptAt?: string;
+  providerAcceptedAt?: string;
+  deliveredAt?: string;
   sentAt?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -159,11 +175,15 @@ export interface CreateSolutionRequestInput {
   estimatedOneTimeStartingUsd: number;
   estimatedMonthlyStartingUsd: number;
   estimatedBudget: string;
+  engagementScope?: string;
+  submissionTimezone?: string;
   preferredCurrency: 'USD' | 'PHP';
   phpConversionRate?: number;
   projectDescription: string;
   fileName?: string;
   privacyConsent: boolean;
+  commercialPolicyConsent?: boolean;
+  sourceChannel?: string;
   clientIp?: string;
 }
 
@@ -177,8 +197,11 @@ export interface CreateAppointmentInput {
   briefReferenceCode?: string;
   executivePathway?: 'ceo' | 'cto' | 'advisory';
   consultationType: 'video' | 'phone' | 'in_person';
+  consultationPurpose?: string;
+  selectedSolution?: string;
   scheduledDate: string;
   scheduledTimeSlot: string;
+  utcScheduledAt?: string;
   durationMinutes: number;
   clientTimezone: string;
   meetingLink?: string;
@@ -188,6 +211,8 @@ export interface CreateAppointmentInput {
   calendarSyncStatus: 'synced' | 'pending' | 'failed' | 'unconfigured';
   calendarEventId?: string;
   managementTokenHash: string;
+  sourceChannel?: string;
+  availabilityVerified?: boolean;
   notes?: string;
 }
 
@@ -235,6 +260,9 @@ export interface DatabaseRepository {
     entityType: 'solution_request' | 'appointment';
     entityReference: string;
     recipientEmail: string;
+    replyTo?: string;
+    idempotencyKey?: string;
+    requestSource?: string;
     notificationType: EmailOutboxRecord['notificationType'];
     subject: string;
     htmlBody: string;
@@ -249,10 +277,14 @@ export interface DatabaseRepository {
       deliveryAttempts: number;
       lastError?: string;
       nextRetryAt?: string | null;
+      lastAttemptAt?: string | null;
+      providerAcceptedAt?: string | null;
+      deliveredAt?: string | null;
       sentAt?: string | null;
     }
   ): Promise<void>;
   listRetryableOutbox(limit?: number): Promise<EmailOutboxRecord[]>;
+  findOutboxByProviderReference?(providerReference: string): Promise<EmailOutboxRecord | null>;
 
   writeAuditLog(input: Omit<AuditLogRecord, 'id' | 'createdAt'>): Promise<void>;
   listAuditLogs(options: { limit: number; offset: number }): Promise<{

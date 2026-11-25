@@ -138,8 +138,11 @@ export const SolutionBuilderModal: React.FC<SolutionBuilderModalProps> = ({
           targetTimeline,
           selectedServiceIds: selectedServices.map((s) => s.id),
           selectedOptionsMap,
+          submissionTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
           projectDescription: projectDescription.trim(),
           privacyConsent,
+          commercialPolicyConsent: privacyConsent,
+          sourceChannel: 'Public Website',
           websiteHoneypot,
         }),
       });
@@ -170,7 +173,7 @@ export const SolutionBuilderModal: React.FC<SolutionBuilderModalProps> = ({
       setSubmittedRecord({
         referenceId: data.referenceId,
         summaryText: summaryLines,
-        emailDeliveryStatus: data.emailDelivery?.customerStatus || 'unconfigured',
+        emailDeliveryStatus: data.emailDelivery?.overallStatus || data.emailDelivery?.customerStatus || 'unconfigured',
         emailConfigured: Boolean(data.emailDelivery?.emailConfigured),
       });
 
@@ -236,8 +239,9 @@ export const SolutionBuilderModal: React.FC<SolutionBuilderModalProps> = ({
 
               <div className="p-5 rounded-xl bg-[#111827] border border-slate-800 text-xs sm:text-sm text-slate-200 leading-relaxed space-y-3 text-left">
                 <p>
-                  Thank you for submitting your enterprise solution requirements to{' '}
-                  {corporateIdentity.legalName}.
+                  Your service inquiry has been successfully registered with{' '}
+                  {corporateIdentity.legalName}. Our authorized team will review your submitted
+                  requirements and coordinate further communication.
                 </p>
                 <p>
                   Your inquiry has been recorded under reference number{' '}

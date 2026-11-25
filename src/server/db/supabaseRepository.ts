@@ -37,15 +37,21 @@ function mapSolutionRequestRow(row: any): SolutionRequestRecord {
     serviceTitle: selectedServices.map((s: any) => String(s.title)).join(' + ') || 'General Consultation',
     estimatedOneTimeStartingUsd: Number(row.estimated_one_time_usd || 0),
     estimatedMonthlyStartingUsd: Number(row.estimated_monthly_usd || 0),
-    estimatedBudget: row.estimated_budget_label || 'To be scoped via proposal',
+    estimatedBudget: row.estimated_budget_label || 'Subject to Formal Assessment',
+    engagementScope: row.engagement_scope || undefined,
+    submissionTimezone: row.submission_timezone || undefined,
     preferredCurrency: row.preferred_currency === 'PHP' ? 'PHP' : 'USD',
     phpConversionRate: row.php_conversion_rate ? Number(row.php_conversion_rate) : undefined,
     projectDescription: String(row.requirements_notes),
     fileName: row.attachment_filename || undefined,
     privacyConsent: Boolean(row.confidentiality_authorized),
+    commercialPolicyConsent:
+      row.commercial_policy_consent !== undefined
+        ? Boolean(row.commercial_policy_consent)
+        : Boolean(row.confidentiality_authorized),
     status: row.status || 'submitted',
     emailDeliveryStatus: row.email_delivery_status || 'pending',
-    sourceChannel: row.source_channel || 'website',
+    sourceChannel: row.source_channel || 'Public Website',
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at || row.created_at),
   };
@@ -66,8 +72,11 @@ function mapAppointmentRow(row: any): AppointmentRecord {
         ? row.executive_pathway
         : 'advisory',
     consultationType: row.consultation_type,
+    consultationPurpose: row.consultation_purpose || undefined,
+    selectedSolution: row.selected_solution || undefined,
     scheduledDate: String(row.scheduled_date),
     scheduledTimeSlot: String(row.scheduled_time_slot),
+    utcScheduledAt: row.utc_scheduled_at || undefined,
     durationMinutes: Number(row.duration_minutes || 30),
     clientTimezone: String(row.client_timezone || 'America/Denver'),
     meetingLink: row.meeting_link || undefined,
@@ -77,6 +86,9 @@ function mapAppointmentRow(row: any): AppointmentRecord {
     calendarSyncStatus: row.calendar_sync_status || 'unconfigured',
     calendarEventId: row.calendar_event_id || undefined,
     managementTokenHash: row.management_token_hash || undefined,
+    sourceChannel: row.source_channel || 'Public Website',
+    availabilityVerified:
+      row.availability_verified !== undefined ? Boolean(row.availability_verified) : true,
     notes: row.notes || undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at || row.created_at),
@@ -84,12 +96,18 @@ function mapAppointmentRow(row: any): AppointmentRecord {
 }
 
 function mapOutboxRow(row: any): EmailOutboxRecord {
+  const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
   return {
     id: String(row.id),
     dedupeKey: String(row.dedupe_key),
     entityType: row.entity_type,
     entityReference: String(row.entity_reference),
     recipientEmail: String(row.recipient_email),
+    replyTo: row.reply_to || (typeof meta.replyTo === 'string' ? meta.replyTo : undefined),
+    idempotencyKey:
+      row.idempotency_key || (typeof meta.idempotencyKey === 'string' ? meta.idempotencyKey : undefined),
+    requestSource:
+      row.request_source || (typeof meta.requestSource === 'string' ? meta.requestSource : undefined),
     notificationType: row.notification_type,
     subject: String(row.subject),
     htmlBody: String(row.html_body),
@@ -100,8 +118,15 @@ function mapOutboxRow(row: any): EmailOutboxRecord {
     deliveryAttempts: Number(row.delivery_attempts || 0),
     lastError: row.last_error || undefined,
     nextRetryAt: row.next_retry_at || undefined,
+    lastAttemptAt:
+      row.last_attempt_at || (typeof meta.lastAttemptAt === 'string' ? meta.lastAttemptAt : undefined),
+    providerAcceptedAt:
+      row.provider_accepted_at ||
+      (typeof meta.providerAcceptedAt === 'string' ? meta.providerAcceptedAt : undefined),
+    deliveredAt:
+      row.delivered_at || (typeof meta.deliveredAt === 'string' ? meta.deliveredAt : undefined),
     sentAt: row.sent_at || undefined,
-    metadata: row.metadata || undefined,
+    metadata: meta,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at || row.created_at),
   };
@@ -210,12 +235,15 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
         preferred_currency: input.preferredCurrency,
         php_conversion_rate: input.phpConversionRate || null,
         estimated_budget_label: input.estimatedBudget,
+        engagement_scope: input.engagementScope || null,
+        submission_timezone: input.submissionTimezone || null,
         requirements_notes: input.projectDescription,
         attachment_filename: input.fileName || null,
         confidentiality_authorized: input.privacyConsent,
+        commercial_policy_consent: Boolean(input.commercialPolicyConsent ?? input.privacyConsent),
         status: 'submitted',
         email_delivery_status: 'pending',
-        source_channel: 'website',
+        source_channel: input.sourceChannel || 'Public Website',
         client_ip: input.clientIp || null,
       })
       .select('*')
@@ -319,8 +347,11 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
         brief_reference_code: input.briefReferenceCode || null,
         executive_pathway: input.executivePathway || 'advisory',
         consultation_type: input.consultationType,
+        consultation_purpose: input.consultationPurpose || null,
+        selected_solution: input.selectedSolution || null,
         scheduled_date: input.scheduledDate,
         scheduled_time_slot: input.scheduledTimeSlot,
+        utc_scheduled_at: input.utcScheduledAt || null,
         duration_minutes: input.durationMinutes,
         client_timezone: input.clientTimezone,
         meeting_link: input.meetingLink || null,
@@ -330,6 +361,8 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
         calendar_sync_status: input.calendarSyncStatus,
         calendar_event_id: input.calendarEventId || null,
         management_token_hash: input.managementTokenHash,
+        source_channel: input.sourceChannel || 'Public Website',
+        availability_verified: input.availabilityVerified ?? true,
         notes: input.notes || null,
       })
       .select('*')
@@ -426,6 +459,9 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
     entityType: 'solution_request' | 'appointment';
     entityReference: string;
     recipientEmail: string;
+    replyTo?: string;
+    idempotencyKey?: string;
+    requestSource?: string;
     notificationType: EmailOutboxRecord['notificationType'];
     subject: string;
     htmlBody: string;
@@ -443,6 +479,13 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
       return { record: mapOutboxRow(existing), created: false };
     }
 
+    const enrichedMeta: Record<string, unknown> = {
+      ...(input.metadata || {}),
+      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      ...(input.requestSource ? { requestSource: input.requestSource } : {}),
+    };
+
     const { data, error } = await db
       .from('notification_records')
       .insert({
@@ -450,6 +493,9 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
         entity_type: input.entityType,
         entity_reference: input.entityReference,
         recipient_email: input.recipientEmail,
+        reply_to: input.replyTo || null,
+        idempotency_key: input.idempotencyKey || null,
+        request_source: input.requestSource || null,
         notification_type: input.notificationType,
         subject: input.subject,
         html_body: input.htmlBody,
@@ -457,7 +503,7 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
         status: 'queued',
         provider: 'resend',
         delivery_attempts: 0,
-        metadata: input.metadata || {},
+        metadata: enrichedMeta,
       })
       .select('*')
       .single();
@@ -476,21 +522,39 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
       deliveryAttempts: number;
       lastError?: string;
       nextRetryAt?: string | null;
+      lastAttemptAt?: string | null;
+      providerAcceptedAt?: string | null;
+      deliveredAt?: string | null;
       sentAt?: string | null;
     }
   ): Promise<void> {
     const db = this.getClient();
+    const updatePayload: Record<string, unknown> = {
+      status: patch.status,
+      delivery_attempts: patch.deliveryAttempts,
+      last_error: patch.lastError || null,
+      next_retry_at: patch.nextRetryAt || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (patch.providerReference !== undefined) {
+      updatePayload.provider_reference = patch.providerReference || null;
+    }
+    if (patch.sentAt !== undefined) {
+      updatePayload.sent_at = patch.sentAt || null;
+    }
+    if (patch.lastAttemptAt !== undefined) {
+      updatePayload.last_attempt_at = patch.lastAttemptAt || null;
+    }
+    if (patch.providerAcceptedAt !== undefined) {
+      updatePayload.provider_accepted_at = patch.providerAcceptedAt || null;
+    }
+    if (patch.deliveredAt !== undefined) {
+      updatePayload.delivered_at = patch.deliveredAt || null;
+    }
+
     const { error } = await db
       .from('notification_records')
-      .update({
-        status: patch.status,
-        provider_reference: patch.providerReference || null,
-        delivery_attempts: patch.deliveryAttempts,
-        last_error: patch.lastError || null,
-        next_retry_at: patch.nextRetryAt || null,
-        sent_at: patch.sentAt || null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', id);
 
     if (error) {
@@ -514,6 +578,20 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
       throw new DatabaseUnavailableError(`Failed to list retryable outbox records: ${error.message}`);
     }
     return (data || []).map(mapOutboxRow);
+  }
+
+  async findOutboxByProviderReference(providerReference: string): Promise<EmailOutboxRecord | null> {
+    const db = this.getClient();
+    const { data, error } = await db
+      .from('notification_records')
+      .select('*')
+      .eq('provider_reference', providerReference)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseUnavailableError(`Failed to query outbox by provider reference: ${error.message}`);
+    }
+    return data ? mapOutboxRow(data) : null;
   }
 
   async writeAuditLog(input: Omit<AuditLogRecord, 'id' | 'createdAt'>): Promise<void> {

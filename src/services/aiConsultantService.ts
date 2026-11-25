@@ -129,10 +129,10 @@ const synthesizeBriefFromState = (state: ConsultationState, recommendedIds: stri
   return {
     referenceCode: refCode,
     client: {
-      fullName: state.client.fullName || 'Prospective Enterprise Client',
-      email: state.client.email || 'client@organization.com',
-      phone: state.client.phone || corporateIdentity.contact.telephone.display,
-      companyName: state.client.companyName || 'Client Organization',
+      fullName: state.client.fullName || '',
+      email: state.client.email || '',
+      phone: state.client.phone || '',
+      companyName: state.client.companyName || '',
       industry: state.client.industry || 'Digital & Enterprise Services',
       location: state.client.location || 'Global / International',
     },
@@ -218,13 +218,18 @@ export const aiConsultantService = {
       updatedState.currentStage = 'client_info';
     } else if (updatedState.currentStage === 'client_info') {
       const emailMatch = trimmed.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-      if (emailMatch) updatedState.client.email = emailMatch[0];
-      const parts = trimmed.split(/[,\n-]/).map((s) => s.trim());
-      if (parts[0] && !updatedState.client.fullName) {
-        updatedState.client.fullName = parts[0].replace(/my name is/i, '').replace(/i am/i, '').trim();
+      if (emailMatch) updatedState.client.email = emailMatch[0].toLowerCase();
+      const phoneMatch = trimmed.match(/(\+?\d[\d\s\-().]{6,}\d)/);
+      if (phoneMatch && !updatedState.client.phone) {
+        updatedState.client.phone = phoneMatch[1].trim();
       }
-      if (parts[1] && !updatedState.client.companyName) {
-        updatedState.client.companyName = parts[1].replace(/company is/i, '').replace(/at/i, '').trim();
+      const nameExplicit = trimmed.match(/(?:my name is|i am|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/);
+      if (nameExplicit && !updatedState.client.fullName) {
+        updatedState.client.fullName = nameExplicit[1].trim();
+      }
+      const companyExplicit = trimmed.match(/(?:company is|organization is|from|at)\s+([A-Za-z0-9&.,'\-\s]{2,60})/i);
+      if (companyExplicit && !updatedState.client.companyName && !companyExplicit[1].includes('@')) {
+        updatedState.client.companyName = companyExplicit[1].split(/[,\n]/)[0].trim();
       }
       updatedState.currentStage = 'brief_ready';
     }

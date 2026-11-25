@@ -133,29 +133,43 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
     const resolvedTitle = matchedCatalog?.title || matchedLegacy?.title || formData.serviceId;
 
     try {
-      const response = await fetch(apiUrl('/api/inquiries'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': idempotencyKeyRef.current,
-        },
-        body: JSON.stringify({
-          idempotencyKey: idempotencyKeyRef.current,
-          type: 'contact_form',
-          fullName: formData.fullName.trim(),
-          email: formData.email.trim(),
-          contactNumber: formData.contactNumber.trim(),
-          company: formData.company.trim(),
-          serviceId: formData.serviceId,
-          serviceTitle: resolvedTitle,
-          selectedServiceIds: matchedCatalog ? [matchedCatalog.id] : [],
-          estimatedBudget: 'Subject to Formal Assessment',
-          projectDescription: formData.projectDescription.trim(),
-          fileName: formData.fileName || undefined,
-          privacyConsent: formData.privacyConsent,
-          websiteHoneypot,
-        }),
-      });
+      const submissionTimezone =
+        Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      let response: Response;
+      try {
+        response = await fetch(apiUrl('/api/inquiries'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': idempotencyKeyRef.current,
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            idempotencyKey: idempotencyKeyRef.current,
+            type: 'contact_form',
+            fullName: formData.fullName.trim(),
+            email: formData.email.trim(),
+            contactNumber: formData.contactNumber.trim(),
+            company: formData.company.trim(),
+            serviceId: formData.serviceId,
+            serviceTitle: resolvedTitle,
+            selectedServiceIds: matchedCatalog ? [matchedCatalog.id] : [],
+            estimatedBudget: 'Subject to Formal Assessment',
+            engagementScope: formData.estimatedBudget || 'Subject to Formal Assessment',
+            submissionTimezone,
+            projectDescription: formData.projectDescription.trim(),
+            fileName: formData.fileName || undefined,
+            privacyConsent: formData.privacyConsent,
+            commercialPolicyConsent: formData.privacyConsent,
+            sourceChannel: 'Public Website',
+            websiteHoneypot,
+          }),
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.success || !data.referenceId) {
@@ -171,7 +185,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
 
       setSubmittedRecord({
         referenceId: data.referenceId,
-        emailDeliveryStatus: data.emailDelivery?.customerStatus || 'unconfigured',
+        emailDeliveryStatus: data.emailDelivery?.overallStatus || data.emailDelivery?.customerStatus || 'unconfigured',
         emailConfigured: Boolean(data.emailDelivery?.emailConfigured),
       });
       idempotencyKeyRef.current = createIdempotencyKey();
@@ -310,18 +324,23 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   </div>
                   <h3 className="text-xl font-bold text-white">Service Inquiry Logged Successfully</h3>
                   <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-                    Your inquiry has been persisted under reference number{' '}
+                    Your service inquiry has been successfully registered with{' '}
+                    <span className="text-white font-semibold">{corporateIdentity.legalName}</span>. Our
+                    authorized team will review your submitted requirements and coordinate further
+                    communication.
+                  </p>
+                  <p className="text-xs text-slate-300 max-w-md mx-auto">
+                    Reference Number:{' '}
                     <span className="font-mono text-[#00C2C7] font-bold">
                       {submittedRecord.referenceId}
-                    </span>{' '}
-                    and assigned for review by the{' '}
-                    <span className="text-white font-semibold">{corporateIdentity.legalName}</span>{' '}
-                    solutions architecture team.
+                    </span>
                   </p>
                   <p className="text-[11px] text-slate-400 max-w-md mx-auto">
                     {submittedRecord.emailDeliveryStatus === 'sent'
-                      ? 'Confirmation email dispatched to your inbox.'
-                      : 'Server persistence verified. Automated email notification awaits transactional email configuration.'}
+                      ? 'Automated confirmation and authorized team notifications have been dispatched.'
+                      : submittedRecord.emailConfigured
+                      ? 'Your inquiry is safely stored on our server. Email notification is queued for automatic retry.'
+                      : 'Your inquiry is safely stored on our server. Automated email notification awaits transactional email configuration.'}
                   </p>
                   <div className="pt-4 flex justify-center gap-3">
                     <button

@@ -13,7 +13,12 @@ import {
   ConsultationState, 
   INITIAL_CONSULTATION_STATE 
 } from '../../services/aiConsultantService';
-import { supabaseService, ProjectBrief, ConsultationAppointment } from '../../services/supabaseService';
+import {
+  supabaseService,
+  ProjectBrief,
+  ConsultationAppointment,
+  ConsultationSourceChannel,
+} from '../../services/supabaseService';
 import { aiVoiceService, VoiceState, VoiceLanguage } from '../../services/aiVoiceService';
 import { SERVICE_CATALOG, formatCatalogEngagement } from '../../data/serviceCatalog';
 import { ProjectBriefModal } from './ProjectBriefModal';
@@ -32,6 +37,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
   const [isBriefModalOpen, setIsBriefModalOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [currentBrief, setCurrentBrief] = useState<ProjectBrief | null>(null);
+  const [activeRequestSource, setActiveRequestSource] = useState<ConsultationSourceChannel>('AI Chat');
 
   // Human Escalation Modal
   const [isEscalationModalOpen, setIsEscalationModalOpen] = useState(false);
@@ -154,6 +160,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
         }));
       },
       onBookingRequested: () => {
+        setActiveRequestSource('AI Voice');
         setIsBookingModalOpen(true);
       },
       onError: (err) => {
@@ -280,15 +287,20 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       if (/review brief|view brief|see brief|project brief/i.test(text)) {
         setTimeout(() => {
           setIsTyping(false);
+          setActiveRequestSource(isVoiceActive ? 'AI Voice' : 'AI Chat');
           if (state.generatedBrief) {
             setCurrentBrief(state.generatedBrief);
             setIsBriefModalOpen(true);
           } else {
-            const draftBrief = supabaseService.generateDefaultBrief(state.requirements.category || 'Enterprise Digital Platform', {
-              fullName: state.client.fullName || 'Prospective Enterprise Client',
-              companyName: state.client.companyName || 'Enterprise Partner',
-              email: state.client.email || 'partner@enterprise.com',
-            });
+            const draftBrief = supabaseService.generateDefaultBrief(
+              state.requirements.category || 'Enterprise Digital Platform',
+              {
+                fullName: state.client.fullName || '',
+                companyName: state.client.companyName || '',
+                email: state.client.email || '',
+                phone: state.client.phone || '',
+              }
+            );
             setCurrentBrief(draftBrief);
             setIsBriefModalOpen(true);
           }
@@ -299,6 +311,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       if (/schedule|book appointment|set meeting|consultation slot/i.test(text)) {
         setTimeout(() => {
           setIsTyping(false);
+          setActiveRequestSource(isVoiceActive ? 'AI Voice' : 'AI Chat');
           setIsBookingModalOpen(true);
         }, 500);
         return;
@@ -955,11 +968,31 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
           ========================================================================= */}
       <ProjectBriefModal
         isOpen={isBriefModalOpen}
+        sourceChannel={isVoiceActive ? 'AI Voice' : activeRequestSource}
         onClose={() => setIsBriefModalOpen(false)}
         brief={currentBrief}
         onScheduleConsultation={() => {
           setIsBriefModalOpen(false);
+          setActiveRequestSource(isVoiceActive ? 'AI Voice' : activeRequestSource);
           setIsBookingModalOpen(true);
+        }}
+        onInquirySubmitted={({ referenceId }) => {
+          const confirmMsg = `Your service inquiry has been successfully registered with DESTRIA TECH INC (Reference: ${referenceId}). Our authorized team will review your submitted requirements and coordinate further communication.`;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-inq-confirmed-${Date.now()}`,
+              sender: 'ai',
+              text: confirmMsg,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              stage: 'brief',
+              suggestedAction: 'schedule_meeting',
+              quickReplies: ['Schedule Consultation', 'Direct Solutions Contact'],
+            },
+          ]);
+          if (isVoiceActive && !isSpeakerMuted) {
+            void aiVoiceService.speakText(confirmMsg);
+          }
         }}
       />
 
@@ -968,6 +1001,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
           ========================================================================= */}
       <AppointmentBookingModal
         isOpen={isBookingModalOpen}
+        sourceChannel={isVoiceActive ? 'AI Voice' : activeRequestSource}
         onClose={() => setIsBookingModalOpen(false)}
         projectBrief={currentBrief}
         initialClientData={state.client}
@@ -978,20 +1012,28 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
             scheduledAppointment: appointment,
           }));
           const isConfirmedCalendar = appointment.status === 'confirmed';
+          const confirmText = isConfirmedCalendar
+            ? `Your consultation appointment is confirmed.\n\n• Reference: ${appointment.referenceCode}\n• Date & Time: ${appointment.scheduledDate} at ${appointment.scheduledTimeSlot} (${appointment.clientTimezone})\n• Channel: ${appointment.consultationType.toUpperCase()}`
+            : `Your consultation request has been successfully registered. The requested schedule remains subject to availability and formal confirmation by our authorized team.\n\n• Reference: ${appointment.referenceCode}\n• Requested Date & Time: ${appointment.scheduledDate} at ${appointment.scheduledTimeSlot} (${appointment.clientTimezone})\n• Channel: ${appointment.consultationType.toUpperCase()}`;
           setMessages((prev) => [
             ...prev,
             {
               id: `msg-confirmed-${Date.now()}`,
               sender: 'ai',
-              text: isConfirmedCalendar
-                ? `Your consultation appointment is confirmed!\n\n• Reference: ${appointment.referenceCode}\n• Date & Time: ${appointment.scheduledDate} at ${appointment.scheduledTimeSlot} (${appointment.clientTimezone})\n• Mode: ${appointment.consultationType.toUpperCase()}`
-                : `Your consultation request has been registered (${appointment.status.replace('_', ' ')}).\n\n• Reference: ${appointment.referenceCode}\n• Requested Date & Time: ${appointment.scheduledDate} at ${appointment.scheduledTimeSlot} (${appointment.clientTimezone})\n• Channel: ${appointment.consultationType.toUpperCase()}\n\nOur executive coordinator will issue your final calendar invite shortly.`,
+              text: confirmText,
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               stage: 'schedule',
               suggestedAction: 'talk_to_human',
               quickReplies: ['Direct Solutions Contact'],
             },
           ]);
+          if (isVoiceActive && !isSpeakerMuted) {
+            void aiVoiceService.speakText(
+              isConfirmedCalendar
+                ? `Your consultation appointment is confirmed under reference ${appointment.referenceCode}.`
+                : `Your consultation request has been successfully registered under reference ${appointment.referenceCode}. The requested schedule remains subject to availability and formal confirmation by our authorized team.`
+            );
+          }
         }}
       />
 

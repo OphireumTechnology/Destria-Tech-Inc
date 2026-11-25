@@ -589,16 +589,18 @@ test('10. Transactional email failure is persisted in outbox and retries succeed
     assert.equal(res.status, 201);
     const json = await res.json();
     assert.equal(json.emailDelivery.overallStatus, 'failed');
-    assert.equal(store.outbox.length, 2);
+    // 1 customer confirmation + 2 independent authorized internal recipient notifications
+    assert.equal(store.outbox.length, 3);
     assert.equal(store.outbox[0].status, 'failed');
     assert.ok(store.outbox[0].lastError?.includes('502'));
 
     // Recover transport & run outbox retry queue
     transport.shouldFail = false;
     const processed = await srv.emailService.processRetryQueue(10);
-    assert.equal(processed, 2);
+    assert.equal(processed, 3);
     assert.equal(store.outbox[0].status, 'sent');
     assert.equal(store.outbox[1].status, 'sent');
+    assert.equal(store.outbox[2].status, 'sent');
   } finally {
     await srv.close();
   }

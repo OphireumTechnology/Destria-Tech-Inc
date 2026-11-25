@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import {
   ConsultationAppointment,
+  ConsultationSourceChannel,
   ExecutiveConsultationPathway,
   supabaseService,
   AVAILABLE_SLOTS,
@@ -26,6 +27,7 @@ interface AppointmentBookingModalProps {
   isOpen: boolean;
   onClose: () => void;
   projectBrief?: ProjectBrief | null;
+  sourceChannel?: ConsultationSourceChannel;
   initialClientData?: {
     fullName: string;
     email: string;
@@ -39,6 +41,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
   isOpen,
   onClose,
   projectBrief,
+  sourceChannel = 'Public Website',
   initialClientData,
   onAppointmentBooked,
 }) => {
@@ -73,6 +76,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
   const [selectedSlot, setSelectedSlot] = useState<string>('');
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const [availabilityVerified, setAvailabilityVerified] = useState<boolean>(true);
   const [timezone, setTimezone] = useState<string>('America/Denver');
   const [isCheckingSlots, setIsCheckingSlots] = useState<boolean>(false);
 
@@ -95,6 +99,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
     appointment: ConsultationAppointment;
     managementToken?: string;
     calendarSynced: boolean;
+    confirmationMessage?: string;
   } | null>(null);
 
   const idempotencyKeyRef = useRef<string>(createIdempotencyKey());
@@ -110,10 +115,11 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
     setAvailabilityError(null);
     setErrorMessage(null);
 
-    supabaseService.getBookedSlots(selectedDate).then((res) => {
+    supabaseService.getBookedSlots(selectedDate, timezone).then((res) => {
       if (isMounted) {
         setBookedSlots(res.bookedSlots);
-        setAvailabilityError(res.error || null);
+        setAvailabilityVerified(res.availabilityVerified);
+        setAvailabilityError(res.warning || res.error || null);
         setIsCheckingSlots(false);
       }
     });
@@ -121,7 +127,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
     return () => {
       isMounted = false;
     };
-  }, [isOpen, selectedDate]);
+  }, [isOpen, selectedDate, timezone]);
 
   if (!isOpen) return null;
 
@@ -141,6 +147,20 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
     setIsSubmitting(true);
     setErrorMessage(null);
 
+    const briefNotes = projectBrief
+      ? [
+          projectBrief.requirements.category ? `Category: ${projectBrief.requirements.category}` : '',
+          projectBrief.requirements.businessProblem
+            ? `Objective: ${projectBrief.requirements.businessProblem}`
+            : '',
+          projectBrief.requirements.keyFeatures.length > 0
+            ? `Key Requirements: ${projectBrief.requirements.keyFeatures.slice(0, 6).join(', ')}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' | ')
+      : undefined;
+
     const res = await supabaseService.bookAppointment({
       fullName: clientName.trim(),
       email: clientEmail.trim(),
@@ -149,9 +169,14 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
       briefReferenceCode: projectBrief?.referenceCode,
       executivePathway,
       consultationType,
+      consultationPurpose: projectBrief?.requirements.category || undefined,
+      selectedSolution: projectBrief?.technicalArchitecture.recommendedModules[0] || undefined,
       scheduledDate: selectedDate,
       scheduledTimeSlot: selectedSlot,
       clientTimezone: timezone,
+      sourceChannel,
+      availabilityVerified,
+      notes: briefNotes,
       idempotencyKey: idempotencyKeyRef.current,
     });
 
@@ -162,6 +187,7 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
         appointment: res.appointment,
         managementToken: res.managementToken,
         calendarSynced: Boolean(res.calendarSynced),
+        confirmationMessage: res.confirmationMessage,
       });
       if (onAppointmentBooked) {
         onAppointmentBooked(res.appointment);
@@ -261,7 +287,8 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                     ? 'This scheduling request has been marked cancelled and the time slot has been released.'
                     : submittedResult.calendarSynced
                     ? `Your consultation with ${submittedResult.appointment.assignedConsultant} is confirmed on our synchronized Google Calendar.`
-                    : `Your scheduling request has been safely reserved in our database as a Pending Scheduling Request. A ${COMPANY_CONFIG.displayName} solutions coordinator will send the final calendar invite and meeting link shortly${COMPANY_CONFIG.corporatePhone ? ` (or call ${COMPANY_CONFIG.corporatePhone} for urgent requests)` : ''}.`}
+                    : submittedResult.confirmationMessage ||
+                      'Your consultation request has been successfully registered. The requested schedule remains subject to availability and formal confirmation by our authorized team.'}
                 </p>
               </div>
 
@@ -269,7 +296,9 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                 <div className="flex justify-between py-1 border-b border-slate-800">
                   <span className="text-slate-400">Status:</span>
                   <span className="font-mono font-bold text-[#00C2C7] uppercase">
-                    {submittedResult.appointment.status.replace('_', ' ')}
+                    {submittedResult.appointment.status === 'pending_review'
+                      ? 'Pending Scheduling Confirmation'
+                      : submittedResult.appointment.status.replace('_', ' ')}
                   </span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-800 gap-3">
@@ -290,10 +319,22 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                     {submittedResult.appointment.scheduledTimeSlot}
                   </span>
                 </div>
+                {submittedResult.appointment.utcScheduledAt && (
+                  <div className="flex justify-between py-1 border-b border-slate-800">
+                    <span className="text-slate-400">Equivalent UTC:</span>
+                    <span className="font-mono text-slate-200">
+                      {submittedResult.appointment.utcScheduledAt}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between py-1 border-b border-slate-800">
                   <span className="text-slate-400">Channel:</span>
-                  <span className="font-semibold text-white capitalize">
-                    {submittedResult.appointment.consultationType} Consultation
+                  <span className="font-semibold text-white">
+                    {submittedResult.appointment.consultationType === 'video'
+                      ? 'Video Call'
+                      : submittedResult.appointment.consultationType === 'phone'
+                      ? 'Phone Call'
+                      : 'Executive Briefing'}
                   </span>
                 </div>
                 {submittedResult.appointment.meetingLink && (

@@ -60,6 +60,7 @@ export interface ProjectBrief {
 }
 
 export type ExecutiveConsultationPathway = 'ceo' | 'cto' | 'advisory';
+export type ConsultationSourceChannel = 'Public Website' | 'AI Chat' | 'AI Voice';
 
 export interface ConsultationAppointment {
   id?: string;
@@ -68,8 +69,11 @@ export interface ConsultationAppointment {
   briefReferenceCode?: string;
   executivePathway?: ExecutiveConsultationPathway;
   consultationType: 'video' | 'phone' | 'in_person';
+  consultationPurpose?: string;
+  selectedSolution?: string;
   scheduledDate: string;
   scheduledTimeSlot: string;
+  utcScheduledAt?: string;
   durationMinutes: number;
   clientTimezone: string;
   meetingLink?: string;
@@ -77,6 +81,8 @@ export interface ConsultationAppointment {
   assignedConsultant: string;
   status: 'pending_review' | 'confirmed' | 'rescheduled' | 'cancelled';
   calendarSyncStatus?: 'synced' | 'pending' | 'failed' | 'unconfigured';
+  sourceChannel?: ConsultationSourceChannel;
+  availabilityVerified?: boolean;
   createdAt: string;
 }
 
@@ -90,35 +96,127 @@ export const AVAILABLE_SLOTS = [
   '04:30 PM - 05:00 PM',
 ];
 
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 10000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function resolveZonedDateToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  timeZone: string
+): Date {
+  const targetAsUtcMs = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  const getOffsetMs = (probeMs: number): number => {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    });
+    const parts = formatter.formatToParts(new Date(probeMs));
+    const lookup: Record<string, number> = {};
+    for (const part of parts) {
+      if (part.type !== 'literal') lookup[part.type] = Number(part.value);
+    }
+    const wallAsUtcMs = Date.UTC(
+      lookup.year,
+      lookup.month - 1,
+      lookup.day,
+      lookup.hour === 24 ? 0 : lookup.hour,
+      lookup.minute,
+      lookup.second
+    );
+    return wallAsUtcMs - probeMs;
+  };
+  let guessMs = targetAsUtcMs;
+  for (let i = 0; i < 3; i++) {
+    const refined = targetAsUtcMs - getOffsetMs(guessMs);
+    if (refined === guessMs) break;
+    guessMs = refined;
+  }
+  return new Date(guessMs);
+}
+
 export const supabaseService = {
-  async getBookedSlots(dateStr: string): Promise<{
+  async getBookedSlots(
+    dateStr: string,
+    timezone?: string
+  ): Promise<{
     bookedSlots: string[];
     calendarConfigured: boolean;
+    availabilityVerified: boolean;
+    warning?: string;
     error?: string;
   }> {
-    try {
-      const response = await fetch(
-        apiUrl(`/api/appointments/availability?date=${encodeURIComponent(dateStr)}`)
-      );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.success) {
+    const query = new URLSearchParams({ date: dateStr });
+    if (timezone) query.set('timezone', timezone);
+    const endpoint = apiUrl(`/api/appointments/availability?${query.toString()}`);
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await fetchWithTimeout(endpoint, { method: 'GET' }, 9000);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) {
+          if (attempt === 0 && response.status >= 500) {
+            await new Promise((r) => setTimeout(r, 400));
+            continue;
+          }
+          return {
+            bookedSlots: [],
+            calendarConfigured: false,
+            availabilityVerified: false,
+            warning:
+              data.error ||
+              'Live scheduling availability could not be verified right now. You may still submit your request as Pending Scheduling Confirmation.',
+          };
+        }
+
+        const verified = data.availabilityVerified !== false;
+        return {
+          bookedSlots: Array.isArray(data.bookedSlots) ? data.bookedSlots : [],
+          calendarConfigured: Boolean(data.calendarConfigured),
+          availabilityVerified: verified,
+          warning: typeof data.warning === 'string' ? data.warning : undefined,
+        };
+      } catch {
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 400));
+          continue;
+        }
         return {
           bookedSlots: [],
           calendarConfigured: false,
-          error: data.error || 'Real-time availability could not be verified from the database.',
+          availabilityVerified: false,
+          warning:
+            'Live scheduling availability could not be verified right now. You may select a preferred window and submit your request as Pending Scheduling Confirmation.',
         };
       }
-      return {
-        bookedSlots: Array.isArray(data.bookedSlots) ? data.bookedSlots : [],
-        calendarConfigured: Boolean(data.calendarConfigured),
-      };
-    } catch {
-      return {
-        bookedSlots: [],
-        calendarConfigured: false,
-        error: 'Unable to reach scheduling availability server.',
-      };
     }
+
+    return {
+      bookedSlots: [],
+      calendarConfigured: false,
+      availabilityVerified: false,
+      warning:
+        'Live scheduling availability could not be verified right now. You may submit your request as Pending Scheduling Confirmation.',
+    };
   },
 
   async bookAppointment(params: {
@@ -129,9 +227,13 @@ export const supabaseService = {
     briefReferenceCode?: string;
     executivePathway?: ExecutiveConsultationPathway;
     consultationType: 'video' | 'phone' | 'in_person';
+    consultationPurpose?: string;
+    selectedSolution?: string;
     scheduledDate: string;
     scheduledTimeSlot: string;
     clientTimezone: string;
+    sourceChannel?: ConsultationSourceChannel;
+    availabilityVerified?: boolean;
     idempotencyKey?: string;
     notes?: string;
   }): Promise<{
@@ -139,14 +241,30 @@ export const supabaseService = {
     appointment?: ConsultationAppointment;
     managementToken?: string;
     calendarSynced?: boolean;
+    confirmationMessage?: string;
+    emailDelivery?: {
+      customerStatus: string;
+      adminStatus: string;
+      overallStatus: string;
+      emailConfigured: boolean;
+    };
     error?: string;
   }> {
     try {
-      const response = await fetch(apiUrl('/api/appointments'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
-      });
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (params.idempotencyKey) {
+        headers['Idempotency-Key'] = params.idempotencyKey;
+      }
+
+      const response = await fetchWithTimeout(
+        apiUrl('/api/appointments'),
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(params),
+        },
+        15000
+      );
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.success || !data.appointment) {
         return {
@@ -168,8 +286,11 @@ export const supabaseService = {
         briefReferenceCode: raw.briefReferenceCode,
         executivePathway: raw.executivePathway || params.executivePathway || 'advisory',
         consultationType: raw.consultationType,
+        consultationPurpose: raw.consultationPurpose,
+        selectedSolution: raw.selectedSolution,
         scheduledDate: raw.scheduledDate,
         scheduledTimeSlot: raw.scheduledTimeSlot,
+        utcScheduledAt: raw.utcScheduledAt,
         durationMinutes: raw.durationMinutes || 30,
         clientTimezone: raw.clientTimezone,
         meetingLink: raw.meetingLink,
@@ -177,6 +298,8 @@ export const supabaseService = {
         assignedConsultant: raw.assignedConsultant,
         status: raw.status,
         calendarSyncStatus: raw.calendarSyncStatus,
+        sourceChannel: raw.sourceChannel || params.sourceChannel || 'Public Website',
+        availabilityVerified: raw.availabilityVerified,
         createdAt: raw.createdAt,
       };
 
@@ -185,11 +308,14 @@ export const supabaseService = {
         appointment: mapped,
         managementToken: data.managementToken,
         calendarSynced: Boolean(data.calendarSynced),
+        confirmationMessage:
+          typeof data.confirmationMessage === 'string' ? data.confirmationMessage : undefined,
+        emailDelivery: data.emailDelivery,
       };
     } catch {
       return {
         success: false,
-        error: 'Network error communicating with scheduling backend.',
+        error: 'Network error communicating with scheduling backend. Please retry.',
       };
     }
   },
@@ -203,13 +329,14 @@ export const supabaseService = {
     scheduledTimeSlot?: string;
   }): Promise<{ success: boolean; appointment?: any; error?: string }> {
     try {
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         apiUrl(`/api/appointments/${encodeURIComponent(params.referenceCode)}`),
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(params),
-        }
+        },
+        12000
       );
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.success) {
@@ -239,17 +366,14 @@ export const supabaseService = {
       if (period === 'AM' && hours === 12) hours = 0;
 
       const [yyyy, mm, dd] = appointment.scheduledDate.split('-').map(Number);
-      const tzOffsetHoursMap: Record<string, number> = {
-        'America/Denver': -7,
-        'America/New_York': -5,
-        'America/Los_Angeles': -8,
-        UTC: 0,
-        'Europe/London': 0,
-        'Asia/Manila': 8,
-        'Asia/Singapore': 8,
-      };
-      const offsetHours = tzOffsetHoursMap[appointment.clientTimezone] ?? -7;
-      const utcStart = new Date(Date.UTC(yyyy, mm - 1, dd, hours - offsetHours, m));
+      const utcStart = resolveZonedDateToUtc(
+        yyyy,
+        mm,
+        dd,
+        hours,
+        m,
+        appointment.clientTimezone || 'America/Denver'
+      );
       const utcEnd = new Date(utcStart.getTime() + appointment.durationMinutes * 60 * 1000);
 
       const fmt = (d: Date) => d.toISOString().replace(/-|:|\.\d\d\d/g, '');
@@ -264,10 +388,10 @@ export const supabaseService = {
     return {
       referenceCode: refCode,
       client: {
-        fullName: client?.fullName || 'Prospective Enterprise Client',
-        email: client?.email || 'client@enterprise.com',
-        phone: client?.phone || '+1 (307) 419-4277',
-        companyName: client?.companyName || 'Enterprise Partner',
+        fullName: client?.fullName || '',
+        email: client?.email || '',
+        phone: client?.phone || '',
+        companyName: client?.companyName || '',
         industry: client?.industry || 'Technology & Digital Systems',
         location: client?.location || 'Global / Remote',
       },
