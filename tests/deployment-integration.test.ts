@@ -442,7 +442,7 @@ test('Pages clean portal entry generation and legacy URL migration', () => {
     assert.equal(base.href, prefix + '/');
   }
   const router = fs.readFileSync('src/portal/PortalRouter.tsx', 'utf8');
-  assert.ok(router.includes('hostingPrefix() + cleanTarget'));
+  assert.ok(router.includes('prefix + normalizeLoginTarget(cleanTarget)'));
   const generator = fs.readFileSync('scripts/build-pages-routes.mjs', 'utf8');
   assert.ok(generator.includes("'forgot-password'"));
   assert.ok(generator.includes("'dist/404.html'"));
