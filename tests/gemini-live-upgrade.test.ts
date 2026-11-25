@@ -698,6 +698,7 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
       live: {
         connect: async (opts: any) => {
           capturedCallbacks = opts.callbacks;
+          opts.callbacks.onopen();
           return {
             sendRealtimeInput: (payload: any) => sentRealtimeInputs.push(payload),
             sendClientContent: (_payload: any) => {},
@@ -759,7 +760,7 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
       ws.send(
         JSON.stringify({
           type: 'init',
-          sessionId: 'live-e2e-session-01',
+          sessionId: 'dti-live-e2e-session-01',
           language: 'en-US',
           history: [],
         })
@@ -778,7 +779,7 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
       const readyMsg = received.find((m) => m.type === 'ready');
       assert.equal(readyMsg.model, 'gemini-3.8-live');
       assert.equal(readyMsg.voice, 'Kore');
-      assert.ok(runtimeConfig.listActiveSessions().some((s) => s.sessionId === 'live-e2e-session-01'));
+      assert.ok(runtimeConfig.listActiveSessions().some((s) => s.sessionId === 'dti-live-e2e-session-01'));
 
       // Ping/pong health check
       ws.send(JSON.stringify({ type: 'ping' }));
@@ -831,7 +832,7 @@ describe('DESTRIA Enterprise Gemini Live AI Voice & Chat Upgrade Suite', () => {
       assert.match(overrideMsg.text, /customized|formal proposal|consultation/i);
 
       // Admin force-terminates active session -> client receives session_terminated & live session closes
-      const terminated = runtimeConfig.terminateSession('live-e2e-session-01');
+      const terminated = runtimeConfig.terminateSession('dti-live-e2e-session-01');
       assert.equal(terminated, true);
       await waitUntil(() => received.some((m) => m.type === 'session_terminated'));
       assert.ok(liveClosedCount >= 1);
