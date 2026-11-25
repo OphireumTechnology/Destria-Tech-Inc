@@ -378,10 +378,10 @@ export const PortalVerifyEmailPage: React.FC = () => {
 };
 
 export const PortalForgotPasswordPage: React.FC = () => {
-  const { navigate } = usePortalRouter();
-  const [step, setStep] = useState<'request' | 'reset' | 'done'>('request');
+  const { navigate, query } = usePortalRouter();
+  const [step, setStep] = useState<'request' | 'reset' | 'done'>(query.get('token') ? 'reset' : 'request');
   const [email, setEmail] = useState('');
-  const [token, setToken] = useState('');
+  const [token, setToken] = useState(query.get('token') || '');
   const [newPassword, setNewPassword] = useState('');
   const [devNotice, setDevNotice] = useState(false);
   const [busy, setBusy] = useState(false);
