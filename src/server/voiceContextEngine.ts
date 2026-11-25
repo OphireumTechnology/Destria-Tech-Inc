@@ -499,7 +499,7 @@ export function generateContextualFallbackReply(params: {
     normalized
   );
   const isHumanEscalation =
-    /\b(speak\s+to\s+(a\s+)?human|talk\s+to\s+(a\s+)?human|real\s+person|call\s+executive|direct\s+contact|live\s+engineer|representative|makausap\s+ang\s+tao)\b/i.test(
+    /\b(speak\s+to\s+(a\s+)?human|talk\s+to\s+(a\s+)?human|real\s+person|call\s+(?:your\s+)?(?:solutions\s+)?(?:team|executive|architect)|direct\s+contact|live\s+engineer|representative|makausap\s+ang\s+tao)\b/i.test(
       normalized
     );
 
