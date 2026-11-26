@@ -421,4 +421,141 @@ describe('DTI-MASTER-COMPLETION-003 Verification & Failure-Injection Suite', () 
       assert.ok(linterSrc.includes('no-public-source-map'));
     });
   });
+
+  describe('5. Live Observability Telemetry, Privacy Session Deletion & Extended Failure Injection (DTI-C013, DTI-C028, Sec 35)', () => {
+    it('records real runtime telemetry without simulated metrics, supports durable draft session deletion, and fails safely on injected faults', async () => {
+      const prevEmail = process.env.ADMIN_BOOTSTRAP_EMAIL;
+      const prevPass = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+      process.env.ADMIN_BOOTSTRAP_EMAIL = 'admin@destriatech.com';
+      process.env.ADMIN_BOOTSTRAP_PASSWORD = 'StrongTestPassword!2026';
+
+      const sharedBacking = createSharedFrontDeskBackingState();
+      const db = createDurableTestDb();
+      const { app } = createApp({
+        db,
+        portalRepo: new LocalPortalRepository(),
+        frontDeskPersistence: new SnapshotFrontDeskPersistenceAdapter(sharedBacking),
+        productionStrictMode: true,
+        geminiClient: null,
+        sessionSecret: 'dti-003-observability-secret',
+      });
+
+      const server = http.createServer(app);
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+      const addr = server.address();
+      const baseUrl = typeof addr === 'object' && addr ? `http://127.0.0.1:${addr.port}` : '';
+
+      try {
+        // 1. Failure injection: Unauthorized admin access -> 401 (increments authFailures401)
+        const unauthRes = await fetch(`${baseUrl}/api/admin/system-health`);
+        assert.equal(unauthRes.status, 401);
+
+        // 2. Failure injection: Malformed JSON -> 400 with zero stack trace leak
+        const badJsonRes = await fetch(`${baseUrl}/api/frontdesk/session/bad-json-sess`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{"broken_json": ',
+        });
+        assert.equal(badJsonRes.status, 400);
+        const badJsonText = await badJsonRes.text();
+        assert.equal(badJsonText.includes('at '), false);
+
+        // 3. Privacy & Retention Control: create draft session -> prepare confirmation token -> DELETE session -> token invalidated
+        const sessId = 'privacy-delete-sess-003';
+        const patchRes = await fetch(`${baseUrl}/api/frontdesk/session/${sessId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientProfile: {
+              fullName: 'Marco Santos',
+              companyName: 'Santos Logistics',
+              email: 'marco@santos-logistics.example',
+              phone: '+63 917 555 0199',
+              industry: 'Transportation',
+              country: 'Philippines',
+            },
+            projectRequirements: {
+              projectName: 'Fleet Tracking Core',
+              businessProblem: 'Manual dispatch delays across 45 delivery trucks',
+              businessObjective: 'Real-time dispatch optimization',
+              keyFeatures: ['Live GPS map', 'Driver mobile app'],
+              preferredTimeline: 'Q3 2026',
+            },
+          }),
+        });
+        assert.equal(patchRes.status, 200);
+
+        const mpRes = await fetch(`${baseUrl}/api/frontdesk/session/${sessId}/masterplan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        assert.equal(mpRes.status, 200);
+
+        const prepRes = await fetch(`${baseUrl}/api/frontdesk/session/${sessId}/prepare-submission`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        assert.equal(prepRes.status, 200);
+        const prepBody = await prepRes.json();
+        assert.ok(prepBody.confirmationToken);
+        assert.equal(sharedBacking.sessions.has(sessId), true);
+
+        const deleteRes = await fetch(`${baseUrl}/api/frontdesk/session/${sessId}`, {
+          method: 'DELETE',
+        });
+        assert.equal(deleteRes.status, 200);
+        const deleteBody = await deleteRes.json();
+        assert.equal(deleteBody.deleted, true);
+        assert.equal(deleteBody.clearedPendingConfirmations, 1);
+        assert.equal(sharedBacking.sessions.has(sessId), false);
+
+        // Replaying invalidated confirmation token after deletion MUST fail with 400
+        const replayAfterDelete = await fetch(`${baseUrl}/api/frontdesk/session/${sessId}/authorize-submission`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            confirmationToken: prepBody.confirmationToken,
+            clientConfirmed: true,
+          }),
+        });
+        assert.equal(replayAfterDelete.status, 400);
+
+        // 4. Verify live measured telemetry in /api/admin/system-health (zero simulated metrics)
+        const loginRes = await fetch(`${baseUrl}/api/admin/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          body: JSON.stringify({ email: 'admin@destriatech.com', password: 'StrongTestPassword!2026' }),
+        });
+        assert.equal(loginRes.status, 200);
+        const loginData = await loginRes.json();
+        const adminToken = loginData.token as string;
+        assert.ok(adminToken);
+
+        const healthRes = await fetch(`${baseUrl}/api/admin/system-health`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        assert.equal(healthRes.status, 200);
+        const healthBody = await healthRes.json();
+        assert.equal(healthBody.telemetry.measurementSource, 'live_process_measured');
+        assert.ok(healthBody.telemetry.apiRequests.total >= 5);
+        assert.ok(healthBody.telemetry.securityEvents.authFailures401 >= 1);
+        assert.ok(healthBody.telemetry.processResources.memoryMb.rss > 0);
+        assert.ok(
+          Array.isArray(healthBody.telemetry.unavailableMetrics) &&
+            healthBody.telemetry.unavailableMetrics.includes('live_browser_core_web_vitals')
+        );
+        // Unconfigured email & calendar providers MUST report UNCONFIGURED honestly
+        assert.equal(healthBody.subsystems.emailDelivery.state, 'UNCONFIGURED');
+        assert.equal(healthBody.subsystems.calendar.state, 'UNCONFIGURED');
+      } finally {
+        await new Promise<void>((r) => server.close(() => r()));
+        if (prevEmail === undefined) delete process.env.ADMIN_BOOTSTRAP_EMAIL;
+        else process.env.ADMIN_BOOTSTRAP_EMAIL = prevEmail;
+        if (prevPass === undefined) delete process.env.ADMIN_BOOTSTRAP_PASSWORD;
+        else process.env.ADMIN_BOOTSTRAP_PASSWORD = prevPass;
+      }
+    });
+  });
 });

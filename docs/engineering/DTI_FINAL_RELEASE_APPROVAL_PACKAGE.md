@@ -15,8 +15,8 @@
 | **G-02** | Static & security lint (`npm run lint`) | **PASS** | `103` source files + workflows + public assets (`0` violations) |
 | **G-03** | Dependency vulnerability audit (`bun audit`) | **PASS** | `0` vulnerabilities across `273` packages |
 | **G-04** | Clean URL routing & public/dist confidentiality hygiene | **PASS** | `54` static routes, `404.html`, `CNAME`, zero `Paste_*` or secret files in `public/` or `dist/` |
-| **G-05** | Frontend, server (`dist-server/server.mjs`), and release manifest builds | **PASS** | Vite `2185` modules (`1.37s`), server `1.1 mb` (`51ms`), `dist/release-manifest.json` verified |
-| **G-06** | Complete automated test suite (`unit`, `integration`, `security`, `all`) | **PASS** | **`183 / 183` PASS** across **`40` suites** (`25.78s`, `0` failed, `0` skipped, `0` hangs) |
+| **G-05** | Frontend, server (`dist-server/server.mjs`), and release manifest builds | **PASS** | Vite `2185` modules (`1.35s`), server `1.1 mb` (`56ms`), `dist/release-manifest.json` verified |
+| **G-06** | Complete automated test suite (`unit`, `integration`, `security`, `all`) | **PASS** | **`184 / 184` PASS** across **`41` suites** (`24.51s`, `0` failed, `0` skipped, `0` hangs) |
 | **G-07** | Corporate identity (**Desmond Hinds**) & zero public pricing | **PASS** | Enforced across code, PDFs, tests, and built `dist/` |
 | **G-08** | Git branch `repair/dti-final-development-commissioning` pushed & GitHub Actions CI green | **BLOCKED (EXTERNAL)** | Local sandbox has no `.git` repository; owner must commit, push, and verify `.github/workflows/ci.yml` on GitHub |
 | **G-09** | Railway backend deployed (`build:server` -> `start:prod`) & `api.destriatech.com` DNS + HTTPS/WSS live | **BLOCKED (EXTERNAL)** | Live probe confirmed `api.destriatech.com` returns **NXDOMAIN** |

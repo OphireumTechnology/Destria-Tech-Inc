@@ -205,6 +205,32 @@ export class FrontDeskStore {
     return this.getOrCreateSession(cleanId);
   }
 
+  public async deleteSessionDurable(
+    sessionId: string
+  ): Promise<{ deleted: boolean; clearedPendingConfirmations: number }> {
+    this.assertDurablePersistenceAvailable('session deletion');
+    const cleanId = sessionId.trim();
+    if (!cleanId) {
+      return { deleted: false, clearedPendingConfirmations: 0 };
+    }
+    const removedLocal = this.sessions.delete(cleanId);
+    let clearedPendingConfirmations = 0;
+    for (const [token, pending] of this.pendingSubmissions.entries()) {
+      if (pending.sessionId === cleanId) {
+        this.pendingSubmissions.delete(token);
+        clearedPendingConfirmations += 1;
+      }
+    }
+    let removedDurable = false;
+    if (this.persistence?.isDurable && typeof this.persistence.deleteSession === 'function') {
+      removedDurable = await this.persistence.deleteSession(cleanId);
+    }
+    return {
+      deleted: removedLocal || removedDurable || clearedPendingConfirmations > 0,
+      clearedPendingConfirmations,
+    };
+  }
+
   public recordTurn(
     sessionId: string,
     userMessage: string,

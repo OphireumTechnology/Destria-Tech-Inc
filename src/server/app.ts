@@ -226,6 +226,24 @@ export function createApp(deps: AppDependencies = {}): {
   const db = deps.db || new SupabaseDatabaseRepository();
   const paymentRegistry = deps.paymentRegistry || new PaymentGatewayRegistry();
   const voiceSessionStore = new VoiceSessionStore();
+
+  // Bounded live operational telemetry (Section 29: real process measurements only, zero simulated metrics)
+  const LATENCY_SAMPLE_CAP = 500;
+  const runtimeTelemetry = {
+    totalApiRequests: 0,
+    error4xxCount: 0,
+    error5xxCount: 0,
+    authFailures401: 0,
+    forbiddenOrCsrf403: 0,
+    rateLimitHits429: 0,
+    corsOriginBlockedCount: 0,
+    latenciesMs: [] as number[],
+  };
+  const percentile = (sorted: number[], p: number): number | null => {
+    if (sorted.length === 0) return null;
+    const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+    return Number(sorted[idx].toFixed(2));
+  };
   const emailService = new TransactionalEmailService(
     db,
     deps.emailTransport || new ResendEmailTransport(),
@@ -348,6 +366,7 @@ export function createApp(deps: AppDependencies = {}): {
         (process.env.NODE_ENV !== 'production' && cleanOrigin.endsWith('.run.app'));
 
       if (!isAllowed) {
+        runtimeTelemetry.corsOriginBlockedCount += 1;
         logStructured('warn', 'cors_origin_blocked', {
           correlationId,
           origin: cleanOrigin,
@@ -377,13 +396,41 @@ export function createApp(deps: AppDependencies = {}): {
     const startMs = Date.now();
     res.on('finish', () => {
       if (req.path.startsWith('/api')) {
-        logStructured('info', 'http_request_completed', {
-          correlationId,
-          method: req.method,
-          path: req.path,
-          statusCode: res.statusCode,
-          durationMs: Date.now() - startMs,
-        });
+        const durationMs = Date.now() - startMs;
+        runtimeTelemetry.totalApiRequests += 1;
+        runtimeTelemetry.latenciesMs.push(durationMs);
+        if (runtimeTelemetry.latenciesMs.length > LATENCY_SAMPLE_CAP) {
+          runtimeTelemetry.latenciesMs.shift();
+        }
+        if (res.statusCode >= 500) runtimeTelemetry.error5xxCount += 1;
+        else if (res.statusCode >= 400) runtimeTelemetry.error4xxCount += 1;
+        if (res.statusCode === 401) runtimeTelemetry.authFailures401 += 1;
+        if (res.statusCode === 403) runtimeTelemetry.forbiddenOrCsrf403 += 1;
+        if (res.statusCode === 429) runtimeTelemetry.rateLimitHits429 += 1;
+
+        logStructured(
+          res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
+          'http_request_completed',
+          {
+            correlationId,
+            method: req.method,
+            path: req.path,
+            statusCode: res.statusCode,
+            durationMs,
+            errorCategory:
+              res.statusCode >= 500
+                ? 'server_error'
+                : res.statusCode === 401
+                ? 'auth_failure'
+                : res.statusCode === 403
+                ? 'authorization_or_csrf'
+                : res.statusCode === 429
+                ? 'rate_limited'
+                : res.statusCode >= 400
+                ? 'client_error'
+                : 'none',
+          }
+        );
       }
     });
 
@@ -1061,6 +1108,52 @@ export function createApp(deps: AppDependencies = {}): {
               providers: paymentProviders,
             },
           },
+          telemetry: (() => {
+            const sortedLatencies = [...runtimeTelemetry.latenciesMs].sort((a, b) => a - b);
+            const mem = process.memoryUsage();
+            const cpu = process.cpuUsage();
+            const total = runtimeTelemetry.totalApiRequests;
+            return {
+              measurementSource: 'live_process_measured',
+              apiRequests: {
+                total,
+                error4xx: runtimeTelemetry.error4xxCount,
+                error5xx: runtimeTelemetry.error5xxCount,
+                errorRatePercent:
+                  total > 0
+                    ? Number((((runtimeTelemetry.error4xxCount + runtimeTelemetry.error5xxCount) / total) * 100).toFixed(2))
+                    : 0,
+                latencyMs: {
+                  sampleCount: sortedLatencies.length,
+                  p50: percentile(sortedLatencies, 50),
+                  p95: percentile(sortedLatencies, 95),
+                  p99: percentile(sortedLatencies, 99),
+                },
+              },
+              securityEvents: {
+                authFailures401: runtimeTelemetry.authFailures401,
+                forbiddenOrCsrf403: runtimeTelemetry.forbiddenOrCsrf403,
+                rateLimitHits429: runtimeTelemetry.rateLimitHits429,
+                corsOriginBlocked: runtimeTelemetry.corsOriginBlockedCount,
+              },
+              processResources: {
+                memoryMb: {
+                  rss: Number((mem.rss / (1024 * 1024)).toFixed(2)),
+                  heapUsed: Number((mem.heapUsed / (1024 * 1024)).toFixed(2)),
+                  heapTotal: Number((mem.heapTotal / (1024 * 1024)).toFixed(2)),
+                },
+                cpuTimeMs: {
+                  user: Number((cpu.user / 1000).toFixed(2)),
+                  system: Number((cpu.system / 1000).toFixed(2)),
+                },
+              },
+              unavailableMetrics: [
+                'external_supabase_pool_connections_pg_stat_activity',
+                'hosted_railway_container_cpu_quota_percent',
+                'live_browser_core_web_vitals',
+              ],
+            };
+          })(),
         });
       } catch (err) {
         next(err);
@@ -3082,6 +3175,40 @@ SECURITY BOUNDARIES:
       next(err);
     }
   });
+
+  // Section 13: Privacy & Authorized Draft Session Deletion
+  app.delete(
+    '/api/frontdesk/session/:sessionId',
+    async (req: Request & { correlationId?: string }, res: Response, next: NextFunction) => {
+      try {
+        const clientIp = getClientIp(req);
+        if (!aiLimiter.check(clientIp)) {
+          res.status(429).json({ success: false, error: 'Too many requests.' });
+          return;
+        }
+        const sessionId = sanitizePlainText(req.params.sessionId, 100);
+        if (!sessionId) {
+          res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
+          return;
+        }
+        const result = await frontDeskStore.deleteSessionDurable(sessionId);
+        logStructured('info', 'frontdesk_session_deleted', {
+          correlationId: req.correlationId,
+          sessionId,
+          deleted: result.deleted,
+          clearedPendingConfirmations: result.clearedPendingConfirmations,
+        });
+        res.status(200).json({
+          success: true,
+          sessionId,
+          deleted: result.deleted,
+          clearedPendingConfirmations: result.clearedPendingConfirmations,
+        });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
 
   app.post('/api/frontdesk/session/:sessionId/masterplan', async (req: Request, res: Response, next: NextFunction) => {
     try {

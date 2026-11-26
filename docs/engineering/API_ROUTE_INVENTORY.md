@@ -40,18 +40,19 @@ All HTTP routes are mounted in `src/server/app.ts` and `src/server/portal/portal
 | `GET` | `/api/frontdesk/knowledge/public` | Public | No | `200` / `503` | Retrieves approved public Front Desk knowledge entries |
 | `GET` | `/api/frontdesk/session/:sessionId` | Public | No | `200` / `400` / `503` | Hydrates or creates durable Front Desk session dossier |
 | `PATCH` | `/api/frontdesk/session/:sessionId` | Public | Yes (`aiLimiter`) | `200` / `400` / `503` | Applies client dossier corrections durably |
-| `POST` | `/api/frontdesk/masterplan` | Public | Yes (`aiLimiter`) | `200` / `400` / `503` | Generates & persists Preliminary Project Masterplan |
-| `POST` | `/api/frontdesk/prepare-submission` | Public | Yes (`aiLimiter`) | `200` / `400` / `503` | Issues persistent single-use `confirmationToken` (survives restarts) |
-| `POST` | `/api/frontdesk/submit` | Public (single-use token + `clientConfirmed`) | Yes (`inquiryLimiter`) | `201` / `200` / `400` / `429` / `503` | Submits inquiry durably with `idempotencyKey` replay deduplication + dual-recipient outbox |
-| `POST` | `/api/frontdesk/escalate` | Public | Yes (`inquiryLimiter`) | `201` / `400` / `503` | Creates persistent human escalation ticket |
+| `DELETE` | `/api/frontdesk/session/:sessionId` | Public | Yes (`aiLimiter`) | `200` / `400` / `429` / `503` | Privacy & retention control: deletes draft session and invalidates pending confirmation tokens durably |
+| `POST` | `/api/frontdesk/session/:sessionId/masterplan` | Public | Yes (`aiLimiter`) | `200` / `400` / `503` | Generates & persists Preliminary Project Masterplan |
+| `POST` | `/api/frontdesk/session/:sessionId/prepare-submission` | Public | Yes (`aiLimiter`) | `200` / `400` / `503` | Issues persistent single-use `confirmationToken` (survives restarts) |
+| `POST` | `/api/frontdesk/session/:sessionId/authorize-submission` | Public (single-use token + `clientConfirmed`) | Yes (`inquiryLimiter`) | `201` / `200` / `400` / `429` / `503` | Submits inquiry durably with `idempotencyKey` replay deduplication + dual-recipient outbox |
+| `POST` | `/api/frontdesk/escalations` | Public | Yes (`inquiryLimiter`) | `201` / `400` / `503` | Creates persistent human escalation ticket |
 
 ## 5. Admin Portal, Front Desk Console & AI Command Center (RBAC + HttpOnly Cookie + CSRF)
 | Method | Path | Auth | Rate Limited | Status Contract | Purpose |
 | :--- | :--- | :---: | :---: | :---: | :--- |
 | `POST` | `/api/admin/auth/login` | Credentials | Yes (`adminLoginLimiter`) | `200` / `401` / `429` | Authenticates admin, sets `dti_admin_session` `HttpOnly` cookie + returns memory token |
-| `POST` | `/api/admin/auth/logout` | Cookie/Bearer (`requireAdmin` + CSRF) | No | `200` / `401` / `403` | Revokes token `jti` server-side & clears `dti_admin_session` cookie (`Max-Age=0`) |
+| `POST` | `/api/admin/auth/logout` | Cookie/Bearer (`requireAdmin` + CSRF) | No | `200` / `401` / `403` | Durably revokes token `jti` (`admin_revoked_sessions` migration `009`) & clears `dti_admin_session` cookie (`Max-Age=0`) |
 | `GET` | `/api/admin/auth/session`, `/api/admin/auth/me` | `requireAdmin` | No | `200` / `401` / `403` | Returns authenticated admin principal & `authSource` (`cookie` \| `bearer`) |
-| `GET` | `/api/admin/system-health` | `requireAdmin` | No | `200` / `401` | Subsystem health, outbox counts, `frontDeskPersistence`, and `deployment` parity block |
+| `GET` | `/api/admin/system-health` | `requireAdmin` | No | `200` / `401` | Subsystem health, separated `checks`, outbox counts, `frontDeskPersistence`, `deployment` parity (`009`), and live measured vs. unavailable `telemetry` |
 | `GET` | `/api/admin/inquiries`, `/api/admin/appointments`, `/api/admin/audit-logs`, `/api/admin/notifications/outbox` | `requireAdmin` | No | `200` / `401` | Paginated operations management |
 | `GET`/`PATCH` | `/api/admin/frontdesk/inquiries`, `/review` | `requireAdmin` (+ CSRF) | No | `200` / `400` / `403` / `409` / `503` | 16-stage executive review workflow with duplicate commercial approval `409` guard |
 | `GET`/`POST`/`PATCH` | `/api/admin/frontdesk/escalations`, `/quality`, `/knowledge` | `requireAdmin` (+ CSRF) | No | `200` / `201` / `400` / `403` / `503` | Durable escalations, QA evaluations, and managed KB governance |

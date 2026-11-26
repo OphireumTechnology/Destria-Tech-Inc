@@ -54,6 +54,12 @@ export function createCorrelationId(existingHeader?: string | string[]): string 
   return `opm-${crypto.randomUUID()}`;
 }
 
+const DEPLOYMENT_VERSION =
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  process.env.GITHUB_SHA ||
+  process.env.APP_VERSION ||
+  'workspace-local';
+
 export function logStructured(
   level: LogLevel,
   event: string,
@@ -62,7 +68,9 @@ export function logStructured(
   const payload = {
     timestamp: new Date().toISOString(),
     level,
+    operationalSeverity: level === 'error' ? 'HIGH' : level === 'warn' ? 'MEDIUM' : 'INFO',
     service: 'destria-api',
+    deploymentVersion: DEPLOYMENT_VERSION,
     event,
     ...(redactSensitiveData(meta) as Record<string, unknown>),
   };

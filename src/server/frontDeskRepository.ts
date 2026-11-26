@@ -31,6 +31,7 @@ export interface FrontDeskPersistenceAdapter {
 
   saveSession(dossier: FrontDeskSessionDossier): Promise<void>;
   loadSession(sessionKey: string): Promise<FrontDeskSessionDossier | null>;
+  deleteSession?(sessionKey: string): Promise<boolean>;
 
   savePendingSubmission(pending: FrontDeskPendingSubmission): Promise<void>;
   consumePendingSubmission(
@@ -101,6 +102,16 @@ export class SnapshotFrontDeskPersistenceAdapter implements FrontDeskPersistence
   async loadSession(sessionKey: string): Promise<FrontDeskSessionDossier | null> {
     const found = this.backing.sessions.get(sessionKey);
     return found ? structuredClone(found) : null;
+  }
+
+  async deleteSession(sessionKey: string): Promise<boolean> {
+    const existed = this.backing.sessions.delete(sessionKey);
+    for (const [token, pending] of this.backing.pendingSubmissions.entries()) {
+      if (pending.sessionId === sessionKey) {
+        this.backing.pendingSubmissions.delete(token);
+      }
+    }
+    return existed;
   }
 
   async savePendingSubmission(pending: FrontDeskPendingSubmission): Promise<void> {
@@ -504,6 +515,28 @@ export class SupabaseFrontDeskPersistenceAdapter implements FrontDeskPersistence
       throw new FrontDeskPersistenceUnavailableError(`Failed to load Front Desk session: ${error.message}`);
     }
     return data?.dossier_json ? (data.dossier_json as FrontDeskSessionDossier) : null;
+  }
+
+  async deleteSession(sessionKey: string): Promise<boolean> {
+    const db = this.getClient();
+    const { error: pendingErr } = await db
+      .from('frontdesk_pending_submissions')
+      .delete()
+      .eq('session_key', sessionKey);
+    if (pendingErr) {
+      throw new FrontDeskPersistenceUnavailableError(
+        `Failed to delete pending Front Desk confirmations: ${pendingErr.message}`
+      );
+    }
+    const { data, error } = await db
+      .from('ai_conversation_sessions')
+      .delete()
+      .eq('session_key', sessionKey)
+      .select('session_key');
+    if (error) {
+      throw new FrontDeskPersistenceUnavailableError(`Failed to delete Front Desk session: ${error.message}`);
+    }
+    return Array.isArray(data) && data.length > 0;
   }
 
   async savePendingSubmission(pending: FrontDeskPendingSubmission): Promise<void> {
