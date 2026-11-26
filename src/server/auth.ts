@@ -138,6 +138,41 @@ export class AdminAuthService {
     return true;
   }
 
+  /**
+   * Revokes an admin session token locally and durably in the backing database
+   * (`admin_revoked_sessions`, migration 009) so logouts persist across restarts
+   * and multiple backend replicas.
+   */
+  public async revokeSessionTokenDurable(
+    token: string,
+    reason = 'logout'
+  ): Promise<{ revoked: boolean; durable: boolean }> {
+    const payload = this.verifySessionToken(token);
+    if (!payload) return { revoked: false, durable: false };
+    this.pruneRevokedTokens();
+    const key = payload.jti || crypto.createHash('sha256').update(token).digest('hex');
+    this.revokedTokens.set(key, payload.exp);
+
+    if (typeof this.db.revokeAdminSessionToken === 'function') {
+      try {
+        await this.db.revokeAdminSessionToken({
+          jti: key,
+          adminEmail: payload.email,
+          expiresAtIso: new Date(payload.exp * 1000).toISOString(),
+          reason,
+        });
+        return { revoked: true, durable: true };
+      } catch (err: any) {
+        logStructured('warn', 'admin_session_durable_revocation_failed', {
+          email: payload.email,
+          error: err?.message,
+        });
+        return { revoked: true, durable: false };
+      }
+    }
+    return { revoked: true, durable: false };
+  }
+
   public verifySessionToken(token: string): SessionTokenPayload | null {
     if (!token || !token.includes('.')) return null;
     const parts = token.split('.');
@@ -214,9 +249,27 @@ export class AdminAuthService {
     }
     const { token, source } = extracted;
 
-    // 1. Check server-signed admin session token
+    // 1. Check server-signed admin session token (+ durable multi-instance revocation store)
     const sessionPayload = this.verifySessionToken(token);
     if (sessionPayload) {
+      const key = sessionPayload.jti || crypto.createHash('sha256').update(token).digest('hex');
+      if (typeof this.db.isAdminSessionTokenRevoked === 'function') {
+        try {
+          const isRevokedDurably = await this.db.isAdminSessionTokenRevoked(key);
+          if (isRevokedDurably) {
+            this.revokedTokens.set(key, sessionPayload.exp);
+            return { authenticated: false };
+          }
+        } catch (err: any) {
+          logStructured('warn', 'admin_session_revocation_lookup_error', {
+            error: err?.message,
+          });
+          if (process.env.NODE_ENV === 'production') {
+            return { authenticated: false };
+          }
+        }
+      }
+
       const adminRecord = await this.db.findActiveAdminByEmail(sessionPayload.email);
       if (adminRecord && (adminRecord.role === 'admin' || adminRecord.role === 'super_admin')) {
         return {

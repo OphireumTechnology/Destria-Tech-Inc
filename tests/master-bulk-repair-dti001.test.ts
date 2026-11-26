@@ -639,7 +639,7 @@ describe('DTI-MASTER-REPAIR-001 Comprehensive Hardening & Regression Suite', () 
       });
       assert.equal(healthRes.status, 200);
       const healthBody = await healthRes.json();
-      assert.equal(healthBody.deployment.databaseMigrationVersion, '008');
+      assert.equal(healthBody.deployment.databaseMigrationVersion, '009');
       assert.equal(healthBody.deployment.apiCompatibilityVersion, API_COMPATIBILITY_VERSION);
       assert.equal(healthBody.subsystems.frontDeskPersistence.durable, true);
 

@@ -85,19 +85,22 @@ function scanSources() {
     });
   }
 
-  const checkNoPasteFiles = (dirRel) => {
+  const PROHIBITED_ASSET_REGEX =
+    /^(?:Paste_|\.env(?:\.|$))|\.(?:pem|key|p12|pfx|sql|bak|dump|map)$|(?:secret|credential|service[-_]?account|private[-_]?key)/i;
+
+  const checkNoSensitivePublicFiles = (dirRel) => {
     const full = path.join(ROOT_DIR, dirRel);
     if (!existsSync(full)) return;
     for (const item of readdirSync(full, { withFileTypes: true })) {
       const rel = path.join(dirRel, item.name);
       if (item.isDirectory()) {
-        checkNoPasteFiles(rel);
-      } else if (/^Paste_/i.test(item.name)) {
-        violations.push(`${rel.replace(/\\/g, '/')} is a prohibited internal prompt artifact in public assets`);
+        checkNoSensitivePublicFiles(rel);
+      } else if (PROHIBITED_ASSET_REGEX.test(item.name)) {
+        violations.push(`${rel.replace(/\\/g, '/')} is a prohibited sensitive or internal artifact in public assets`);
       }
     }
   };
-  checkNoPasteFiles('public');
+  checkNoSensitivePublicFiles('public');
 
   return violations;
 }
@@ -183,18 +186,21 @@ function verifyDistArtifact(requireDist) {
     }
   }
 
-  const checkNoDistPasteFiles = (dirAbs) => {
+  const PROHIBITED_DIST_REGEX =
+    /^(?:Paste_|\.env(?:\.|$))|\.(?:pem|key|p12|pfx|sql|bak|dump|map)$|(?:secret|credential|service[-_]?account|private[-_]?key)/i;
+
+  const checkNoSensitiveDistFiles = (dirAbs) => {
     if (!existsSync(dirAbs)) return;
     for (const item of readdirSync(dirAbs, { withFileTypes: true })) {
       const full = path.join(dirAbs, item.name);
       if (item.isDirectory()) {
-        checkNoDistPasteFiles(full);
-      } else if (/^Paste_/i.test(item.name)) {
+        checkNoSensitiveDistFiles(full);
+      } else if (PROHIBITED_DIST_REGEX.test(item.name)) {
         violations.push(`${path.relative(ROOT_DIR, full).replace(/\\/g, '/')} must never be emitted into dist/`);
       }
     }
   };
-  checkNoDistPasteFiles(distDir);
+  checkNoSensitiveDistFiles(distDir);
 
   return violations;
 }

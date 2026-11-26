@@ -38,19 +38,22 @@ jobs:
       - name: Independent static & security lint
         run: npm run lint
 
-      - name: Build production frontend bundle
-        run: npm run build
+      - name: Build production frontend bundle, static routes & release manifest
+        run: |
+          npm run build
+          npm run build:pages-routes
+          npm run build:release-manifest
 
       - name: Verify compiled clean URL static routes, 404.html, CNAME, and SEO artifacts
         run: npm run verify:routing:dist
 
-      - name: Verify zero secret, internal email, localhost API, proprietary paste, or outdated identity leakage in dist/ bundle
+      - name: Verify zero secret, internal email, localhost API, sensitive file, or outdated identity leakage in dist/ bundle
         run: |
-          if find public dist -type f -name 'Paste_*' | grep -q .; then
-            echo "ERROR: Proprietary internal Paste_* prompt files found in public/ or dist/!"
+          if find public dist -type f \( -name 'Paste_*' -o -name '.env*' -o -name '*.pem' -o -name '*.key' -o -name '*.sql' -o -name '*.bak' -o -name '*.map' \) | grep -q .; then
+            echo "ERROR: Prohibited sensitive or internal files found in public/ or dist/!"
             exit 1
           fi
-          if grep -rnE "artaxsvcs@gmail\.com|dhenze\.languisan@gmail\.com|SUPABASE_SERVICE_ROLE_KEY|RESEND_API_KEY|GEMINI_API_KEY|ADMIN_BOOTSTRAP_PASSWORD|ADMIN_SESSION_SECRET|PORTAL_SIGNING_SECRET|api\.ophireummultimedia\.com|Desmond Hines" dist/; then
+          if grep -rnE "artaxsvcs@gmail\.com|dhenze\.languisan@gmail\.com|SUPABASE_SERVICE_ROLE_KEY|RESEND_API_KEY|GEMINI_API_KEY|ADMIN_BOOTSTRAP_PASSWORD|ADMIN_SESSION_SECRET|BACKUP_SIGNING_SECRET|PORTAL_SIGNING_SECRET|api\.ophireummultimedia\.com|Desmond Hines" dist/; then
             echo "ERROR: Forbidden secret, legacy domain, outdated identity, or internal notification email leaked into dist/ bundle!"
             exit 1
           fi
@@ -58,9 +61,9 @@ jobs:
             echo "ERROR: Hardcoded localhost API URL leaked into production dist/assets/!"
             exit 1
           fi
-          echo "PASS: Zero forbidden secrets, Paste_* artifacts, localhost API URLs, legacy domains, or internal emails in dist/."
+          echo "PASS: Zero forbidden secrets, sensitive artifacts, localhost API URLs, legacy domains, or internal emails in dist/."
 
-      - name: Verify SQL migration hygiene (additive, idempotent, RLS enabled, 001-008)
+      - name: Verify SQL migration hygiene (additive, idempotent, RLS enabled, 001-009)
         run: |
           for f in supabase/migrations/*.sql; do
             echo "Checking $f"
@@ -74,7 +77,9 @@ jobs:
           grep -q "frontdesk_pending_submissions" supabase/migrations/008_ai_frontdesk_durability_hardening.sql
           grep -q "idempotency_key" supabase/migrations/008_ai_frontdesk_durability_hardening.sql
           grep -q "dti_set_updated_at_timestamp" supabase/migrations/008_ai_frontdesk_durability_hardening.sql
-          echo "PASS: SQL migrations 001-008 present and verified."
+          grep -q "admin_revoked_sessions" supabase/migrations/009_operational_hardening_and_durable_governance.sql
+          grep -q "purge_expired_admin_revoked_sessions" supabase/migrations/009_operational_hardening_and_durable_governance.sql
+          echo "PASS: SQL migrations 001-009 present and verified."
 
       - name: Run unit test suite
         run: npm run test:unit
@@ -85,5 +90,5 @@ jobs:
       - name: Run security regression test suite
         run: npm run test:security
 
-      - name: Verify server bundle compilation
+      - name: Verify production server bundle compilation
         run: npm run build:server

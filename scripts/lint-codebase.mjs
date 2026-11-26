@@ -282,6 +282,15 @@ function lintWorkflows() {
   }
 }
 
+const PROHIBITED_PUBLIC_ASSET_PATTERNS = [
+  { rule: 'no-proprietary-public-paste', regex: /^Paste_/i, msg: 'Internal AI Studio prompt paste files (Paste_*) must never be committed or published in public/.' },
+  { rule: 'no-public-env-file', regex: /^\.env(?:\.|$)/i, msg: 'Environment files (.env*) must never be stored in public/.' },
+  { rule: 'no-public-private-key', regex: /\.(?:pem|key|p12|pfx)$/i, msg: 'Private key or certificate files must never be stored in public/.' },
+  { rule: 'no-public-database-artifact', regex: /\.(?:sql|bak|dump)$/i, msg: 'Database migrations, backups, or SQL dumps must never be stored in public/.' },
+  { rule: 'no-public-source-map', regex: /\.map$/i, msg: 'JavaScript/CSS source maps must not be published in public/.' },
+  { rule: 'no-public-secret-filename', regex: /(?:secret|credential|service[-_]?account|private[-_]?key)/i, msg: 'Potential secret or credential file must never be stored in public/.' },
+];
+
 function lintPublicAssets() {
   const publicDir = path.join(ROOT, 'public');
   if (!fs.existsSync(publicDir)) return;
@@ -290,13 +299,13 @@ function lintPublicAssets() {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (/^Paste_/i.test(entry.name)) {
-        addViolation(
-          full,
-          1,
-          'no-proprietary-public-paste',
-          'Internal AI Studio prompt paste files (Paste_*) must never be committed or published in public/.'
-        );
+      } else {
+        for (const check of PROHIBITED_PUBLIC_ASSET_PATTERNS) {
+          if (check.regex.test(entry.name)) {
+            addViolation(full, 1, check.rule, check.msg);
+            break;
+          }
+        }
       }
     }
   };

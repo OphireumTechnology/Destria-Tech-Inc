@@ -6,19 +6,21 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
+    "start:prod": "node dist-server/server.mjs",
     "build": "vite build",
     "build:pages-routes": "node scripts/build-pages-routes.mjs",
-    "build:server": "esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=/tmp/ophireum-server-check.mjs && rm -f /tmp/ophireum-server-check.mjs",
+    "build:release-manifest": "node scripts/generate-release-manifest.mjs",
+    "build:server": "esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist-server/server.mjs",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist dist-server server.js",
     "typecheck": "tsc --noEmit",
     "lint": "node scripts/lint-codebase.mjs",
     "verify:routing": "node scripts/verify-clean-routing.mjs",
     "verify:routing:dist": "node scripts/verify-clean-routing.mjs --dist",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:unit": "node --import tsx --test tests/corporate-profile.test.ts tests/corporate-resources.test.ts tests/corporate-identity-regression.test.ts tests/enterprise-routing.test.ts tests/portal-login-modernization.test.ts tests/voice-continuous-conversation.test.ts",
-    "test:integration": "node --import tsx --test tests/natural-conversational-ai.test.ts tests/ai-frontdesk-platform.test.ts tests/gemini-live-upgrade.test.ts tests/client-portal.test.ts tests/dual-recipient-notifications.test.ts tests/deployment-integration.test.ts tests/enterprise-stabilization.test.ts tests/phase1-stabilization.test.ts tests/master-enterprise-repair.test.ts tests/master-bulk-repair-dti001.test.ts tests/dti-bulk-repair-002-verification.test.ts",
-    "test:security": "node --import tsx --test tests/security-hardening-regression.test.ts tests/corporate-governance-regression.test.ts tests/gemini-live-upgrade.test.ts tests/master-bulk-repair-dti001.test.ts tests/dti-bulk-repair-002-verification.test.ts"
+    "test:integration": "node --import tsx --test tests/natural-conversational-ai.test.ts tests/ai-frontdesk-platform.test.ts tests/gemini-live-upgrade.test.ts tests/client-portal.test.ts tests/dual-recipient-notifications.test.ts tests/deployment-integration.test.ts tests/enterprise-stabilization.test.ts tests/phase1-stabilization.test.ts tests/master-enterprise-repair.test.ts tests/master-bulk-repair-dti001.test.ts tests/dti-bulk-repair-002-verification.test.ts tests/dti-master-completion-003.test.ts",
+    "test:security": "node --import tsx --test tests/security-hardening-regression.test.ts tests/corporate-governance-regression.test.ts tests/gemini-live-upgrade.test.ts tests/master-bulk-repair-dti001.test.ts tests/dti-bulk-repair-002-verification.test.ts tests/dti-master-completion-003.test.ts"
   },
   "dependencies": {
     "@google/genai": "^3.6.1",

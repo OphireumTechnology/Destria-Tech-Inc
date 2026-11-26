@@ -388,4 +388,11 @@ export interface DatabaseRepository {
 
   findActiveAdminByEmail(email: string, authUserId?: string): Promise<AdminUserRecord | null>;
   verifySupabaseUserToken(token: string): Promise<{ id: string; email: string } | null>;
+  revokeAdminSessionToken?(input: {
+    jti: string;
+    adminEmail: string;
+    expiresAtIso: string;
+    reason?: string;
+  }): Promise<void>;
+  isAdminSessionTokenRevoked?(jti: string): Promise<boolean>;
 }

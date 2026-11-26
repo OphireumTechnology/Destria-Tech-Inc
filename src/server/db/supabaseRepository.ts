@@ -1069,4 +1069,41 @@ export class SupabaseDatabaseRepository implements DatabaseRepository {
       return null;
     }
   }
+
+  async revokeAdminSessionToken(input: {
+    jti: string;
+    adminEmail: string;
+    expiresAtIso: string;
+    reason?: string;
+  }): Promise<void> {
+    if (!this.client || !input.jti) return;
+    const { error } = await this.client.from('admin_revoked_sessions').upsert(
+      {
+        jti: input.jti,
+        admin_email: input.adminEmail.trim().toLowerCase(),
+        expires_at: input.expiresAtIso,
+        reason: input.reason || 'logout',
+      },
+      { onConflict: 'jti' }
+    );
+    if (error) {
+      throw new DatabaseUnavailableError(`Failed to persist revoked admin session token: ${error.message}`);
+    }
+  }
+
+  async isAdminSessionTokenRevoked(jti: string): Promise<boolean> {
+    if (!this.client || !jti) return false;
+    const { data, error } = await this.client
+      .from('admin_revoked_sessions')
+      .select('jti, expires_at')
+      .eq('jti', jti)
+      .maybeSingle();
+    if (error) {
+      const isMissingTable =
+        error.code === '42P01' || /relation.*admin_revoked_sessions.*does not exist/i.test(error.message || '');
+      if (isMissingTable) return false;
+      throw new DatabaseUnavailableError(`Failed to verify admin session revocation status: ${error.message}`);
+    }
+    return Boolean(data);
+  }
 }

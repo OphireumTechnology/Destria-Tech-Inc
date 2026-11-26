@@ -453,7 +453,7 @@ describe('DTI-BULK-REPAIR-002 Verification Suite (Schema 007+008, DR Restore, Lo
 
       // Step 1: Export signed backup snapshot
       const backup = adapter.exportSignedBackupSnapshot();
-      assert.equal(backup.schemaVersion, '008');
+      assert.equal(backup.schemaVersion, '009');
       assert.equal(backup.checksumSha256.length, 64);
       assert.equal(backup.counts.inquiries, 1);
       assert.equal(backup.counts.escalations, 1);

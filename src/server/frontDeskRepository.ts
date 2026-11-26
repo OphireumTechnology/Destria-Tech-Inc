@@ -189,13 +189,17 @@ export class SnapshotFrontDeskPersistenceAdapter implements FrontDeskPersistence
   }
 
   /**
-   * Exports a deterministic JSON backup bundle with a SHA-256 integrity checksum for
-   * isolated disaster-recovery and restoration verification (DTI-015).
+   * Exports a versioned backup snapshot with SHA-256 integrity checksum and, when
+   * `signingKey` (or `process.env.BACKUP_SIGNING_SECRET`) is provided, an
+   * authenticated HMAC-SHA256 signature. Explicitly distinguishes checksum-only
+   * exports from HMAC-authenticated exports (never mislabels an unkeyed hash as signed).
    */
-  public exportSignedBackupSnapshot(): {
+  public exportSignedBackupSnapshot(signingKey?: string): {
     schemaVersion: string;
     exportedAt: string;
+    integrityMode: 'hmac-sha256' | 'sha256-checksum-only';
     checksumSha256: string;
+    hmacSha256Signature: string | null;
     payloadJson: string;
     counts: {
       sessions: number;
@@ -217,10 +221,17 @@ export class SnapshotFrontDeskPersistenceAdapter implements FrontDeskPersistence
     };
     const payloadJson = JSON.stringify(payload);
     const checksumSha256 = crypto.createHash('sha256').update(payloadJson, 'utf8').digest('hex');
+    const resolvedKey = (signingKey ?? process.env.BACKUP_SIGNING_SECRET ?? '').trim();
+    const hmacSha256Signature = resolvedKey
+      ? crypto.createHmac('sha256', resolvedKey).update(payloadJson, 'utf8').digest('hex')
+      : null;
+
     return {
-      schemaVersion: '008',
+      schemaVersion: '009',
       exportedAt: new Date().toISOString(),
+      integrityMode: hmacSha256Signature ? 'hmac-sha256' : 'sha256-checksum-only',
       checksumSha256,
+      hmacSha256Signature,
       payloadJson,
       counts: {
         sessions: payload.sessions.length,
@@ -234,19 +245,57 @@ export class SnapshotFrontDeskPersistenceAdapter implements FrontDeskPersistence
   }
 
   /**
-   * Verifies SHA-256 backup checksum and restores all persisted entities atomically.
-   * Rejects tampered or corrupted snapshots without mutating current state.
+   * Verifies SHA-256 backup checksum (and HMAC-SHA256 authenticated signature
+   * whenever `signingKey` / `BACKUP_SIGNING_SECRET` is configured or the snapshot
+   * declares `hmac-sha256` integrity) and restores all persisted entities atomically.
+   * Rejects tampered, mismatched-key, or downgraded snapshots without mutating state.
    */
-  public restoreSignedBackupSnapshot(snapshot: {
-    checksumSha256: string;
-    payloadJson: string;
-  }): { ok: true; restoredCounts: Record<string, number> } | { ok: false; error: string } {
-    const computed = crypto.createHash('sha256').update(snapshot.payloadJson, 'utf8').digest('hex');
-    const a = Buffer.from(computed, 'utf8');
+  public restoreSignedBackupSnapshot(
+    snapshot: {
+      checksumSha256: string;
+      payloadJson: string;
+      integrityMode?: 'hmac-sha256' | 'sha256-checksum-only';
+      hmacSha256Signature?: string | null;
+    },
+    signingKey?: string
+  ): { ok: true; integrityMode: 'hmac-sha256' | 'sha256-checksum-only'; restoredCounts: Record<string, number> } | { ok: false; error: string } {
+    const computedChecksum = crypto.createHash('sha256').update(snapshot.payloadJson, 'utf8').digest('hex');
+    const a = Buffer.from(computedChecksum, 'utf8');
     const b = Buffer.from(String(snapshot.checksumSha256 || ''), 'utf8');
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
       return { ok: false, error: 'Backup snapshot integrity checksum mismatch; restore aborted.' };
     }
+
+    const resolvedKey = (signingKey ?? process.env.BACKUP_SIGNING_SECRET ?? '').trim();
+    const requiresHmac = Boolean(resolvedKey) || snapshot.integrityMode === 'hmac-sha256';
+    if (requiresHmac) {
+      if (!resolvedKey) {
+        return {
+          ok: false,
+          error: 'Backup snapshot requires HMAC-SHA256 verification key; restore aborted.',
+        };
+      }
+      const providedSig = String(snapshot.hmacSha256Signature || '');
+      if (!providedSig) {
+        return {
+          ok: false,
+          error: 'Unsigned backup snapshot rejected because HMAC-SHA256 authentication is required.',
+        };
+      }
+      const expectedSig = crypto
+        .createHmac('sha256', resolvedKey)
+        .update(snapshot.payloadJson, 'utf8')
+        .digest('hex');
+      const sigA = Buffer.from(expectedSig, 'utf8');
+      const sigB = Buffer.from(providedSig, 'utf8');
+      if (sigA.length !== sigB.length || !crypto.timingSafeEqual(sigA, sigB)) {
+        return {
+          ok: false,
+          error: 'Backup snapshot HMAC-SHA256 signature verification failed; restore aborted.',
+        };
+      }
+    }
+
     try {
       const parsed = JSON.parse(snapshot.payloadJson);
       this.backing.sessions = new Map(parsed.sessions || []);
@@ -260,6 +309,7 @@ export class SnapshotFrontDeskPersistenceAdapter implements FrontDeskPersistence
       this.backing.knowledgeDocs = new Map(parsed.knowledgeDocs || []);
       return {
         ok: true,
+        integrityMode: requiresHmac ? 'hmac-sha256' : 'sha256-checksum-only',
         restoredCounts: {
           sessions: this.backing.sessions.size,
           pendingSubmissions: this.backing.pendingSubmissions.size,

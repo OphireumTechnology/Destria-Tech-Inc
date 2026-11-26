@@ -450,7 +450,9 @@ export function createApp(deps: AppDependencies = {}): {
   app.get('/ready', async (req: Request & { correlationId?: string }, res: Response) => {
     const dbPing = await db.ping();
     const portalReady = portalRepo.mode !== 'unconfigured';
-    const isReady = dbPing.ok && portalReady;
+    const frontDeskPersistence = frontDeskStore.getPersistenceStatus();
+    const geminiProviderStatus = aiRuntimeConfig.getCanonicalProviderStatus();
+    const isReady = dbPing.ok && portalReady && (!productionStrictMode || frontDeskPersistence.durable);
     const status = isReady
       ? 'healthy'
       : !dbPing.configured || !portalReady
@@ -463,8 +465,19 @@ export function createApp(deps: AppDependencies = {}): {
       ready: isReady,
       platform: 'DESTRIA TECH INC API Gateway',
       version: APP_VERSION,
+      apiCompatibilityVersion: API_COMPATIBILITY_VERSION,
+      databaseMigrationVersion: '009',
       timestamp: new Date().toISOString(),
       correlationId: req.correlationId,
+      checks: {
+        serverAlive: true,
+        appReady: isReady,
+        databaseReady: dbPing.ok,
+        frontDeskDurableReady: frontDeskPersistence.durable,
+        geminiReady: geminiProviderStatus === 'READY',
+        emailReady: emailService.isConfigured(),
+        calendarReady: calendarService.isConfigured(),
+      },
       dependencies: {
         database: {
           configured: dbPing.configured,
@@ -477,6 +490,10 @@ export function createApp(deps: AppDependencies = {}): {
           durable: portalRepo.mode === 'supabase',
           ready: portalReady,
         },
+        gemini: {
+          configured: Boolean(ai),
+          providerStatus: geminiProviderStatus,
+        },
       },
     });
   });
@@ -484,6 +501,8 @@ export function createApp(deps: AppDependencies = {}): {
   const healthHandler = async (req: Request & { correlationId?: string }, res: Response) => {
     const dbPing = await db.ping();
     const portalReady = portalRepo.mode !== 'unconfigured';
+    const frontDeskPersistence = frontDeskStore.getPersistenceStatus();
+    const geminiProviderStatus = aiRuntimeConfig.getCanonicalProviderStatus();
     const overallStatus =
       dbPing.ok && portalReady
         ? 'healthy'
@@ -495,9 +514,20 @@ export function createApp(deps: AppDependencies = {}): {
       status: overallStatus,
       platform: 'DESTRIA NETWORK API Gateway',
       version: APP_VERSION,
+      apiCompatibilityVersion: API_COMPATIBILITY_VERSION,
+      databaseMigrationVersion: '009',
       uptimeSeconds: Math.floor((Date.now() - APP_STARTED_AT) / 1000),
       timestamp: new Date().toISOString(),
       correlationId: req.correlationId,
+      checks: {
+        serverAlive: true,
+        appReady: dbPing.ok && portalReady && (!productionStrictMode || frontDeskPersistence.durable),
+        databaseReady: dbPing.ok,
+        frontDeskDurableReady: frontDeskPersistence.durable,
+        geminiReady: geminiProviderStatus === 'READY',
+        emailReady: emailService.isConfigured(),
+        calendarReady: calendarService.isConfigured(),
+      },
       dependencies: {
         database: {
           configured: dbPing.configured,
@@ -523,6 +553,7 @@ export function createApp(deps: AppDependencies = {}): {
         gemini: {
           configured: Boolean(ai),
           status: Boolean(ai) ? 'configured' : 'unconfigured',
+          providerStatus: geminiProviderStatus,
         },
         adminAuth: {
           bootstrapConfigured: authService.isBootstrapLoginConfigured(),
@@ -639,8 +670,10 @@ export function createApp(deps: AppDependencies = {}): {
     '/api/admin/auth/logout',
     authService.requireAdmin,
     async (req: AuthenticatedAdminRequest, res: Response) => {
+      let durableRevocation = false;
       if (req.adminRawToken) {
-        authService.revokeSessionToken(req.adminRawToken);
+        const result = await authService.revokeSessionTokenDurable(req.adminRawToken, 'logout');
+        durableRevocation = result.durable;
       }
       clearAdminSessionCookie(req, res);
       await db
@@ -651,13 +684,14 @@ export function createApp(deps: AppDependencies = {}): {
           action: 'admin_session_revoked',
           entityType: 'admin_auth',
           entityId: req.adminUser?.id,
-          details: { authSource: req.adminAuthSource || 'unknown' },
+          details: { authSource: req.adminAuthSource || 'unknown', durableRevocation },
         })
         .catch(() => {});
 
       res.json({
         success: true,
         revoked: true,
+        durableRevocation,
       });
     }
   );
@@ -924,7 +958,13 @@ export function createApp(deps: AppDependencies = {}): {
           : 'UNCONFIGURED';
         const webhookState = dualConfig.webhookSecret ? 'HEALTHY' : 'UNCONFIGURED';
         const calendarState = calendarService.isConfigured() ? 'HEALTHY' : 'UNCONFIGURED';
-        const geminiState = ai ? 'HEALTHY' : 'UNCONFIGURED';
+        const geminiProviderStatus = aiRuntimeConfig.getCanonicalProviderStatus();
+        const geminiState =
+          geminiProviderStatus === 'UNCONFIGURED'
+            ? 'UNCONFIGURED'
+            : geminiProviderStatus === 'READY'
+            ? 'HEALTHY'
+            : 'DEGRADED';
         const activeGateways = paymentProviders.filter((p) => p.isEnabled).length;
         const paymentsState = activeGateways > 0 ? 'HEALTHY' : 'UNCONFIGURED';
 
@@ -940,7 +980,10 @@ export function createApp(deps: AppDependencies = {}): {
             ? 'UNAVAILABLE'
             : dbState === 'UNCONFIGURED'
             ? 'UNCONFIGURED'
-            : emailState === 'DEGRADED' || portalState === 'DEGRADED' || frontDeskState === 'DEGRADED'
+            : emailState === 'DEGRADED' ||
+              portalState === 'DEGRADED' ||
+              frontDeskState === 'DEGRADED' ||
+              geminiState === 'DEGRADED'
             ? 'DEGRADED'
             : 'HEALTHY';
 
@@ -950,6 +993,15 @@ export function createApp(deps: AppDependencies = {}): {
           version: APP_VERSION,
           uptimeSeconds: Math.floor((Date.now() - APP_STARTED_AT) / 1000),
           timestamp: new Date().toISOString(),
+          checks: {
+            serverAlive: true,
+            appReady: dbPing.ok && portalReady && (!productionStrictMode || frontDeskPersistenceStatus.durable),
+            databaseReady: dbPing.ok,
+            frontDeskDurableReady: frontDeskPersistenceStatus.durable,
+            geminiReady: geminiProviderStatus === 'READY',
+            emailReady: emailService.isConfigured(),
+            calendarReady: calendarService.isConfigured(),
+          },
           deployment: {
             backendCommit:
               process.env.RAILWAY_GIT_COMMIT_SHA ||
@@ -958,7 +1010,7 @@ export function createApp(deps: AppDependencies = {}): {
               'workspace-local',
             buildTimestamp: new Date(APP_STARTED_AT).toISOString(),
             apiCompatibilityVersion: API_COMPATIBILITY_VERSION,
-            databaseMigrationVersion: '008',
+            databaseMigrationVersion: '009',
             nodeVersion: process.version,
             environment: process.env.NODE_ENV || 'development',
           },
@@ -1000,6 +1052,7 @@ export function createApp(deps: AppDependencies = {}): {
             },
             aiConsultant: {
               state: geminiState,
+              providerStatus: geminiProviderStatus,
               configured: Boolean(ai),
             },
             payments: {

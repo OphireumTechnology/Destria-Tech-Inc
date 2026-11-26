@@ -80,6 +80,16 @@ export interface TranscriptionErrorReport {
   reportedAt: string;
 }
 
+export type CanonicalGeminiProviderStatus =
+  | 'UNCONFIGURED'
+  | 'AUTHENTICATION_FAILED'
+  | 'MODEL_UNAVAILABLE'
+  | 'QUOTA_EXCEEDED'
+  | 'RATE_LIMITED'
+  | 'NETWORK_ERROR'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'READY';
+
 export type GeminiErrorCategory =
   | 'INVALID_CREDENTIALS'
   | 'UNSUPPORTED_MODEL'
@@ -93,9 +103,29 @@ export type GeminiErrorCategory =
 
 export interface GeminiProviderErrorClassification {
   category: GeminiErrorCategory;
+  providerStatus: Exclude<CanonicalGeminiProviderStatus, 'UNCONFIGURED' | 'READY'>;
   httpStatus?: number;
   retryable: boolean;
   safeMessage: string;
+}
+
+export function mapErrorCategoryToProviderStatus(
+  category: string
+): Exclude<CanonicalGeminiProviderStatus, 'UNCONFIGURED' | 'READY'> {
+  switch (category) {
+    case 'INVALID_CREDENTIALS':
+      return 'AUTHENTICATION_FAILED';
+    case 'UNSUPPORTED_MODEL':
+      return 'MODEL_UNAVAILABLE';
+    case 'QUOTA_EXCEEDED':
+      return 'QUOTA_EXCEEDED';
+    case 'RATE_LIMITED':
+      return 'RATE_LIMITED';
+    case 'NETWORK_TIMEOUT':
+      return 'NETWORK_ERROR';
+    default:
+      return 'PROVIDER_UNAVAILABLE';
+  }
 }
 
 /**
@@ -130,6 +160,7 @@ export function classifyGeminiProviderError(err: unknown): GeminiProviderErrorCl
   ) {
     return {
       category: 'INVALID_CREDENTIALS',
+      providerStatus: 'AUTHENTICATION_FAILED',
       httpStatus: httpStatus || 401,
       retryable: false,
       safeMessage: 'Gemini API authentication failed; verify server GEMINI_API_KEY credentials.',
@@ -144,6 +175,7 @@ export function classifyGeminiProviderError(err: unknown): GeminiProviderErrorCl
   ) {
     return {
       category: 'UNSUPPORTED_MODEL',
+      providerStatus: 'MODEL_UNAVAILABLE',
       httpStatus: httpStatus || 404,
       retryable: false,
       safeMessage: 'Configured Gemini model is unavailable or unsupported by the upstream API.',
@@ -153,6 +185,7 @@ export function classifyGeminiProviderError(err: unknown): GeminiProviderErrorCl
   if (/quota\s+exceeded|billing|insufficient\s+quota|resource_exhausted.*quota/i.test(lower)) {
     return {
       category: 'QUOTA_EXCEEDED',
+      providerStatus: 'QUOTA_EXCEEDED',
       httpStatus: httpStatus || 429,
       retryable: false,
       safeMessage: 'Gemini API quota limit exceeded on the configured provider account.',
@@ -162,6 +195,7 @@ export function classifyGeminiProviderError(err: unknown): GeminiProviderErrorCl
   if (httpStatus === 429 || /rate\s*limit|too\s+many\s+requests|resource_exhausted/i.test(lower)) {
     return {
       category: 'RATE_LIMITED',
+      providerStatus: 'RATE_LIMITED',
       httpStatus: 429,
       retryable: true,
       safeMessage: 'Gemini API temporarily rate-limited the request; retry with backoff.',
@@ -171,6 +205,7 @@ export function classifyGeminiProviderError(err: unknown): GeminiProviderErrorCl
   if (/timeout|timed\s*out|aborted|econnreset|etimedout|enotfound|fetch\s+failed|network/i.test(lower)) {
     return {
       category: 'NETWORK_TIMEOUT',
+      providerStatus: 'NETWORK_ERROR',
       httpStatus,
       retryable: true,
       safeMessage: 'Upstream Gemini request timed out or encountered a transient network error.',
@@ -183,6 +218,7 @@ export function classifyGeminiProviderError(err: unknown): GeminiProviderErrorCl
   ) {
     return {
       category: 'PROVIDER_UNAVAILABLE',
+      providerStatus: 'PROVIDER_UNAVAILABLE',
       httpStatus: httpStatus || 503,
       retryable: true,
       safeMessage: 'Gemini AI provider is temporarily unavailable.',
@@ -192,6 +228,7 @@ export function classifyGeminiProviderError(err: unknown): GeminiProviderErrorCl
   if (httpStatus === 400 || /invalid_argument|invalid\s+request|malformed\s+request/i.test(lower)) {
     return {
       category: 'INVALID_REQUEST',
+      providerStatus: 'PROVIDER_UNAVAILABLE',
       httpStatus: 400,
       retryable: false,
       safeMessage: 'Gemini rejected the request payload as invalid.',
@@ -201,6 +238,7 @@ export function classifyGeminiProviderError(err: unknown): GeminiProviderErrorCl
   if (/malformed|json\s+parse|unexpected\s+token|empty\s+response/i.test(lower)) {
     return {
       category: 'MALFORMED_RESPONSE',
+      providerStatus: 'PROVIDER_UNAVAILABLE',
       httpStatus,
       retryable: true,
       safeMessage: 'Gemini returned an incomplete or malformed response payload.',
@@ -209,6 +247,7 @@ export function classifyGeminiProviderError(err: unknown): GeminiProviderErrorCl
 
   return {
     category: 'UNKNOWN_PROVIDER_ERROR',
+    providerStatus: 'PROVIDER_UNAVAILABLE',
     httpStatus,
     retryable: true,
     safeMessage: redacted || 'Unexpected Gemini provider error.',
@@ -290,6 +329,8 @@ export class AiRuntimeConfigRegistry {
   private audioInputTokens = 0;
   private audioOutputTokens = 0;
   private lastUpdatedAt = new Date().toISOString();
+  private lastProviderStatus: CanonicalGeminiProviderStatus | null = null;
+  private lastProviderStatusAt: string | null = null;
 
   constructor(options?: { env?: NodeJS.ProcessEnv; geminiConfiguredOverride?: boolean }) {
     const env = options?.env || process.env;
@@ -613,20 +654,36 @@ export class AiRuntimeConfigRegistry {
           : Math.round((diag.avgLatencyMs * prevTurns + params.latencyMs) / diag.turns);
       diag.lastUpdatedAt = new Date().toISOString();
     }
+    if (this.isGeminiApiKeyConfigured()) {
+      this.lastProviderStatus = 'READY';
+      this.lastProviderStatusAt = new Date().toISOString();
+    }
   }
 
   public recordFailure(category: string, channel: string, message: string) {
     this.failureCounts[category] = (this.failureCounts[category] || 0) + 1;
+    const now = new Date().toISOString();
+    if (this.isGeminiApiKeyConfigured()) {
+      this.lastProviderStatus = mapErrorCategoryToProviderStatus(category);
+      this.lastProviderStatusAt = now;
+    }
     this.recentFailures.unshift({
       id: `err-${crypto.randomUUID().slice(0, 8)}`,
       category,
       channel,
       message: message.slice(0, 240),
-      occurredAt: new Date().toISOString(),
+      occurredAt: now,
     });
     if (this.recentFailures.length > 40) {
       this.recentFailures.pop();
     }
+  }
+
+  public getCanonicalProviderStatus(): CanonicalGeminiProviderStatus {
+    if (!this.isGeminiApiKeyConfigured()) {
+      return 'UNCONFIGURED';
+    }
+    return this.lastProviderStatus || 'READY';
   }
 
   public recordTranscriptionError(params: {
@@ -686,15 +743,18 @@ export class AiRuntimeConfigRegistry {
     );
     const totalFailures = Object.values(this.failureCounts).reduce((a, b) => a + b, 0);
 
+    const canonicalProviderStatus = this.getCanonicalProviderStatus();
     const healthState = !configured
       ? 'UNCONFIGURED'
-      : totalFailures > 20 || budgetUtilizationPct >= 95
+      : totalFailures > 20 || budgetUtilizationPct >= 95 || canonicalProviderStatus !== 'READY'
       ? 'DEGRADED'
       : 'HEALTHY';
 
     return {
       serviceHealth: {
         state: healthState,
+        providerStatus: canonicalProviderStatus,
+        lastProviderStatusAt: this.lastProviderStatusAt,
         provider: this.settings.aiProvider,
         geminiApiKeyConfigured: configured,
         liveApiAvailable: configured && this.settings.geminiLiveEnabled,
