@@ -28,7 +28,7 @@ import {
  * fabricated certifications, unverified client claims, or public pricing.
  */
 
-export const CORPORATE_KNOWLEDGE_VERSION = '2026.11.26-enterprise-v3';
+export const CORPORATE_KNOWLEDGE_VERSION = '2026.11.26-frontdesk-v4';
 
 export type KnowledgeDomainId =
   | 'corporate_identity'
@@ -36,11 +36,14 @@ export type KnowledgeDomainId =
   | 'executive_leadership'
   | 'service_catalog'
   | 'enterprise_architecture'
+  | 'website_development'
   | 'ai_automation'
   | 'software_platforms'
   | 'blockchain_systems'
   | 'cloud_cybersecurity'
   | 'creative_multimedia'
+  | 'industry_solutions'
+  | 'technical_qa'
   | 'corporate_governance'
   | 'commercial_policy'
   | 'consultation_procedures'
@@ -48,9 +51,12 @@ export type KnowledgeDomainId =
   | 'official_contacts'
   | 'faq';
 
+export type KnowledgeClassification = 'verified_corporate_offering' | 'general_technical_knowledge';
+
 export interface CorporateKnowledgeEntry {
   id: string;
   domain: KnowledgeDomainId;
+  knowledgeType?: KnowledgeClassification;
   title: string;
   keywords: string[];
   summary: string;
@@ -519,6 +525,219 @@ export const CORPORATE_KNOWLEDGE_BASE: readonly CorporateKnowledgeEntry[] = [
       'Legacy Integrations: Solutions are engineered to integrate securely with existing CRM, ERP, payment gateways, identity providers, and internal APIs.',
       'Timelines: Delivery timelines depend on technical complexity, security requirements, and integration scope and are formalized in staged milestones within the written proposal.',
       'Ongoing Care: Digital Care, cloud reliability monitoring, security patching, and enhancement retainers are available as customized post-deployment engagements.',
+    ],
+  },
+  {
+    id: 'kb-website-development',
+    domain: 'website_development',
+    knowledgeType: 'verified_corporate_offering',
+    title: 'Website Development, Portals & Digital Modernization',
+    keywords: [
+      'website',
+      'corporate website',
+      'e-commerce website',
+      'ecommerce',
+      'customer portal',
+      'membership platform',
+      'responsive design',
+      'cms',
+      'content management',
+      'seo',
+      'accessibility',
+      'website hosting',
+      'domain',
+      'website maintenance',
+      'website modernization',
+    ],
+    summary:
+      'DESTRIA TECH INC designs and engineers modern corporate websites, e-commerce platforms, authenticated customer portals, membership platforms, and legacy website modernizations with responsive UX, accessibility, SEO architecture, managed hosting, and ongoing maintenance.',
+    facts: [
+      'Verified Offerings: Corporate websites, e-commerce storefronts, authenticated customer/client portals, membership systems, CMS integrations, and legacy web modernization.',
+      'Engineering Standards: Mobile-first responsive layouts, WCAG-minded accessibility, technical SEO structure, clean URL routing, TLS domain configuration, and post-launch maintenance.',
+      'Commercial Basis: Customized scope based on page count, integrations, authentication, and payment/CMS requirements—final pricing is determined during executive consultation.',
+    ],
+    canonicalLinks: ['https://destriatech.com/solutions', 'https://destriatech.com/ai-frontdesk'],
+  },
+  {
+    id: 'kb-software-engineering-guide',
+    domain: 'software_platforms',
+    knowledgeType: 'general_technical_knowledge',
+    title: 'Software Application Development & Enterprise Systems Guide',
+    keywords: [
+      'software application',
+      'web app',
+      'mobile app',
+      'pwa',
+      'progressive web app',
+      'desktop app',
+      'saas',
+      'erp',
+      'crm',
+      'hrm',
+      'inventory management',
+      'financial management',
+      'workflow automation',
+      'document management',
+      'multi-branch',
+      'multi-user',
+    ],
+    summary:
+      'General technical guidance and DESTRIA TECH INC engineering alignment for custom web, mobile, PWA, desktop, SaaS, ERP, CRM, HRM, inventory, financial, document management, and workflow automation systems.',
+    facts: [
+      'Application Architectures: Web applications, cross-platform mobile apps, Progressive Web Apps (PWAs), desktop clients, and multi-tenant SaaS platforms.',
+      'Enterprise Modules: Role-based access control (RBAC), multi-branch data isolation, inventory & order management, financial/accounting integrations, audit trails, notifications, and executive reporting dashboards.',
+      'Distinction: General architecture guidance is preliminary; specific DESTRIA TECH INC delivery scope, database schema, and integration feasibility are formally validated during technical assessment.',
+    ],
+  },
+  {
+    id: 'kb-ai-systems-guide',
+    domain: 'ai_automation',
+    knowledgeType: 'verified_corporate_offering',
+    title: 'Artificial Intelligence Systems, Agents & Responsible AI Governance',
+    keywords: [
+      'ai chatbot',
+      'voice assistant',
+      'ai agent',
+      'ai workforce',
+      'document processing',
+      'idp',
+      'rag',
+      'knowledge retrieval',
+      'multilingual ai',
+      'decision support',
+      'model integration',
+      'ai governance',
+    ],
+    summary:
+      'Enterprise AI engineering covering conversational voice/chat assistants, autonomous AI agents and workforces, intelligent document processing (IDP), retrieval-augmented generation (RAG), multilingual AI, and strict human-in-the-loop governance.',
+    facts: [
+      'Capabilities: AI front-desk assistants, voice/chat automation, multi-step AI workflow agents, verified knowledge retrieval (RAG), document extraction, and analytics/decision support.',
+      'Governance Controls: Server-side secret isolation, prompt-injection defense, explicit human confirmation for business actions, audit logging, and zero autonomous commercial commitments.',
+      'Multilingual Readiness: Supports English, Filipino, Taglish, Spanish, French, and additional languages available through verified provider configurations.',
+    ],
+  },
+  {
+    id: 'kb-blockchain-limitations',
+    domain: 'blockchain_systems',
+    knowledgeType: 'general_technical_knowledge',
+    title: 'Blockchain Architecture, Verification Systems & Regulatory Limitations',
+    keywords: [
+      'blockchain',
+      'smart contract',
+      'digital identity',
+      'document verification',
+      'digital asset',
+      'supply chain traceability',
+      'audit ledger',
+      'transparency',
+      'web3',
+    ],
+    summary:
+      'Technical and governance guidance on smart contracts, document verification, digital identity, supply chain traceability, and immutable audit ledgers—including security, immutability, cost, and regulatory considerations.',
+    facts: [
+      'Applicable Use Cases: Tamper-evident document verification, supply chain provenance, multi-party audit ledgers, and digital identity attestation.',
+      'Technical & Security Limitations: Smart contracts are immutable once deployed and require independent security audits; storing personal data directly on public chains conflicts with privacy laws (off-chain encrypted storage with on-chain hashes is recommended).',
+      'Regulatory Notice: Digital asset, token, or financial blockchain deployments require independent legal and regulatory compliance review in applicable jurisdictions.',
+    ],
+    complianceNotice: BLOCKCHAIN_COMPLIANCE_NOTICE,
+  },
+  {
+    id: 'kb-cloud-cybersecurity-guide',
+    domain: 'cloud_cybersecurity',
+    knowledgeType: 'general_technical_knowledge',
+    title: 'Cloud Infrastructure, Database Design & Cybersecurity Architecture',
+    keywords: [
+      'cloud hosting',
+      'database design',
+      'api development',
+      'server management',
+      'cloud migration',
+      'scalable',
+      'backup',
+      'recovery',
+      'devops',
+      'ci/cd',
+      'mfa',
+      'encryption',
+      'rbac',
+      'vulnerability',
+      'audit logging',
+      'protect customer',
+    ],
+    summary:
+      'Architectural best practices for scalable cloud hosting, relational/hybrid database design, secure API engineering, CI/CD, disaster recovery, authentication/MFA, encryption, and audit logging.',
+    facts: [
+      'Cloud & DevOps: Managed cloud hosting, PostgreSQL/relational schemas with indexes and foreign keys, automated backups, monitoring, CI/CD pipelines, and zero-downtime migration strategies.',
+      'Cybersecurity Controls: TLS 1.3 transport encryption, encryption at rest, role-based access control (RBAC), row-level security (RLS), multi-factor authentication (MFA), parameterized queries, rate limiting, and immutable audit trails.',
+      'Honesty Standard: Specific compliance certifications (such as SOC 2, ISO 27001, or HIPAA) are never claimed without independent third-party audit evidence.',
+    ],
+  },
+  {
+    id: 'kb-industry-solutions',
+    domain: 'industry_solutions',
+    knowledgeType: 'general_technical_knowledge',
+    title: 'Industry Technology Solutions & Preliminary Architecture Templates',
+    keywords: [
+      'hospitality',
+      'hotel',
+      'transportation',
+      'fleet',
+      'logistics',
+      'warehouse',
+      'healthcare',
+      'clinic',
+      'agriculture',
+      'farm',
+      'construction',
+      'accounting',
+      'tax',
+      'retail',
+      'pos',
+      'e-commerce',
+      'education',
+      'school',
+      'lms',
+      'nonprofit',
+      'real estate',
+      'property',
+      'manufacturing',
+      'professional services',
+      'legal',
+    ],
+    summary:
+      'Preliminary technology architecture guidance across 15 industry domains: Hospitality, Transportation, Logistics, Healthcare, Agriculture, Construction, Accounting, Tax Services, Retail, E-Commerce, Education, Nonprofit, Real Estate, Manufacturing, and Professional Services.',
+    facts: [
+      'Hospitality, Retail & E-Commerce: Reservations, front-desk check-in, housekeeping automation, omnichannel storefront, POS/inventory sync, and online payment gateway integrations.',
+      'Transportation, Logistics, Manufacturing & Construction: Fleet/dispatch tracking, warehouse/inventory controls, job costing, subcontractor portals, and supply-chain reporting.',
+      'Healthcare, Accounting, Tax, Education, Real Estate, Agriculture, Nonprofit & Professional Services: Secure client/patient/donor portals, appointment scheduling, document management, compliance-aware workflows, and automated analytics.',
+      'Verification Notice: Industry templates represent preliminary architectural capabilities for discussion; DESTRIA TECH INC does not claim prior delivery of every industry variant without verified case references.',
+    ],
+  },
+  {
+    id: 'kb-technical-qa-factors',
+    domain: 'technical_qa',
+    knowledgeType: 'general_technical_knowledge',
+    title: 'Project Feasibility, Licensing, Maintenance & Cost Factor Reference',
+    keywords: [
+      'what technology',
+      'what features',
+      'online payments',
+      'accounting systems',
+      'licenses',
+      'who will maintain',
+      'how long',
+      'how much',
+      'cost factors',
+      'multiple branches',
+      'international',
+      'multiple languages',
+    ],
+    summary:
+      'Structured engineering guidance for common client feasibility questions covering technology selection, multi-branch/international operation, accounting & payment integrations, third-party licenses, maintenance, timelines, and cost drivers.',
+    facts: [
+      'Integrations & Scale: Modern API-first platforms support multi-user RBAC, multi-branch isolation, international currencies/timezones, multilingual UIs, online payment gateways (Stripe, PayPal, local gateways), and accounting exports/APIs (QuickBooks, Xero, ERP).',
+      'Third-Party Licenses: Projects may involve external cloud hosting, domain/SSL, transactional email, SMS, payment processor fees, or AI API usage—always disclosed transparently as client-owned or pass-through infrastructure costs.',
+      'Cost & Timeline Drivers: Development timeline and investment depend on project complexity, number of modules, user scale, third-party integrations, AI capabilities, infrastructure, security/compliance requirements, and ongoing maintenance SLA. Final pricing is determined exclusively through authorized executive review.',
     ],
   },
 ];

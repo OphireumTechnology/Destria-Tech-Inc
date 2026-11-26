@@ -14,6 +14,12 @@ import {
   sanitizeEmailHeader,
 } from '../config/notificationRecipients';
 import { computeEquivalentUtcSlot } from '../utils/timezoneUtc';
+import {
+  FrontDeskSessionDossier,
+  PreliminaryProjectMasterplan,
+  buildFrontDeskClientConfirmationEmail,
+  buildFrontDeskExecutiveReportEmail,
+} from '../frontDeskEngine';
 
 export interface EmailMessage {
   to: string;
@@ -1834,6 +1840,154 @@ export class TransactionalEmailService {
     kind: 'requested' | 'rescheduled' | 'cancelled' = 'requested'
   ) {
     return this.enqueueAndSendAppointmentEmails(appointment, correlationId, kind);
+  }
+
+  /**
+   * M18 & M19: Dispatches the 18-section (A-R) Executive Project Discovery Report to
+   * configured authorized recipients AND a separate Client-Facing Confirmation Email
+   * (strictly excluding internal lead scores/notes) via the durable email outbox.
+   */
+  public async enqueueAndSendFrontDeskReportEmails(params: {
+    referenceCode: string;
+    submittedAtUtc: string;
+    dossier: FrontDeskSessionDossier;
+    masterplan: PreliminaryProjectMasterplan;
+    consultationDetails?: {
+      referenceCode?: string;
+      status: 'confirmed' | 'pending_review';
+      scheduledDate?: string;
+      scheduledTimeSlot?: string;
+      clientTimezone?: string;
+      meetingLink?: string;
+    };
+    correlationId?: string;
+  }): Promise<{
+    outcome: DualRecipientDeliveryOutcome;
+    executiveSubject: string;
+    clientSubject: string;
+  }> {
+    const dualConfig = this.getDualNotificationConfig();
+    const clientEmail = (params.dossier.clientProfile.email || '').trim().toLowerCase();
+    const safeClientReplyTo = isValidEmailAddress(clientEmail) ? clientEmail : undefined;
+
+    const execEmail = buildFrontDeskExecutiveReportEmail({
+      referenceCode: params.referenceCode,
+      submittedAtUtc: params.submittedAtUtc,
+      dossier: params.dossier,
+      masterplan: params.masterplan,
+      consultationDetails: params.consultationDetails,
+    });
+
+    const clientConfirmEmail = buildFrontDeskClientConfirmationEmail({
+      referenceCode: params.referenceCode,
+      submittedAtUtc: params.submittedAtUtc,
+      dossier: params.dossier,
+      consultationDetails: params.consultationDetails,
+    });
+
+    let customerStatus: DeliveryStatusSummary = 'unconfigured';
+    if (safeClientReplyTo) {
+      const { record: custRecord } = await this.db.createOutboxRecord({
+        dedupeKey: `fd:${params.referenceCode}:customer:${safeClientReplyTo}`,
+        entityType: 'solution_request',
+        entityReference: params.referenceCode,
+        recipientEmail: safeClientReplyTo,
+        replyTo: corporateIdentity.contact.email,
+        idempotencyKey: buildNotificationIdempotencyKey({
+          entityType: 'solution_request',
+          entityReference: params.referenceCode,
+          notificationType: 'customer_confirmation',
+          recipientEmail: safeClientReplyTo,
+          eventRevision: 'fd1',
+        }),
+        requestSource: 'AI Front Desk',
+        notificationType: 'customer_confirmation',
+        subject: clientConfirmEmail.subject,
+        htmlBody: clientConfirmEmail.html,
+        textBody: clientConfirmEmail.text,
+        eventRevision: 1,
+        metadata: {
+          correlationId: params.correlationId,
+          referenceCode: params.referenceCode,
+          channel: 'ai_frontdesk',
+          replyTo: corporateIdentity.contact.email,
+        },
+      });
+      customerStatus = await this.dispatchOutboxRecord(custRecord, params.correlationId);
+    }
+
+    const recipients = dualConfig.serviceInquiry.enabled ? dualConfig.serviceInquiry.recipients : [];
+    const recipientStatuses: DeliveryStatusSummary[] = [];
+
+    if (recipients.length > 0) {
+      const settled = await Promise.allSettled(
+        recipients.map(async (rawRecipient) => {
+          const recipientEmail = rawRecipient.trim().toLowerCase();
+          const { record: rec } = await this.db.createOutboxRecord({
+            dedupeKey: `fd:${params.referenceCode}:exec:${recipientEmail}`,
+            entityType: 'solution_request',
+            entityReference: params.referenceCode,
+            recipientEmail,
+            replyTo: safeClientReplyTo,
+            idempotencyKey: buildNotificationIdempotencyKey({
+              entityType: 'solution_request',
+              entityReference: params.referenceCode,
+              notificationType: 'admin_alert',
+              recipientEmail,
+              eventRevision: 'fd1',
+            }),
+            requestSource: 'AI Front Desk',
+            notificationType: 'admin_alert',
+            subject: execEmail.subject,
+            htmlBody: execEmail.html,
+            textBody: execEmail.text,
+            eventRevision: 1,
+            metadata: {
+              correlationId: params.correlationId,
+              referenceCode: params.referenceCode,
+              channel: 'ai_frontdesk',
+              replyTo: safeClientReplyTo,
+            },
+          });
+          return this.dispatchOutboxRecord(rec, params.correlationId);
+        })
+      );
+
+      for (const s of settled) {
+        if (s.status === 'fulfilled') {
+          recipientStatuses.push(s.value);
+        } else {
+          recipientStatuses.push('failed');
+          logStructured('error', 'frontdesk_executive_report_dispatch_error', {
+            correlationId: params.correlationId,
+            referenceCode: params.referenceCode,
+            error: s.reason?.message || 'Unexpected error dispatching Front Desk executive report',
+          });
+        }
+      }
+    }
+
+    const outcome = this.summarizeOutcome(
+      customerStatus,
+      recipientStatuses,
+      dualConfig.serviceInquiry.enabled
+    );
+
+    const legacyDbStatus: 'pending' | 'sent' | 'failed' | 'unconfigured' =
+      outcome.overallStatus === 'provider_accepted' || outcome.overallStatus === 'delivered'
+        ? 'sent'
+        : outcome.overallStatus === 'unconfigured'
+        ? 'unconfigured'
+        : outcome.overallStatus === 'queued'
+        ? 'pending'
+        : 'failed';
+    await this.db.updateSolutionRequestEmailStatus(params.referenceCode, legacyDbStatus).catch(() => {});
+
+    return {
+      outcome,
+      executiveSubject: execEmail.subject,
+      clientSubject: clientConfirmEmail.subject,
+    };
   }
 
   public async dispatchPortalTransactionalEmail(params: {

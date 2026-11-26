@@ -40,6 +40,7 @@ import {
   PortalSettingsPage,
   PortalSupportPage,
 } from './pages/SupportAccountPages';
+import { PortalFrontDeskInquiriesPage } from './pages/FrontDeskInquiriesPage';
 
 const PortalLoadingScreen: React.FC = () => (
   <div className="min-h-screen bg-[#F3F4F6] text-[#0B1F3B] flex items-center justify-center p-6">
@@ -165,6 +166,14 @@ const PortalRouteSwitch: React.FC = () => {
         element={
           <ProtectedPortalRoute>
             <PortalCartPage />
+          </ProtectedPortalRoute>
+        }
+      />
+      <Route
+        path="inquiries"
+        element={
+          <ProtectedPortalRoute>
+            <PortalFrontDeskInquiriesPage />
           </ProtectedPortalRoute>
         }
       />

@@ -27,6 +27,7 @@ import {
   buildAdminLoginWithNextRoute,
   resolveSafePostAdminLoginPath,
 } from '../config/routes';
+import { AdminFrontDeskConsole } from './AdminFrontDeskConsole';
 
 interface AdminProfile {
   email: string;
@@ -418,7 +419,7 @@ export const AdminPortalApp: React.FC = () => {
     );
   };
 
-  const renderProtectedConsole = (activeSection: 'inquiries' | 'appointments' | 'audit') => {
+  const renderProtectedConsole = (activeSection: 'inquiries' | 'appointments' | 'frontdesk' | 'audit') => {
     if (!adminProfile) {
       return <Navigate to={buildAdminLoginWithNextRoute(location.pathname)} replace />;
     }
@@ -488,6 +489,18 @@ export const AdminPortalApp: React.FC = () => {
               >
                 <Calendar className="w-3.5 h-3.5" />
                 <span>Consultations ({appointments.length})</span>
+              </Link>
+
+              <Link
+                to={ROUTES.ADMIN.AI_FRONTDESK}
+                className={`px-3.5 py-2 rounded-lg text-xs font-mono flex items-center gap-1.5 ${
+                  activeSection === 'frontdesk'
+                    ? 'bg-[#00C2C7] text-[#0B1220] font-bold'
+                    : 'bg-slate-900 text-slate-300 border border-slate-800 hover:text-white'
+                }`}
+              >
+                <Bot className="w-3.5 h-3.5" />
+                <span>AI Front Desk Command</span>
               </Link>
 
               <Link
@@ -1152,6 +1165,10 @@ export const AdminPortalApp: React.FC = () => {
               )
             )}
 
+            {activeSection === 'frontdesk' && (
+              <AdminFrontDeskConsole adminToken={adminToken} />
+            )}
+
             {activeSection === 'audit' && (
               auditLogs.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
@@ -1197,6 +1214,7 @@ export const AdminPortalApp: React.FC = () => {
       <Route path="login" element={renderLoginView()} />
       <Route path="dashboard" element={renderProtectedConsole('inquiries')} />
       <Route path="appointments" element={renderProtectedConsole('appointments')} />
+      <Route path="ai-frontdesk" element={renderProtectedConsole('frontdesk')} />
       <Route path="audit-logs" element={renderProtectedConsole('audit')} />
       <Route path="*" element={<NotFoundPage scope="admin" />} />
     </Routes>

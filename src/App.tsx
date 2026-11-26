@@ -31,6 +31,7 @@ import {
 
 const CorporateProfilePage = lazy(() => import('./components/CorporateProfilePage'));
 const ResourcesPage = lazy(() => import('./components/ResourcesPage'));
+const AIFrontDeskPage = lazy(() => import('./components/frontdesk/AIFrontDeskPage'));
 const ClientPortalApp = lazy(() => import('./portal/ClientPortalApp'));
 const AdminPortalApp = lazy(() => import('./admin/AdminPortalApp'));
 
@@ -321,9 +322,22 @@ export default function App() {
           }
         />
 
+        {/* Dedicated Public AI Front Desk & Technology Consultation Platform (Clean Permanent URL) */}
+        <Route
+          path={ROUTES.AI_FRONTDESK}
+          element={
+            <Suspense fallback={<RouteLoaderFallback label="Loading DESTRIA TECH INC AI Front Desk..." />}>
+              <AIFrontDeskPage />
+            </Suspense>
+          }
+        />
+
         {/* Public Corporate Website Canonical Clean Routes */}
         {PUBLIC_STATIC_ROUTES.filter(
-          (routePath) => routePath !== ROUTES.CORPORATE_PROFILE && routePath !== ROUTES.RESOURCES
+          (routePath) =>
+            routePath !== ROUTES.CORPORATE_PROFILE &&
+            routePath !== ROUTES.RESOURCES &&
+            routePath !== ROUTES.AI_FRONTDESK
         ).map((routePath) => (
           <Route key={routePath} path={routePath} element={<PublicCorporateView />} />
         ))}

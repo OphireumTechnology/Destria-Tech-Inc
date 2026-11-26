@@ -15,6 +15,7 @@ export const ROUTES = {
   ENTERPRISE_SUITE: '/enterprise-suite',
   CONSULTATION: '/consultation',
   CONTACT: '/contact',
+  AI_FRONTDESK: '/ai-frontdesk',
 
   GOVERNANCE: {
     ROOT: '/governance',
@@ -42,6 +43,7 @@ export const ROUTES = {
     STORE: '/portal/store',
     CART: '/portal/cart',
     PROPOSALS: '/portal/proposals',
+    INQUIRIES: '/portal/inquiries',
     CHECKOUT: '/portal/checkout',
     ORDERS: '/portal/orders',
     PROJECTS: '/portal/projects',
@@ -65,6 +67,7 @@ export const ROUTES = {
     LOGIN: '/admin/login',
     DASHBOARD: '/admin/dashboard',
     APPOINTMENTS: '/admin/appointments',
+    AI_FRONTDESK: '/admin/ai-frontdesk',
     AUDIT_LOGS: '/admin/audit-logs',
   },
 } as const;
@@ -77,6 +80,7 @@ export const PUBLIC_SECTION_ROUTE_MAP: Record<string, string> = {
   services: ROUTES.SOLUTIONS,
   portfolio: ROUTES.PORTFOLIO,
   architecture: ROUTES.ENTERPRISE_SUITE,
+  'ai-frontdesk': ROUTES.AI_FRONTDESK,
   consultation: ROUTES.CONSULTATION,
   contact: ROUTES.CONTACT,
 };
@@ -562,6 +566,13 @@ export function getRouteSeoMeta(pathname: string): RouteSeoMeta {
         description:
           'Explore the 8 integrated DESTRIA NETWORK enterprise pillars uniting software engineering, AI workforce systems, and client governance.',
         canonicalUrl: buildCanonicalPublicUrl(ROUTES.ENTERPRISE_SUITE),
+      };
+    case ROUTES.AI_FRONTDESK:
+      return {
+        title: 'AI Front Desk & Technology Consultation | DESTRIA TECH INC',
+        description:
+          'Speak or chat naturally with the DESTRIA TECH INC AI Front Desk Officer to explore enterprise technology solutions, organize project requirements, generate a preliminary project masterplan, and schedule an executive consultation.',
+        canonicalUrl: buildCanonicalPublicUrl(ROUTES.AI_FRONTDESK),
       };
     case ROUTES.CONSULTATION:
     case ROUTES.CONTACT:

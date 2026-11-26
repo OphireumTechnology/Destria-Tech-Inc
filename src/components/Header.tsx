@@ -41,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenPortal, onNavigate, active
     { id: 'portfolio', label: 'Portfolio', to: ROUTES.PORTFOLIO },
     { id: 'architecture', label: 'Enterprise Suite', to: ROUTES.ENTERPRISE_SUITE },
     { id: 'resources', label: 'Resources', to: ROUTES.RESOURCES },
+    { id: 'ai-frontdesk', label: 'AI Front Desk', to: ROUTES.AI_FRONTDESK },
     { id: 'contact', label: 'Consultation', to: ROUTES.CONSULTATION },
   ];
 

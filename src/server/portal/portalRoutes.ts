@@ -25,6 +25,7 @@ import {
 } from '../aiCommercialPolicy';
 import { ROUTES, buildCanonicalPublicUrl, buildOrderDetailRoute } from '../../config/routes';
 import type { TransactionalEmailService } from '../services/emailService';
+import type { FrontDeskStore } from '../frontDeskStore';
 
 function sanitizeProductForPublicCatalog(product: ProductRecord) {
   return {
@@ -294,10 +295,12 @@ export function createPortalRouter(options: {
   paymentRegistry?: PaymentGatewayRegistry;
   signingSecret?: string;
   emailService?: TransactionalEmailService;
+  frontDeskStore?: FrontDeskStore;
 }): Router {
   const router = Router();
   const repo = options.repo;
   const emailService = options.emailService;
+  const frontDeskStore = options.frontDeskStore;
   const paymentRegistry = options.paymentRegistry || new PaymentGatewayRegistry();
 
   // Fail closed when durable production persistence is unconfigured
@@ -1078,6 +1081,48 @@ export function createPortalRouter(options: {
   router.get('/custom-inquiries', async (req: PortalAuthenticatedRequest, res: Response) => {
     const inquiries = await repo.listCustomInquiries(req.portalUser!.id);
     res.status(200).json({ success: true, inquiries });
+  });
+
+  // M23: Client-Owned AI Front Desk Project Inquiries, Preliminary Masterplans & Inline Corrections
+  // SECURITY: Strictly scoped to req.portalUser.email — cross-client access is impossible.
+  router.get('/frontdesk/inquiries', async (req: PortalAuthenticatedRequest, res: Response) => {
+    const clientEmail = req.portalUser!.email;
+    const records = frontDeskStore ? frontDeskStore.listInquiriesForClientEmail(clientEmail) : [];
+    res.status(200).json({
+      success: true,
+      count: records.length,
+      inquiries: records,
+      commercialEngagementStatement: COMMERCIAL_ENGAGEMENT_STATEMENT,
+    });
+  });
+
+  router.patch('/frontdesk/inquiries/:referenceCode/corrections', async (req: PortalAuthenticatedRequest, res: Response) => {
+    if (!frontDeskStore) {
+      res.status(503).json({ success: false, error: 'AI Front Desk inquiry store is not enabled.' });
+      return;
+    }
+    const referenceCode = sanitizeText(req.params.referenceCode, 80);
+    const clientEmail = req.portalUser!.email;
+    const patch = req.body?.patch && typeof req.body.patch === 'object' ? req.body.patch : {};
+    const note = sanitizeText(req.body?.note, 300) || undefined;
+
+    const outcome = frontDeskStore.applyClientPortalCorrection({
+      referenceCode,
+      authenticatedEmail: clientEmail,
+      patch,
+      note,
+    });
+
+    if (outcome.ok === false) {
+      res.status(outcome.statusCode).json({ success: false, error: outcome.error });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      inquiry: outcome.record,
+      message: 'Your inquiry profile and preliminary project masterplan have been updated.',
+    });
   });
 
   // Server-Authorized Formal Proposals (Scoped strictly to authenticated client)

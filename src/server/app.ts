@@ -75,6 +75,20 @@ import {
   formatGroundedKnowledgeBlock,
   retrieveCorporateKnowledge,
 } from '../data/corporateKnowledgeBase';
+import {
+  EXECUTIVE_REVIEW_STAGES,
+  ExecutiveReviewStage,
+  LEAD_QUALIFICATION_STATUSES,
+  LeadQualificationStatus,
+  answerTechnicalFeasibilityQuestion,
+} from './frontDeskEngine';
+import { FrontDeskStore } from './frontDeskStore';
+import {
+  FrontDeskKnowledgeStore,
+  KnowledgeStatus,
+  KnowledgeVisibility,
+  formatManagedKnowledgeEntry,
+} from './frontDeskKnowledgeStore';
 
 export interface AppDependencies {
   db?: DatabaseRepository;
@@ -85,6 +99,8 @@ export interface AppDependencies {
   calendarService?: GoogleCalendarService;
   geminiClient?: GoogleGenAI | null;
   aiRuntimeConfig?: AiRuntimeConfigRegistry;
+  frontDeskStore?: FrontDeskStore;
+  frontDeskKnowledgeStore?: FrontDeskKnowledgeStore;
   sessionSecret?: string;
   rateLimitMaxOverride?: number;
 }
@@ -186,6 +202,8 @@ export function createApp(deps: AppDependencies = {}): {
   ai: GoogleGenAI | null;
   aiRuntimeConfig: AiRuntimeConfigRegistry;
   aiToolsExecutor: AIToolsExecutor;
+  frontDeskStore: FrontDeskStore;
+  frontDeskKnowledgeStore: FrontDeskKnowledgeStore;
   allowedOrigins: string[];
 } {
   const app = express();
@@ -222,6 +240,8 @@ export function createApp(deps: AppDependencies = {}): {
       geminiConfiguredOverride: Boolean(ai),
     });
   const aiToolsExecutor = new AIToolsExecutor(db, emailService, calendarService);
+  const frontDeskStore = deps.frontDeskStore || new FrontDeskStore();
+  const frontDeskKnowledgeStore = deps.frontDeskKnowledgeStore || new FrontDeskKnowledgeStore();
 
   const inquiryLimiter = new SlidingWindowRateLimiter(
     15 * 60 * 1000,
@@ -2014,6 +2034,12 @@ export function createApp(deps: AppDependencies = {}): {
     );
     const allowToolsThisTurn = conversationalClass.shouldAllowEnterpriseTools;
 
+    // Progressively update AI Front Desk session dossier (non-intrusive on casual turns)
+    const frontDeskDossier = frontDeskStore.recordTurn(chatSessionId, userMessage, {
+      isProjectDiscoveryTurn: allowToolsThisTurn,
+      detectedLanguage: conversationalClass.language,
+    });
+
     // Handle private executive/employee personal probes deterministically so LLM never speculates
     if (conversationalClass.isPrivateExecutiveProbe) {
       const privateReply = buildDeterministicConversationalReply(userMessage, conversationalClass)!;
@@ -2031,6 +2057,7 @@ export function createApp(deps: AppDependencies = {}): {
         detectedIntent: conversationalClass.intent,
         detectedLanguage: conversationalClass.language,
         memory: conversationalClass.memory,
+        frontDeskDossier,
         policyEnforced: false,
         provider: 'DESTRIA Conversational Privacy Guard',
         timestamp: new Date().toISOString(),
@@ -2038,12 +2065,31 @@ export function createApp(deps: AppDependencies = {}): {
       return;
     }
 
-    const kbHits = allowToolsThisTurn ? retrieveCorporateKnowledge(userMessage, { topK: 3 }) : [];
-    const groundedKb = kbHits.length > 0 ? formatGroundedKnowledgeBlock(kbHits) : '';
+    const managedKbHits = allowToolsThisTurn
+      ? frontDeskKnowledgeStore.retrieveApprovedPublicKnowledge(userMessage, { topK: 3 })
+      : [];
+    const kbHits = allowToolsThisTurn && managedKbHits.length === 0 ? retrieveCorporateKnowledge(userMessage, { topK: 3 }) : [];
+    const groundedKb =
+      managedKbHits.length > 0
+        ? managedKbHits.map((h) => formatManagedKnowledgeEntry(h.entry)).join('\n\n')
+        : kbHits.length > 0
+        ? formatGroundedKnowledgeBlock(kbHits)
+        : '';
     const naturalContextBlock = buildNaturalGeminiContextBlock(conversationalClass, 'chat');
 
+    const frontDeskDiscoveryHint = frontDeskDossier.discoveryActive
+      ? `\nACTIVE FRONT DESK DISCOVERY STATE (Completeness ${frontDeskDossier.completeness.scorePercent}%, Lead Status: ${frontDeskDossier.leadStatus}):\n- Already captured client fields: ${
+          Object.entries(frontDeskDossier.clientProfile)
+            .filter(([, v]) => Boolean(v))
+            .map(([k, v]) => `${k}=${v}`)
+            .join(', ') || 'none yet'
+        }\n- Do NOT repeat questions for fields already captured.\n- Next single helpful question if appropriate: ${
+          frontDeskDossier.completeness.nextRecommendedQuestion || 'Offer summary review or executive consultation.'
+        }`
+      : '';
+
     const enterpriseCatalogSection = allowToolsThisTurn
-      ? `\nRETRIEVED CORPORATE KNOWLEDGE (Version ${CORPORATE_KNOWLEDGE_VERSION}):\n${groundedKb}\n\nOFFICIAL 10-CATEGORY CUSTOMIZED ENTERPRISE SOLUTION CATALOG (ZERO PUBLIC PRICING):\n${CATALOG_SUMMARY_FOR_AI}\n\nCOMPLIANCE DISCLOSURES:\n- External charges: ${EXTERNAL_CHARGES_DISCLOSURE}\n- Blockchain compliance: ${BLOCKCHAIN_COMPLIANCE_NOTICE}\n- Emerging technology feasibility: ${EMERGING_TECH_FEASIBILITY_NOTICE}\n\nCONSULTATION & AUTHORIZED TOOL BEHAVIOR:\n- Use your authorized tools to retrieve corporate facts, search/recommend solutions, check real appointment availability, or prepare consultation/inquiry requests.\n- NEVER call submit_consultation_request or submit_service_inquiry without explicit client confirmation of the prepared summary.`
+      ? `\nRETRIEVED CORPORATE & TECHNICAL KNOWLEDGE (Version ${CORPORATE_KNOWLEDGE_VERSION}):\n${groundedKb}${frontDeskDiscoveryHint}\n\nOFFICIAL 10-CATEGORY CUSTOMIZED ENTERPRISE SOLUTION CATALOG (ZERO PUBLIC PRICING):\n${CATALOG_SUMMARY_FOR_AI}\n\nCOMPLIANCE DISCLOSURES:\n- External charges: ${EXTERNAL_CHARGES_DISCLOSURE}\n- Blockchain compliance: ${BLOCKCHAIN_COMPLIANCE_NOTICE}\n- Emerging technology feasibility: ${EMERGING_TECH_FEASIBILITY_NOTICE}\n\nCONSULTATION & AUTHORIZED TOOL BEHAVIOR:\n- Use your authorized tools to retrieve corporate facts, search/recommend solutions, check real appointment availability, or prepare consultation/inquiry requests.\n- NEVER call submit_consultation_request or submit_service_inquiry without explicit client confirmation of the prepared summary.`
       : '';
 
     const systemInstruction = `${MANDATORY_AI_SYSTEM_INSTRUCTION}
@@ -2237,6 +2283,7 @@ SECURITY BOUNDARIES:
             detectedIntent: conversationalClass.intent,
             detectedLanguage: conversationalClass.language,
             memory: conversationalClass.memory,
+            frontDeskDossier,
             policyEnforced: enforced.enforced,
             provider: 'DESTRIA AI Conversational Assistant',
             timestamp: new Date().toISOString(),
@@ -2274,8 +2321,38 @@ SECURITY BOUNDARIES:
         detectedIntent: naturalFallback.intent,
         detectedLanguage: naturalFallback.language,
         memory: naturalFallback.memory,
+        frontDeskDossier,
         policyEnforced: enforcedNatural.enforced,
         provider: 'DESTRIA Natural Conversational Engine',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Section 9: Technical Q&A & Feasibility deterministic guidance when Gemini is unavailable
+    const techQaAnswer = answerTechnicalFeasibilityQuestion(userMessage);
+    if (techQaAnswer && !/\b(schedule|appointment|book|meeting)\b/i.test(userMessage)) {
+      const enforcedQa = enforceCommercialPolicyOnOutput(techQaAnswer, userMessage);
+      const nextStepPrompt = frontDeskDossier.discoveryActive && frontDeskDossier.completeness.nextRecommendedQuestion
+        ? `\n\n${frontDeskDossier.completeness.nextRecommendedQuestion}`
+        : '';
+      aiRuntimeConfig.recordTurnTelemetry({
+        sessionId: chatSessionId,
+        channel: 'chat',
+        latencyMs: Date.now() - chatStartedAt,
+        policyEnforced: enforcedQa.enforced,
+      });
+      res.json({
+        sessionId: chatSessionId,
+        replyText: `${enforcedQa.replyText}${nextStepPrompt}`,
+        recommendedServiceIds: findCatalogMatches(userMessage, 3).map((s) => s.id),
+        quickReplies: ['Review Preliminary Masterplan', 'Request an Enterprise Consultation'],
+        detectedIntent: conversationalClass.intent,
+        detectedLanguage: conversationalClass.language,
+        memory: conversationalClass.memory,
+        frontDeskDossier,
+        policyEnforced: enforcedQa.enforced,
+        provider: 'DESTRIA AI Front Desk Technical Advisory Engine',
         timestamp: new Date().toISOString(),
       });
       return;
@@ -2336,6 +2413,7 @@ SECURITY BOUNDARIES:
       detectedIntent: conversationalClass.intent,
       detectedLanguage: conversationalClass.language,
       memory: conversationalClass.memory,
+      frontDeskDossier,
       policyEnforced: enforcedFallback.enforced,
       provider: 'DESTRIA Corporate Solutions Engine',
       timestamp: new Date().toISOString(),
@@ -2513,7 +2591,20 @@ SECURITY BOUNDARIES:
       },
     });
 
-    res.json(turnResult);
+    const voiceTurnClass = classifyConversationalTurn(
+      sanitized.userMessage,
+      sanitized.history,
+      sanitized.stateContext as Record<string, unknown>
+    );
+    const frontDeskDossier = frontDeskStore.recordTurn(turnResult.sessionId, sanitized.userMessage, {
+      isProjectDiscoveryTurn: voiceTurnClass.shouldAllowEnterpriseTools,
+      detectedLanguage: voiceTurnClass.language,
+    });
+
+    res.json({
+      ...turnResult,
+      frontDeskDossier,
+    });
   });
 
   app.post('/api/voice/speak', async (req: Request & { correlationId?: string }, res: Response) => {
@@ -2683,6 +2774,743 @@ SECURITY BOUNDARIES:
   });
 
   // -----------------------------------------------------------------------
+  // 6A. INTELLIGENT AI FRONT DESK PLATFORM ENDPOINTS (M01-M26)
+  // -----------------------------------------------------------------------
+
+  app.get('/api/frontdesk/knowledge/public', (req: Request, res: Response) => {
+    const query = sanitizePlainText(req.query.q, 200);
+    const hits = frontDeskKnowledgeStore.retrieveApprovedPublicKnowledge(query, { topK: 8 });
+    res.json({
+      success: true,
+      version: CORPORATE_KNOWLEDGE_VERSION,
+      count: hits.length,
+      documents: hits.map((h) => ({
+        id: h.entry.id,
+        domain: h.entry.domain,
+        knowledgeType: h.entry.knowledgeType,
+        title: h.entry.title,
+        summary: h.entry.summary,
+        facts: h.entry.facts,
+        canonicalLinks: h.entry.canonicalLinks,
+        version: h.entry.version,
+      })),
+    });
+  });
+
+  app.get('/api/frontdesk/session/:sessionId', (req: Request, res: Response) => {
+    const sessionId = sanitizePlainText(req.params.sessionId, 100);
+    if (!sessionId) {
+      res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
+      return;
+    }
+    const dossier = frontDeskStore.getOrCreateSession(sessionId);
+    res.json({ success: true, dossier });
+  });
+
+  app.patch('/api/frontdesk/session/:sessionId', (req: Request, res: Response) => {
+    const clientIp = getClientIp(req);
+    if (!aiLimiter.check(clientIp)) {
+      res.status(429).json({ success: false, error: 'Too many requests.' });
+      return;
+    }
+    const sessionId = sanitizePlainText(req.params.sessionId, 100);
+    if (!sessionId) {
+      res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
+      return;
+    }
+    const patch = req.body && typeof req.body === 'object' ? req.body : {};
+    const dossier = frontDeskStore.applySessionCorrections(sessionId, patch);
+    res.json({ success: true, dossier });
+  });
+
+  app.post('/api/frontdesk/session/:sessionId/masterplan', (req: Request, res: Response) => {
+    const sessionId = sanitizePlainText(req.params.sessionId, 100);
+    if (!sessionId) {
+      res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
+      return;
+    }
+    const { dossier, masterplan } = frontDeskStore.generateAndStoreMasterplan(sessionId);
+    res.json({ success: true, dossier, masterplan });
+  });
+
+  app.post('/api/frontdesk/session/:sessionId/prepare-submission', (req: Request, res: Response) => {
+    const clientIp = getClientIp(req);
+    if (!inquiryLimiter.check(clientIp)) {
+      res.status(429).json({ success: false, error: 'Rate limit exceeded. Please wait before retrying.' });
+      return;
+    }
+    const sessionId = sanitizePlainText(req.params.sessionId, 100);
+    if (!sessionId) {
+      res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
+      return;
+    }
+    // Allow final inline edits right before preparing confirmation token
+    if (req.body?.patch && typeof req.body.patch === 'object') {
+      frontDeskStore.applySessionCorrections(sessionId, req.body.patch);
+    }
+    const prepared = frontDeskStore.prepareSubmissionConfirmation(sessionId);
+    if (prepared.ok === false) {
+      res.status(400).json({
+        success: false,
+        error: prepared.error,
+        missingFields: prepared.missingFields,
+      });
+      return;
+    }
+    res.json({
+      success: true,
+      confirmationRequired: true,
+      confirmationToken: prepared.confirmationToken,
+      dossier: prepared.dossier,
+      masterplan: prepared.masterplan,
+      reviewPrompt:
+        'Please review your client profile, confirmed requirements, and preliminary project masterplan carefully. Nothing has been submitted yet—confirm explicitly to authorize submission and executive report dispatch.',
+    });
+  });
+
+  app.post(
+    '/api/frontdesk/session/:sessionId/authorize-submission',
+    async (req: Request & { correlationId?: string }, res: Response, next: NextFunction) => {
+      try {
+        const clientIp = getClientIp(req);
+        if (!inquiryLimiter.check(clientIp)) {
+          res.status(429).json({ success: false, error: 'Too many submission attempts. Please wait before retrying.' });
+          return;
+        }
+
+        const sessionId = sanitizePlainText(req.params.sessionId, 100);
+        const confirmationToken = sanitizePlainText(req.body?.confirmationToken, 120);
+        const clientConfirmed = req.body?.clientConfirmed === true;
+
+        if (!sessionId || !confirmationToken || !clientConfirmed) {
+          res.status(400).json({
+            success: false,
+            code: 'EXPLICIT_CLIENT_CONFIRMATION_REQUIRED',
+            error:
+              'Explicit client confirmation (clientConfirmed=true) and a valid single-use confirmationToken are required before submitting your project inquiry.',
+          });
+          return;
+        }
+
+        const tokenCheck = frontDeskStore.consumeSubmissionConfirmation(sessionId, confirmationToken);
+        if (tokenCheck.ok === false) {
+          res.status(400).json({
+            success: false,
+            code: 'INVALID_CONFIRMATION_TOKEN',
+            error: tokenCheck.error,
+          });
+          return;
+        }
+
+        const { dossier, masterplan } = frontDeskStore.generateAndStoreMasterplan(sessionId);
+        const cp = dossier.clientProfile;
+        const pr = dossier.projectRequirements;
+
+        // Optional atomic Executive Consultation booking during authorized submission
+        const scheduleConsultation = req.body?.scheduleConsultation === true;
+        const scheduledDate = sanitizePlainText(req.body?.scheduledDate, 20);
+        const scheduledTimeSlot = sanitizePlainText(req.body?.scheduledTimeSlot, 40);
+        const rawTimezone = sanitizePlainText(req.body?.clientTimezone, 80) || cp.timezone || 'UTC';
+        const clientTimezone = isValidIanaTimezone(rawTimezone) ? rawTimezone : 'UTC';
+        const consultationType: 'video' | 'phone' | 'in_person' =
+          req.body?.consultationType === 'phone'
+            ? 'phone'
+            : req.body?.consultationType === 'in_person' || req.body?.consultationType === 'executive_briefing'
+            ? 'in_person'
+            : 'video';
+        const executivePathway: 'ceo' | 'cto' | 'advisory' =
+          req.body?.executivePathway === 'ceo' || req.body?.executivePathway === 'cto'
+            ? req.body.executivePathway
+            : 'advisory';
+
+        let consultationDetails:
+          | {
+              referenceCode: string;
+              status: 'confirmed' | 'pending_review';
+              scheduledDate: string;
+              scheduledTimeSlot: string;
+              clientTimezone: string;
+              meetingLink?: string;
+              calendarSynced: boolean;
+            }
+          | undefined;
+
+        if (scheduleConsultation) {
+          if (
+            !/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate) ||
+            !(ALLOWED_APPOINTMENT_SLOTS as readonly string[]).includes(scheduledTimeSlot)
+          ) {
+            res.status(400).json({
+              success: false,
+              error: 'Valid scheduledDate (YYYY-MM-DD) and allowed scheduledTimeSlot are required when booking a consultation.',
+            });
+            return;
+          }
+
+          // Strict double-booking prevention
+          const bookedSlots = await db.getBookedSlotsForDate(scheduledDate);
+          if (bookedSlots.includes(scheduledTimeSlot)) {
+            res.status(409).json({
+              success: false,
+              code: 'SLOT_ALREADY_BOOKED',
+              error: `The requested consultation slot (${scheduledDate} at ${scheduledTimeSlot}) is already reserved. Please select another available slot.`,
+            });
+            return;
+          }
+
+          const aptRef = `DTI-APT-${new Date().getFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+          const officeLocation = corporateIdentity.headquarters.fullAddress;
+          const calResult = await calendarService.createConsultationEvent({
+            referenceCode: aptRef,
+            fullName: cp.fullName || 'Prospective Client',
+            email: cp.email || '',
+            companyName: cp.companyName || 'Prospective Client',
+            consultationType,
+            scheduledDate,
+            scheduledTimeSlot,
+            clientTimezone,
+            location: officeLocation,
+            correlationId: req.correlationId,
+          });
+
+          const aptStatus: 'confirmed' | 'pending_review' = calResult.synced ? 'confirmed' : 'pending_review';
+          const assignedConsultant =
+            executivePathway === 'ceo'
+              ? `${corporateIdentity.leadership.ceo.name} — ${corporateIdentity.leadership.ceo.title}`
+              : executivePathway === 'cto'
+              ? `${corporateIdentity.leadership.cto.name} — ${corporateIdentity.leadership.cto.title}`
+              : 'DESTRIA TECH INC Solutions Architecture Team';
+
+          const rawMgmtToken = crypto.randomBytes(18).toString('hex');
+          const { record: createdApt } = await db.createAppointment({
+            referenceCode: aptRef,
+            idempotencyKey: `fd-apt-${sessionId}-${scheduledDate}-${scheduledTimeSlot}`,
+            fullName: cp.fullName || 'Prospective Client',
+            email: (cp.email || '').toLowerCase(),
+            phone: cp.phone || 'Not provided',
+            companyName: cp.companyName || 'Prospective Client',
+            executivePathway,
+            consultationType,
+            consultationPurpose: `AI Front Desk Executive Consultation — ${pr.projectName || pr.applicationType || 'Custom Project'}`,
+            selectedSolution: dossier.recommendation?.proposedApplicationType || 'Customized Enterprise Solution',
+            scheduledDate,
+            scheduledTimeSlot,
+            durationMinutes: 30,
+            clientTimezone,
+            meetingLink: calResult.synced ? calResult.meetingLink : undefined,
+            meetingLocation: officeLocation,
+            assignedConsultant,
+            status: aptStatus,
+            calendarSyncStatus: calResult.calendarSyncStatus,
+            calendarEventId: calResult.eventId,
+            managementTokenHash: hashToken(rawMgmtToken),
+            sourceChannel: 'AI Front Desk',
+            availabilityVerified: calResult.synced,
+            notes: `Completeness: ${dossier.completeness.scorePercent}% | Lead: ${dossier.leadStatus}`,
+          });
+
+          consultationDetails = {
+            referenceCode: createdApt.referenceCode,
+            status: aptStatus,
+            scheduledDate: createdApt.scheduledDate,
+            scheduledTimeSlot: createdApt.scheduledTimeSlot,
+            clientTimezone: createdApt.clientTimezone,
+            meetingLink: createdApt.meetingLink,
+            calendarSynced: calResult.synced,
+          };
+        }
+
+        const referenceCode = `DTI-FD-${new Date().getFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+        const submittedAtUtc = new Date().toISOString();
+
+        // Persist solution request into primary DB repository
+        const primaryService = SERVICE_CATALOG[0];
+        const fallbackServiceId = primaryService?.id || 'enterprise-software';
+        await db.createSolutionRequest({
+          referenceCode,
+          idempotencyKey: `fd-req-${sessionId}-${dossier.version}`,
+          type: 'solution_builder',
+          fullName: cp.fullName || 'Prospective Client',
+          company: cp.companyName || 'Prospective Client',
+          email: (cp.email || '').toLowerCase(),
+          contactNumber: cp.phone || 'Not provided',
+          industry: cp.industry || 'Not specified',
+          serviceId: fallbackServiceId,
+          serviceTitle: pr.projectName || dossier.recommendation?.proposedApplicationType || 'Customized Enterprise Solution',
+          selectedServices: [
+            {
+              id: fallbackServiceId,
+              title: pr.projectName || dossier.recommendation?.proposedApplicationType || 'Customized Enterprise Solution',
+              engagementLabel: 'Customized Enterprise Solution',
+              assessmentBasis: 'Subject to Formal Assessment',
+              startingUsd: 0,
+              monthlyUsd: 0,
+              selectedOptionIds: [],
+            },
+          ],
+          selectedServiceIds: [fallbackServiceId],
+          selectedOptionsMap: {},
+          estimatedOneTimeStartingUsd: 0,
+          estimatedMonthlyStartingUsd: 0,
+          estimatedBudget: pr.optionalBudgetExpectation || 'Subject to Formal Assessment',
+          engagementScope: dossier.recommendation?.proposedApplicationType || 'Subject to Formal Assessment',
+          preferredCurrency: 'USD',
+          targetTimeline: pr.preferredTimeline || 'To be confirmed during executive consultation',
+          projectDescription:
+            pr.businessProblem ||
+            pr.projectDescription ||
+            pr.functionalRequirements.map((f) => f.label).join('; ') ||
+            'AI Front Desk qualified project discovery submission.',
+          privacyConsent: true,
+          commercialPolicyConsent: true,
+          sourceChannel: 'AI Front Desk',
+          submissionTimezone: clientTimezone,
+        });
+
+        // Dispatch 18-Section (A-R) Executive Report + Separate Client Confirmation Email via Outbox
+        const emailDispatch = await emailService.enqueueAndSendFrontDeskReportEmails({
+          referenceCode,
+          submittedAtUtc,
+          dossier,
+          masterplan,
+          consultationDetails: consultationDetails
+            ? {
+                referenceCode: consultationDetails.referenceCode,
+                status: consultationDetails.status,
+                scheduledDate: consultationDetails.scheduledDate,
+                scheduledTimeSlot: consultationDetails.scheduledTimeSlot,
+                clientTimezone: consultationDetails.clientTimezone,
+                meetingLink: consultationDetails.meetingLink,
+              }
+            : undefined,
+          correlationId: req.correlationId,
+        });
+
+        // Save complete submitted Front Desk Inquiry record (with Client Portal ownerEmail isolation)
+        const submittedInquiry = frontDeskStore.saveSubmittedInquiry({
+          referenceCode,
+          dossier,
+          masterplan,
+          consultation: consultationDetails
+            ? {
+                referenceCode: consultationDetails.referenceCode,
+                status: consultationDetails.status,
+                scheduledDate: consultationDetails.scheduledDate,
+                scheduledTimeSlot: consultationDetails.scheduledTimeSlot,
+                clientTimezone: consultationDetails.clientTimezone,
+              }
+            : undefined,
+          emailDeliveryState: emailDispatch.outcome.deliveryState,
+        });
+
+        await db.writeAuditLog({
+          correlationId: req.correlationId,
+          actor: 'ai_frontdesk_client',
+          actorRole: 'client',
+          action: 'frontdesk_project_inquiry_authorized',
+          entityType: 'frontdesk_inquiries',
+          entityId: referenceCode,
+          details: {
+            sessionId,
+            completenessScore: dossier.completeness.scorePercent,
+            leadStatus: submittedInquiry.leadStatus,
+            consultationReferenceCode: consultationDetails?.referenceCode,
+            emailDeliveryState: emailDispatch.outcome.deliveryState,
+          },
+        });
+
+        res.status(201).json({
+          success: true,
+          referenceCode,
+          submittedAtUtc,
+          inquiry: submittedInquiry,
+          consultation: consultationDetails || null,
+          executiveEmailSubject: emailDispatch.executiveSubject,
+          clientEmailSubject: emailDispatch.clientSubject,
+          emailDelivery: {
+            customerStatus: emailDispatch.outcome.customerStatus,
+            adminStatus: emailDispatch.outcome.adminStatus,
+            overallStatus: emailDispatch.outcome.overallStatus,
+            deliveryState: emailDispatch.outcome.deliveryState,
+            notifiedRecipientsCount: emailDispatch.outcome.notifiedRecipientsCount,
+            providerAcceptedRecipientsCount: emailDispatch.outcome.providerAcceptedRecipientsCount,
+            confirmedDeliveredRecipientsCount: emailDispatch.outcome.confirmedDeliveredRecipientsCount,
+            failedRecipientsCount: emailDispatch.outcome.failedRecipientsCount,
+            emailConfigured: emailService.isConfigured(),
+          },
+          confirmationMessage:
+            consultationDetails?.status === 'confirmed'
+              ? `Your project inquiry (${referenceCode}) and executive consultation (${consultationDetails.referenceCode}) have been registered.`
+              : consultationDetails
+              ? `Your project inquiry (${referenceCode}) and consultation request (${consultationDetails.referenceCode}, pending executive scheduling confirmation) have been registered.`
+              : `Your qualified project inquiry (${referenceCode}) has been registered for executive review.`,
+        });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
+  app.post('/api/frontdesk/session/:sessionId/escalate', async (req: Request & { correlationId?: string }, res: Response) => {
+    const clientIp = getClientIp(req);
+    if (!inquiryLimiter.check(clientIp)) {
+      res.status(429).json({ success: false, error: 'Too many escalation requests. Please wait a moment.' });
+      return;
+    }
+    const sessionId = sanitizePlainText(req.params.sessionId, 100);
+    const dossier = frontDeskStore.getOrCreateSession(sessionId);
+    const reason = sanitizePlainText(req.body?.reason, 500);
+    if (!reason || reason.length < 4) {
+      res.status(400).json({ success: false, error: 'Please describe how our human team can assist you.' });
+      return;
+    }
+
+    const escalation = frontDeskStore.createHumanEscalation({
+      sessionId,
+      clientName: sanitizePlainText(req.body?.clientName, 120) || dossier.clientProfile.fullName || 'Prospective Client',
+      clientEmail: sanitizePlainText(req.body?.clientEmail, 180) || dossier.clientProfile.email,
+      clientPhone: sanitizePlainText(req.body?.clientPhone, 40) || dossier.clientProfile.phone,
+      companyName: sanitizePlainText(req.body?.companyName, 140) || dossier.clientProfile.companyName,
+      reason,
+      requestedTrack:
+        req.body?.requestedTrack === 'ceo' ||
+        req.body?.requestedTrack === 'cto' ||
+        req.body?.requestedTrack === 'pricing' ||
+        req.body?.requestedTrack === 'technical'
+          ? req.body.requestedTrack
+          : 'general',
+      preferredContactMethod:
+        req.body?.preferredContactMethod === 'telephone' || req.body?.preferredContactMethod === 'scheduled_consultation'
+          ? req.body.preferredContactMethod
+          : 'email',
+    });
+
+    await db
+      .writeAuditLog({
+        correlationId: req.correlationId,
+        actor: 'ai_frontdesk_client',
+        actorRole: 'client',
+        action: 'frontdesk_human_escalation_requested',
+        entityType: 'human_escalations',
+        entityId: escalation.referenceCode,
+        details: { sessionId, requestedTrack: escalation.requestedTrack },
+      })
+      .catch(() => {});
+
+    res.status(201).json({
+      success: true,
+      escalation,
+      directContact: {
+        telephone: corporateIdentity.contact.telephone.display,
+        email: corporateIdentity.contact.email,
+      },
+      message: `Your human assistance request (${escalation.referenceCode}) has been logged for our team. You may also reach us directly at ${corporateIdentity.contact.telephone.display} or ${corporateIdentity.contact.email}.`,
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // 6A-ADMIN. PROTECTED ADMIN AI FRONT DESK COMMAND CENTER (M25 / M26)
+  // -----------------------------------------------------------------------
+
+  app.get(
+    '/api/admin/frontdesk/overview',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const analytics = frontDeskStore.getPrivacySafeAnalytics();
+        const knowledgeStats = frontDeskKnowledgeStore.getStats();
+        const aiOverview = aiRuntimeConfig.getAdminOverview();
+        const outboxSnapshot = db.listOutboxRecords
+          ? await db.listOutboxRecords({ limit: 50, offset: 0 }).catch(() => ({ records: [], total: 0 }))
+          : { records: [], total: 0 };
+
+        res.json({
+          success: true,
+          analytics,
+          knowledgeStats,
+          aiRuntime: {
+            config: aiOverview.config,
+            metrics: aiOverview.metrics,
+            activeSessionsCount: aiOverview.activeSessions.length,
+            recentFailuresCount: aiOverview.metrics.failures.recent.length,
+          },
+          emailOutboxSummary: {
+            total: outboxSnapshot.total,
+            delivered: outboxSnapshot.records.filter((r) => r.status === 'delivered').length,
+            providerAccepted: outboxSnapshot.records.filter(
+              (r) => r.status === 'provider_accepted' || r.status === 'sent'
+            ).length,
+            failed: outboxSnapshot.records.filter((r) => r.status === 'failed' || r.status === 'dead_letter').length,
+          },
+          executiveReviewStages: EXECUTIVE_REVIEW_STAGES,
+          leadQualificationStatuses: LEAD_QUALIFICATION_STATUSES,
+        });
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
+  app.get(
+    '/api/admin/frontdesk/inquiries',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response) => {
+      const { limit, offset } = parsePagination(req);
+      const query = sanitizePlainText(req.query.q, 120) || undefined;
+      const leadStatus = sanitizePlainText(req.query.leadStatus, 80) || undefined;
+      const reviewStage = sanitizePlainText(req.query.reviewStage, 80) || undefined;
+      const result = frontDeskStore.listInquiriesForAdmin({ query, leadStatus, reviewStage, limit, offset });
+
+      await db
+        .writeAuditLog({
+          correlationId: req.correlationId,
+          actor: req.adminUser?.email || 'admin',
+          actorRole: req.adminUser?.role || 'admin',
+          action: 'admin_list_frontdesk_inquiries',
+          entityType: 'frontdesk_inquiries',
+          details: { total: result.total, limit, offset },
+        })
+        .catch(() => {});
+
+      res.json({
+        success: true,
+        total: result.total,
+        limit,
+        offset,
+        records: result.records,
+      });
+    }
+  );
+
+  app.get(
+    '/api/admin/frontdesk/inquiries/:referenceCode',
+    authService.requireAdmin,
+    (req: AuthenticatedAdminRequest, res: Response) => {
+      const ref = sanitizePlainText(req.params.referenceCode, 80);
+      const record = frontDeskStore.getInquiryByReference(ref);
+      if (!record) {
+        res.status(404).json({ success: false, error: 'Project inquiry not found.' });
+        return;
+      }
+      res.json({ success: true, inquiry: record });
+    }
+  );
+
+  app.patch(
+    '/api/admin/frontdesk/inquiries/:referenceCode/review',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response) => {
+      const ref = sanitizePlainText(req.params.referenceCode, 80);
+      const stage = sanitizePlainText(req.body?.stage, 120) as ExecutiveReviewStage;
+      const leadStatus = sanitizePlainText(req.body?.leadStatus, 80) as LeadQualificationStatus | '';
+      const notes = sanitizePlainText(req.body?.notes, 500);
+      const approveCommercialTerms = req.body?.approveCommercialTerms === true;
+
+      const outcome = frontDeskStore.advanceExecutiveCommercialReview({
+        referenceCode: ref,
+        stage,
+        leadStatus: leadStatus ? (leadStatus as LeadQualificationStatus) : undefined,
+        notes,
+        actorEmail: req.adminUser?.email || 'admin',
+        actorRole: req.adminUser?.role || 'admin',
+        approveCommercialTerms,
+      });
+
+      if (outcome.ok === false) {
+        res.status(400).json({ success: false, error: outcome.error });
+        return;
+      }
+
+      await db
+        .writeAuditLog({
+          correlationId: req.correlationId,
+          actor: req.adminUser?.email || 'admin',
+          actorRole: req.adminUser?.role || 'admin',
+          action: approveCommercialTerms ? 'admin_commercial_terms_approved' : 'admin_executive_review_updated',
+          entityType: 'frontdesk_inquiries',
+          entityId: ref,
+          details: { stage, leadStatus: outcome.record.leadStatus, approveCommercialTerms },
+        })
+        .catch(() => {});
+
+      res.json({ success: true, inquiry: outcome.record });
+    }
+  );
+
+  app.get(
+    '/api/admin/frontdesk/escalations',
+    authService.requireAdmin,
+    (req: AuthenticatedAdminRequest, res: Response) => {
+      const status = sanitizePlainText(req.query.status, 40) || undefined;
+      const records = frontDeskStore.listHumanEscalations(status);
+      res.json({ success: true, count: records.length, records });
+    }
+  );
+
+  app.patch(
+    '/api/admin/frontdesk/escalations/:id',
+    authService.requireAdmin,
+    (req: AuthenticatedAdminRequest, res: Response) => {
+      const id = sanitizePlainText(req.params.id, 100);
+      const updated = frontDeskStore.updateHumanEscalation(id, {
+        status:
+          req.body?.status === 'in_progress' || req.body?.status === 'resolved' || req.body?.status === 'open'
+            ? req.body.status
+            : undefined,
+        assignedTo: typeof req.body?.assignedTo === 'string' ? req.body.assignedTo : undefined,
+        resolutionNotes: typeof req.body?.resolutionNotes === 'string' ? req.body.resolutionNotes : undefined,
+      });
+      if (!updated) {
+        res.status(404).json({ success: false, error: 'Escalation record not found.' });
+        return;
+      }
+      res.json({ success: true, escalation: updated });
+    }
+  );
+
+  app.get(
+    '/api/admin/frontdesk/knowledge',
+    authService.requireAdmin,
+    (req: AuthenticatedAdminRequest, res: Response) => {
+      const domain = sanitizePlainText(req.query.domain, 60) || undefined;
+      const status = (sanitizePlainText(req.query.status, 30) || undefined) as KnowledgeStatus | undefined;
+      const visibility = (sanitizePlainText(req.query.visibility, 30) || undefined) as KnowledgeVisibility | undefined;
+      const query = sanitizePlainText(req.query.q, 120) || undefined;
+      const documents = frontDeskKnowledgeStore.listDocuments({ domain, status, visibility, query });
+      res.json({
+        success: true,
+        stats: frontDeskKnowledgeStore.getStats(),
+        documents,
+      });
+    }
+  );
+
+  app.post(
+    '/api/admin/frontdesk/knowledge',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response) => {
+      const result = frontDeskKnowledgeStore.createDocument({
+        domain: (sanitizePlainText(req.body?.domain, 60) || 'technical_qa') as any,
+        knowledgeType:
+          req.body?.knowledgeType === 'verified_corporate_offering'
+            ? 'verified_corporate_offering'
+            : 'general_technical_knowledge',
+        title: String(req.body?.title || ''),
+        summary: String(req.body?.summary || ''),
+        facts: Array.isArray(req.body?.facts) ? req.body.facts.map(String) : [],
+        keywords: Array.isArray(req.body?.keywords) ? req.body.keywords.map(String) : [],
+        canonicalLinks: Array.isArray(req.body?.canonicalLinks) ? req.body.canonicalLinks.map(String) : [],
+        sourceReference: typeof req.body?.sourceReference === 'string' ? req.body.sourceReference : undefined,
+        visibility: req.body?.visibility === 'internal_only' ? 'internal_only' : 'public',
+        status: req.body?.status === 'approved' ? 'approved' : 'draft',
+        actorEmail: req.adminUser?.email || 'admin',
+        changeNote: typeof req.body?.changeNote === 'string' ? req.body.changeNote : undefined,
+      });
+
+      if (result.ok === false) {
+        res.status(400).json({ success: false, error: result.error });
+        return;
+      }
+
+      await db
+        .writeAuditLog({
+          correlationId: req.correlationId,
+          actor: req.adminUser?.email || 'admin',
+          actorRole: req.adminUser?.role || 'admin',
+          action: 'admin_knowledge_created',
+          entityType: 'knowledge_documents',
+          entityId: result.document.id,
+          details: { status: result.document.status, visibility: result.document.visibility },
+        })
+        .catch(() => {});
+
+      res.status(201).json({ success: true, document: result.document });
+    }
+  );
+
+  app.patch(
+    '/api/admin/frontdesk/knowledge/:id',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response) => {
+      const id = sanitizePlainText(req.params.id, 100);
+      const result = frontDeskKnowledgeStore.updateDocument(id, {
+        title: typeof req.body?.title === 'string' ? req.body.title : undefined,
+        summary: typeof req.body?.summary === 'string' ? req.body.summary : undefined,
+        facts: Array.isArray(req.body?.facts) ? req.body.facts.map(String) : undefined,
+        keywords: Array.isArray(req.body?.keywords) ? req.body.keywords.map(String) : undefined,
+        status:
+          req.body?.status === 'approved' || req.body?.status === 'draft' || req.body?.status === 'deactivated'
+            ? req.body.status
+            : undefined,
+        visibility:
+          req.body?.visibility === 'public' || req.body?.visibility === 'internal_only'
+            ? req.body.visibility
+            : undefined,
+        changeNote: typeof req.body?.changeNote === 'string' ? req.body.changeNote : undefined,
+        actorEmail: req.adminUser?.email || 'admin',
+      });
+
+      if (result.ok === false) {
+        res.status(result.error.includes('not found') ? 404 : 400).json({ success: false, error: result.error });
+        return;
+      }
+
+      await db
+        .writeAuditLog({
+          correlationId: req.correlationId,
+          actor: req.adminUser?.email || 'admin',
+          actorRole: req.adminUser?.role || 'admin',
+          action: 'admin_knowledge_updated',
+          entityType: 'knowledge_documents',
+          entityId: id,
+          details: { version: result.document.version, status: result.document.status },
+        })
+        .catch(() => {});
+
+      res.json({ success: true, document: result.document });
+    }
+  );
+
+  app.get(
+    '/api/admin/frontdesk/quality',
+    authService.requireAdmin,
+    (req: AuthenticatedAdminRequest, res: Response) => {
+      const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+      res.json({
+        success: true,
+        records: frontDeskStore.listQualityEvaluations(limit),
+      });
+    }
+  );
+
+  app.post(
+    '/api/admin/frontdesk/quality',
+    authService.requireAdmin,
+    (req: AuthenticatedAdminRequest, res: Response) => {
+      const clampRating = (v: unknown): 1 | 2 | 3 | 4 | 5 => {
+        const n = Math.max(1, Math.min(5, Math.round(Number(v) || 5)));
+        return n as 1 | 2 | 3 | 4 | 5;
+      };
+      const rec = frontDeskStore.recordQualityEvaluation({
+        sessionId: sanitizePlainText(req.body?.sessionId, 100) || 'manual-audit',
+        channel:
+          req.body?.channel === 'ai_frontdesk_voice' ||
+          req.body?.channel === 'widget_chat' ||
+          req.body?.channel === 'widget_voice'
+            ? req.body.channel
+            : 'ai_frontdesk_chat',
+        rating: clampRating(req.body?.rating),
+        naturalnessScore: clampRating(req.body?.naturalnessScore),
+        accuracyScore: clampRating(req.body?.accuracyScore),
+        policyCompliancePassed: req.body?.policyCompliancePassed !== false,
+        evaluatorEmail: req.adminUser?.email || 'admin',
+        notes: sanitizePlainText(req.body?.notes, 500) || 'Reviewed for quality & commercial compliance.',
+      });
+      res.status(201).json({ success: true, evaluation: rec });
+    }
+  );
+
+  // -----------------------------------------------------------------------
   // 6B. CLIENT PORTAL API ROUTER (/api/portal/*)
   // -----------------------------------------------------------------------
   app.use(
@@ -2692,6 +3520,7 @@ SECURITY BOUNDARIES:
       paymentRegistry,
       signingSecret: deps.sessionSecret,
       emailService,
+      frontDeskStore,
     })
   );
 
@@ -2764,6 +3593,8 @@ SECURITY BOUNDARIES:
     ai,
     aiRuntimeConfig,
     aiToolsExecutor,
+    frontDeskStore,
+    frontDeskKnowledgeStore,
     allowedOrigins: configuredOrigins,
   };
 }

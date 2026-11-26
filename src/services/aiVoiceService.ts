@@ -139,7 +139,25 @@ export interface VoiceRuntimeDeps {
   bargeInThreshold?: number;
   idleTimeoutMs?: number;
   maxConsecutiveRecognitionFailures?: number;
+  maxConsecutiveNetworkFailures?: number;
+  echoSuppressionWindowMs?: number;
   playbackWatchdogPaddingMs?: number;
+}
+
+export interface VoiceRuntimeDiagnostics {
+  sessionId: string;
+  status: VoiceSessionState;
+  transportMode: VoiceTransportMode;
+  activeVoiceEngine: VoiceEngineType;
+  turnCount: number;
+  lastTurnId: string | null;
+  circuitBreakerOpen: boolean;
+  consecutiveNetworkFailures: number;
+  consecutiveRecognitionFailures: number;
+  suppressedDuplicatesCount: number;
+  suppressedEchoesCount: number;
+  suppressedNetworkErrorRepeats: number;
+  lastResponseLatencyMs: number | null;
 }
 
 const ALLOWED_TRANSITIONS: Record<VoiceSessionState, ReadonlySet<VoiceSessionState>> = {
@@ -321,6 +339,17 @@ export class AIVoiceService {
   private turnMetricsHistory: VoiceTurnMetrics[] = [];
   private stateTransitionLog: Array<{ from: VoiceSessionState; to: VoiceSessionState; at: number }> = [];
 
+  // Anti-loop protection: turn IDs, echo guard, and network circuit breaker (Section 28)
+  private lastTurnId: string | null = null;
+  private circuitBreakerOpen = false;
+  private consecutiveNetworkFailures = 0;
+  private lastSpokenNetworkErrorAt = 0;
+  private lastAssistantSpokenText = '';
+  private lastAssistantSpeechEndedAt = 0;
+  private suppressedDuplicatesCount = 0;
+  private suppressedEchoesCount = 0;
+  private suppressedNetworkErrorRepeats = 0;
+
   private readonly deps: VoiceRuntimeDeps;
   private readonly idleTimeoutMs: number;
   private readonly clauseMergeDelayMs: number;
@@ -329,6 +358,8 @@ export class AIVoiceService {
   private readonly bargeInHoldMs: number;
   private readonly bargeInThreshold: number;
   private readonly maxConsecutiveRecognitionFailures: number;
+  private readonly maxConsecutiveNetworkFailures: number;
+  private readonly echoSuppressionWindowMs: number;
   private readonly playbackWatchdogPaddingMs: number;
 
   constructor(deps: VoiceRuntimeDeps = {}) {
@@ -344,6 +375,8 @@ export class AIVoiceService {
     this.bargeInHoldMs = deps.bargeInHoldMs ?? 240;
     this.bargeInThreshold = deps.bargeInThreshold ?? 36;
     this.maxConsecutiveRecognitionFailures = deps.maxConsecutiveRecognitionFailures ?? 6;
+    this.maxConsecutiveNetworkFailures = deps.maxConsecutiveNetworkFailures ?? 3;
+    this.echoSuppressionWindowMs = deps.echoSuppressionWindowMs ?? 2600;
     this.playbackWatchdogPaddingMs = deps.playbackWatchdogPaddingMs ?? 6000;
   }
 
@@ -413,6 +446,87 @@ export class AIVoiceService {
 
   public getSharedContext(): VoiceSharedContext {
     return { ...this.sharedContext };
+  }
+
+  public isCircuitBreakerOpen(): boolean {
+    return this.circuitBreakerOpen;
+  }
+
+  public getDiagnostics(): VoiceRuntimeDiagnostics {
+    return {
+      sessionId: this.sessionId,
+      status: this.status,
+      transportMode: this.transportMode,
+      activeVoiceEngine: this.activeVoiceEngine,
+      turnCount: this.turnCount,
+      lastTurnId: this.lastTurnId,
+      circuitBreakerOpen: this.circuitBreakerOpen,
+      consecutiveNetworkFailures: this.consecutiveNetworkFailures,
+      consecutiveRecognitionFailures: this.consecutiveRecognitionFailures,
+      suppressedDuplicatesCount: this.suppressedDuplicatesCount,
+      suppressedEchoesCount: this.suppressedEchoesCount,
+      suppressedNetworkErrorRepeats: this.suppressedNetworkErrorRepeats,
+      lastResponseLatencyMs: this.lastResponseLatencyMs,
+    };
+  }
+
+  /**
+   * Manual recovery control after circuit breaker opens or transient voice outage.
+   */
+  public async retryConnection(): Promise<boolean> {
+    this.circuitBreakerOpen = false;
+    this.consecutiveNetworkFailures = 0;
+    this.consecutiveRecognitionFailures = 0;
+    this.lastSpokenNetworkErrorAt = 0;
+    if (!this.isSessionActiveFlag || this.status === 'disconnected') {
+      return this.startSession();
+    }
+    const mySession = this.sessionSeq;
+    this.transitionTo('reconnecting');
+    if (this.transportMode === 'turn_based_continuous') {
+      this.transitionTo('listening');
+      if (!this.isMicMuted) {
+        await this.resumeSpeechRecognitionSafely(mySession);
+      }
+      return true;
+    }
+    this.stopSession();
+    return this.startSession();
+  }
+
+  public isLikelyAssistantEcho(candidateTranscript: string, referenceAssistantText?: string): boolean {
+    const sourceAssistantText = referenceAssistantText ?? this.lastAssistantSpokenText;
+    if (!sourceAssistantText) return false;
+    if (!referenceAssistantText) {
+      if (!this.lastAssistantSpeechEndedAt) return false;
+      const elapsed = Date.now() - this.lastAssistantSpeechEndedAt;
+      if (elapsed > this.echoSuppressionWindowMs) return false;
+    }
+
+    const cleanCandidate = candidateTranscript
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const cleanAssistant = sourceAssistantText
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleanCandidate || !cleanAssistant) return false;
+
+    if (cleanCandidate.length >= 12 && cleanAssistant.includes(cleanCandidate)) {
+      return true;
+    }
+
+    const candWords = cleanCandidate.split(' ').filter((w) => w.length >= 3);
+    if (candWords.length < 3) return false;
+    const assistantSet = new Set(cleanAssistant.split(' ').filter((w) => w.length >= 3));
+    let overlap = 0;
+    for (const w of candWords) {
+      if (assistantSet.has(w)) overlap += 1;
+    }
+    return overlap / candWords.length >= 0.65;
   }
 
   /**
@@ -732,6 +846,11 @@ export class AIVoiceService {
     this.responseSeq += 1;
     this.turnCount = 0;
     this.consecutiveRecognitionFailures = 0;
+    this.consecutiveNetworkFailures = 0;
+    this.circuitBreakerOpen = false;
+    this.lastSpokenNetworkErrorAt = 0;
+    this.lastAssistantSpokenText = '';
+    this.lastAssistantSpeechEndedAt = 0;
     this.lastFinalSubmittedText = '';
     this.lastFinalSubmittedAt = 0;
     this.bargeInHighSince = null;
@@ -941,6 +1060,9 @@ export class AIVoiceService {
     this.isPushToTalkPressed = false;
     this.liveSessionResumptionHandle = null;
     this.liveEchoBargeInSince = null;
+    this.circuitBreakerOpen = false;
+    this.consecutiveNetworkFailures = 0;
+    this.lastSpokenNetworkErrorAt = 0;
     this.setActiveVoiceEngine('none');
     this.setTransportMode('none');
     this.bargeInHighSince = null;
@@ -1118,6 +1240,20 @@ export class AIVoiceService {
     const mySession = this.sessionSeq;
     if (this.isSessionActiveFlag && !this.isCurrentActiveSession(mySession)) return;
 
+    // Section 28 Circuit Breaker: stop automatic voice turn loops once network failure budget is exhausted
+    if (this.circuitBreakerOpen) {
+      this.callbacks.onError?.(
+        'Voice connection is paused due to repeated network errors. Use Manual Retry or continue via text chat.'
+      );
+      return;
+    }
+
+    // Section 28 Self-Transcription / Acoustic Echo Guard: reject mic pick-up of assistant's own speech
+    if (this.isLikelyAssistantEcho(cleanTranscript)) {
+      this.suppressedEchoesCount += 1;
+      return;
+    }
+
     // Prevent duplicate browser recognition bursts from firing duplicate AI responses
     const normalizedKey = cleanTranscript.toLowerCase().replace(/\s+/g, ' ');
     const now = Date.now();
@@ -1125,6 +1261,7 @@ export class AIVoiceService {
       normalizedKey === this.lastFinalSubmittedText &&
       now - this.lastFinalSubmittedAt < 1800
     ) {
+      this.suppressedDuplicatesCount += 1;
       return;
     }
     this.lastFinalSubmittedText = normalizedKey;
@@ -1136,6 +1273,8 @@ export class AIVoiceService {
     }
 
     const myResponse = ++this.responseSeq;
+    const turnId = `dti-turn-${mySession}-${myResponse}`;
+    this.lastTurnId = turnId;
     const turnStartedAt = Date.now();
     const speechCaptureDurationMs =
       timing?.speechCaptureDurationMs ??
@@ -1207,6 +1346,7 @@ export class AIVoiceService {
           signal: controller.signal,
           body: JSON.stringify({
             sessionId: this.sessionId,
+            turnId,
             userMessage: cleanTranscript,
             language: this.language,
             conversationHistory: priorHistory,
@@ -1255,7 +1395,12 @@ export class AIVoiceService {
     let spokenText: string;
     let detectedIntent: VoiceAiIntent = {};
 
+    let shouldSpeakReply = true;
+    let shouldRestartListeningAfter = true;
+
     if (responseData && typeof responseData.replyText === 'string' && responseData.replyText.trim()) {
+      this.consecutiveNetworkFailures = 0;
+      this.circuitBreakerOpen = false;
       if (responseData.sessionId) {
         this.sessionId = responseData.sessionId;
       }
@@ -1284,11 +1429,33 @@ export class AIVoiceService {
         updatedContext: responseData.updatedContext,
       };
     } else {
-      // Surface accurate connection error and recover gracefully to listening
-      const errMsg = lastError || 'Temporary voice connection issue. Reconnecting automatically.';
+      // Section 28 Anti-Loop Circuit Breaker: NEVER repeatedly speak the same network error!
+      this.consecutiveNetworkFailures += 1;
+      const errMsg = lastError || 'Temporary voice connection issue. You may retry manually or continue via text chat.';
       this.callbacks.onError?.(errMsg);
       replyText = this.generateContextualLocalFallback(cleanTranscript);
       spokenText = replyText;
+
+      const nowMs = Date.now();
+      const repeatedErrorTooSoon =
+        this.lastSpokenNetworkErrorAt > 0 && nowMs - this.lastSpokenNetworkErrorAt < 20_000;
+
+      if (this.consecutiveNetworkFailures >= this.maxConsecutiveNetworkFailures) {
+        // Exhausted failure budget -> open circuit breaker, halt auto-listening loop cleanly!
+        this.circuitBreakerOpen = true;
+        this.pauseRecognitionTemporarily();
+        shouldSpeakReply = false;
+        shouldRestartListeningAfter = false;
+        this.suppressedNetworkErrorRepeats += 1;
+        if (this.isSessionActiveFlag) {
+          this.transitionTo('service_unavailable');
+        }
+      } else if (repeatedErrorTooSoon) {
+        shouldSpeakReply = false;
+        this.suppressedNetworkErrorRepeats += 1;
+      } else {
+        this.lastSpokenNetworkErrorAt = nowMs;
+      }
     }
 
     this.turnCount += 1;
@@ -1316,7 +1483,12 @@ export class AIVoiceService {
     }
 
     const audioGenStart = Date.now();
-    const audioResult = await this.speakTextInternal(spokenText, mySession, myResponse, true);
+    const audioResult = shouldSpeakReply
+      ? await this.speakTextInternal(spokenText, mySession, myResponse, shouldRestartListeningAfter)
+      : { played: false, audioGenerationLatencyMs: 0, firstAudioAtMs: null };
+    if (!shouldSpeakReply && shouldRestartListeningAfter && this.isCurrentResponse(mySession, myResponse)) {
+      await this.handleAssistantPlaybackComplete(mySession, myResponse);
+    }
     const totalTurnLatencyMs = Date.now() - turnStartedAt;
 
     if (this.isCurrentActiveSession(mySession)) {
@@ -1382,6 +1554,7 @@ export class AIVoiceService {
 
     this.clearPlaybackResources();
     this.pauseRecognitionTemporarily();
+    this.lastAssistantSpokenText = cleanText;
 
     if (this.isSessionActiveFlag) {
       this.transitionTo('ai_speaking');
@@ -1750,6 +1923,11 @@ export class AIVoiceService {
     if (!this.isCurrentResponse(sessionSeq, responseSeq)) return;
 
     this.clearPlaybackResources();
+    this.lastAssistantSpeechEndedAt = Date.now();
+    if (this.circuitBreakerOpen) {
+      this.transitionTo('service_unavailable');
+      return;
+    }
     this.transitionTo('listening');
     this.resetIdleTimer(sessionSeq);
 
@@ -2001,7 +2179,14 @@ export class AIVoiceService {
       this.isRecognitionRunning = false;
       if (!this.isCurrentActiveSession(sessionSeq)) return;
       if (this.isMicMuted || this.recognitionPausedForSpeech) return;
-      if (this.status === 'ai_speaking' || this.status === 'processing' || this.status === 'stopping' || this.status === 'error') {
+      if (
+        this.status === 'ai_speaking' ||
+        this.status === 'processing' ||
+        this.status === 'stopping' ||
+        this.status === 'error' ||
+        this.status === 'service_unavailable' ||
+        this.circuitBreakerOpen
+      ) {
         return;
       }
 

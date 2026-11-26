@@ -65,6 +65,7 @@ export const PortalLayout: React.FC<{
         { label: 'Overview', path: ROUTES.PORTAL.DASHBOARD, icon: LayoutDashboard },
         { label: 'Solutions Directory', path: ROUTES.PORTAL.STORE, icon: Layers, matchPrefixes: [ROUTES.PORTAL.STORE] },
         { label: 'Inquiries & Proposals', path: ROUTES.PORTAL.CART, icon: ClipboardCheck, matchPrefixes: [ROUTES.PORTAL.CHECKOUT, ROUTES.PORTAL.PROPOSALS] },
+        { label: 'AI Discovery & Masterplans', path: ROUTES.PORTAL.INQUIRIES, icon: FileText },
         { label: 'My Engagements', path: ROUTES.PORTAL.SERVICES, icon: Briefcase },
       ],
     },

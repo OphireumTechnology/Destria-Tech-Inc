@@ -580,12 +580,12 @@ test('Scenario 1-6, 15, 16, 20: Real GitHub Pages static-hosting HTTP simulation
     await new Promise<void>((resolve) => staticServer.close(() => resolve()));
   }
 
-  // Verify manifest counts match expected implementation scope (including /corporate-profile and /resources)
-  assert.equal(PUBLIC_STATIC_ROUTES.length, 9);
+  // Verify manifest counts match expected implementation scope (including /corporate-profile, /resources, /ai-frontdesk, /portal/inquiries, and /admin/ai-frontdesk)
+  assert.equal(PUBLIC_STATIC_ROUTES.length, 10);
   assert.equal(GOVERNANCE_STATIC_ROUTES.length, 11);
-  assert.equal(PORTAL_STATIC_ROUTES.length, 27);
+  assert.equal(PORTAL_STATIC_ROUTES.length, 28);
   assert.equal(PORTAL_DYNAMIC_PREFIXES.length, 3);
-  assert.equal(ADMIN_STATIC_ROUTES.length, 5);
+  assert.equal(ADMIN_STATIC_ROUTES.length, 6);
 });
 
 test('Scenario 18: Automated clean-URL source & dist regression gate script passes with zero violations', () => {
