@@ -99,7 +99,9 @@ export const PortalFrontDeskInquiriesPage: React.FC = () => {
   const handleSaveCorrection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRef || saving) return;
+    const targetInquiry = inquiries.find((i) => i.referenceCode === editingRef);
     setSaving(true);
+    setError(null);
     setSaveNotice(null);
     try {
       const data = await portalRequest<{ success: boolean; inquiry: ClientFrontDeskInquiry; message?: string }>(
@@ -107,6 +109,7 @@ export const PortalFrontDeskInquiriesPage: React.FC = () => {
         {
           method: 'PATCH',
           body: {
+            expectedVersion: targetInquiry?.dossierVersion,
             patch: {
               projectOverview: {
                 projectName: editProjectName,
@@ -126,7 +129,14 @@ export const PortalFrontDeskInquiriesPage: React.FC = () => {
         setSaveNotice(data.message || 'Project requirements and preliminary masterplan updated.');
       }
     } catch (err: any) {
-      setError(err?.message || 'Unable to save inquiry corrections.');
+      if (err?.status === 409) {
+        setError(
+          'This inquiry was updated in another session. Your view has been refreshed — please review the latest version before resubmitting your changes.'
+        );
+        void loadInquiries();
+      } else {
+        setError(err?.message || 'Unable to save inquiry corrections.');
+      }
     } finally {
       setSaving(false);
     }

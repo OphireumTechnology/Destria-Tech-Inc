@@ -1,16 +1,34 @@
 -- =============================================================================
--- Migration 008: AI Front Desk Durability, Lossless Hydration & RLS Hardening
+-- Migration 008: AI Front Desk Durability, Schema Reconciliation & RLS Hardening
 -- =============================================================================
--- Strictly additive & idempotent migration extending 007_ai_frontdesk_platform.sql.
--- Enables zero-data-loss multi-instance Supabase persistence for:
---   - Single-use Front Desk confirmation tokens (`frontdesk_pending_submissions`)
---   - Full hydration of `frontdesk_project_inquiries` across backend restarts
---   - Idempotent submission keys preventing duplicate inquiry writes
---   - Full metadata hydration of `ai_knowledge_documents` (canonical_links, compliance_notice)
---   - Complete RLS client-owner read policies, updated_at triggers, and query indexes
+-- Strictly additive & idempotent corrective migration extending
+-- `007_ai_frontdesk_platform.sql` without altering historical migration history.
+--
+-- Reconciles and hardens:
+--   1. `public.ai_conversation_sessions` (from 007): adds `dossier_version`,
+--      `dossier_json`, and `updated_at` for lossless multi-instance hydration.
+--   2. `public.frontdesk_pending_submissions`: durable single-use confirmation
+--      tokens surviving backend restarts and multi-instance deployments.
+--   3. `public.frontdesk_project_inquiries` (from 007): adds lossless JSON
+--      hydration columns, defaults `client_confirmed_at` to NOW(), and indexes
+--      `idempotency_key`, `session_key`, and `updated_at`.
+--   4. `public.ai_knowledge_documents` (from 007): preserves canonical `id` and
+--      `version` columns and adds `canonical_links`, `compliance_notice`, and
+--      `versions_json`.
+--   5. Complete `service_role` + strict client-owner RLS policies across all
+--      Front Desk tables, `updated_at` triggers, and migration metadata `'008'`.
 -- =============================================================================
 
--- 1. Single-Use Session-Scoped Confirmation Tokens (survives restarts & multi-instance deploys)
+-- 1. Extend `ai_conversation_sessions` (created in 007) for lossless dossier hydration
+ALTER TABLE public.ai_conversation_sessions
+  ADD COLUMN IF NOT EXISTS dossier_version INTEGER NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS dossier_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+CREATE INDEX IF NOT EXISTS idx_ai_conversation_sessions_updated_at
+  ON public.ai_conversation_sessions(updated_at DESC);
+
+-- 2. Single-Use Session-Scoped Confirmation Tokens (survives restarts & multi-instance deploys)
 CREATE TABLE IF NOT EXISTS public.frontdesk_pending_submissions (
   confirmation_token TEXT PRIMARY KEY,
   session_key TEXT NOT NULL,
@@ -34,7 +52,10 @@ CREATE POLICY frontdesk_pending_service_all
   USING (auth.role() = 'service_role')
   WITH CHECK (auth.role() = 'service_role');
 
--- 2. Lossless Hydration & Idempotency Columns on `frontdesk_project_inquiries`
+-- 3. Lossless Hydration & Idempotency Columns on `frontdesk_project_inquiries` (created in 007)
+ALTER TABLE public.frontdesk_project_inquiries
+  ALTER COLUMN client_confirmed_at SET DEFAULT NOW();
+
 ALTER TABLE public.frontdesk_project_inquiries
   ADD COLUMN IF NOT EXISTS session_key TEXT,
   ADD COLUMN IF NOT EXISTS client_name TEXT,
@@ -62,13 +83,16 @@ CREATE INDEX IF NOT EXISTS idx_frontdesk_inquiries_session_key
 CREATE INDEX IF NOT EXISTS idx_frontdesk_inquiries_updated_at
   ON public.frontdesk_project_inquiries(updated_at DESC);
 
--- 3. Extend `ai_knowledge_documents` for Full Managed Knowledge Hydration
+-- 4. Extend `ai_knowledge_documents` (created in 007 with PK `id` and `version`)
 ALTER TABLE public.ai_knowledge_documents
   ADD COLUMN IF NOT EXISTS canonical_links TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   ADD COLUMN IF NOT EXISTS compliance_notice TEXT,
   ADD COLUMN IF NOT EXISTS versions_json JSONB NOT NULL DEFAULT '[]'::jsonb;
 
--- 4. Performance Indexes on Human Escalations & Quality Evaluations
+CREATE INDEX IF NOT EXISTS idx_ai_knowledge_status_visibility
+  ON public.ai_knowledge_documents(status, visibility, updated_at DESC);
+
+-- 5. Performance Indexes on Human Escalations & Quality Evaluations
 CREATE INDEX IF NOT EXISTS idx_frontdesk_escalations_status
   ON public.frontdesk_human_escalations(status, updated_at DESC);
 
@@ -78,7 +102,35 @@ CREATE INDEX IF NOT EXISTS idx_frontdesk_escalations_session
 CREATE INDEX IF NOT EXISTS idx_ai_quality_evals_created
   ON public.ai_quality_evaluations(created_at DESC);
 
--- 5. Complete Client-Owner RLS Read Isolation on Child Tables
+-- 6. Complete Explicit `service_role` + Strict Client-Owner RLS Policies on 007/008 Tables
+DO $$
+DECLARE
+  svc_tbl TEXT;
+BEGIN
+  FOREACH svc_tbl IN ARRAY ARRAY[
+    'frontdesk_companies',
+    'frontdesk_client_profiles',
+    'ai_conversation_sessions',
+    'ai_conversation_turns',
+    'frontdesk_project_inquiries',
+    'frontdesk_requirement_versions',
+    'frontdesk_executive_reviews',
+    'frontdesk_human_escalations',
+    'ai_knowledge_documents',
+    'ai_knowledge_versions',
+    'ai_quality_evaluations'
+  ]
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I_service_role_all ON public.%I;', svc_tbl, svc_tbl);
+    EXECUTE format(
+      'CREATE POLICY %I_service_role_all ON public.%I FOR ALL USING (auth.role() = ''service_role'') WITH CHECK (auth.role() = ''service_role'');',
+      svc_tbl,
+      svc_tbl
+    );
+  END LOOP;
+END;
+$$;
+
 -- Clients may ONLY read requirement versions belonging to their own normalized owner_email inquiry.
 DROP POLICY IF EXISTS frontdesk_req_versions_client_read ON public.frontdesk_requirement_versions;
 CREATE POLICY frontdesk_req_versions_client_read
@@ -103,7 +155,7 @@ CREATE POLICY frontdesk_client_profiles_client_read
     AND lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
   );
 
--- 6. Automatic `updated_at` Timestamp Triggers (idempotent)
+-- 7. Automatic `updated_at` Timestamp Triggers (reconciled with exact 007 table names)
 CREATE OR REPLACE FUNCTION public.dti_set_updated_at_timestamp()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -119,8 +171,9 @@ DECLARE
   tbl TEXT;
 BEGIN
   FOREACH tbl IN ARRAY ARRAY[
-    'frontdesk_sessions',
+    'frontdesk_companies',
     'frontdesk_client_profiles',
+    'ai_conversation_sessions',
     'frontdesk_project_inquiries',
     'frontdesk_human_escalations',
     'ai_knowledge_documents'
@@ -136,7 +189,7 @@ BEGIN
 END;
 $$;
 
--- 7. Record Schema Migration Metadata for Authorized System Health Inspection
+-- 8. Record Schema Migration Metadata for Authorized System Health Inspection
 CREATE TABLE IF NOT EXISTS public.schema_migration_metadata (
   migration_version TEXT PRIMARY KEY,
   description TEXT NOT NULL,
@@ -153,5 +206,7 @@ CREATE POLICY schema_migration_metadata_service_all
   WITH CHECK (auth.role() = 'service_role');
 
 INSERT INTO public.schema_migration_metadata (migration_version, description)
-VALUES ('008', 'AI Front Desk durability, pending confirmation persistence, idempotency, triggers, and RLS hardening')
+VALUES
+  ('007', 'AI Front Desk core platform tables, knowledge versioning, escalations, quality evaluations, and RLS'),
+  ('008', 'AI Front Desk schema reconciliation, pending confirmation persistence, idempotency, triggers, and RLS hardening')
 ON CONFLICT (migration_version) DO NOTHING;

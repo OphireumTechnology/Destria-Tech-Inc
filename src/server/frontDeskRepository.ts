@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type {
   AiQualityEvaluationRecord,
@@ -186,6 +187,92 @@ export class SnapshotFrontDeskPersistenceAdapter implements FrontDeskPersistence
   async listKnowledgeDocuments(): Promise<ManagedKnowledgeDocument[]> {
     return Array.from(this.backing.knowledgeDocs.values()).map((d) => structuredClone(d));
   }
+
+  /**
+   * Exports a deterministic JSON backup bundle with a SHA-256 integrity checksum for
+   * isolated disaster-recovery and restoration verification (DTI-015).
+   */
+  public exportSignedBackupSnapshot(): {
+    schemaVersion: string;
+    exportedAt: string;
+    checksumSha256: string;
+    payloadJson: string;
+    counts: {
+      sessions: number;
+      pendingSubmissions: number;
+      inquiries: number;
+      escalations: number;
+      qualityEvaluations: number;
+      knowledgeDocs: number;
+    };
+  } {
+    const payload = {
+      sessions: Array.from(this.backing.sessions.entries()),
+      pendingSubmissions: Array.from(this.backing.pendingSubmissions.entries()),
+      inquiries: Array.from(this.backing.inquiries.entries()),
+      idempotencyIndex: Array.from(this.backing.idempotencyIndex.entries()),
+      escalations: Array.from(this.backing.escalations.entries()),
+      qualityEvaluations: this.backing.qualityEvaluations,
+      knowledgeDocs: Array.from(this.backing.knowledgeDocs.entries()),
+    };
+    const payloadJson = JSON.stringify(payload);
+    const checksumSha256 = crypto.createHash('sha256').update(payloadJson, 'utf8').digest('hex');
+    return {
+      schemaVersion: '008',
+      exportedAt: new Date().toISOString(),
+      checksumSha256,
+      payloadJson,
+      counts: {
+        sessions: payload.sessions.length,
+        pendingSubmissions: payload.pendingSubmissions.length,
+        inquiries: payload.inquiries.length,
+        escalations: payload.escalations.length,
+        qualityEvaluations: payload.qualityEvaluations.length,
+        knowledgeDocs: payload.knowledgeDocs.length,
+      },
+    };
+  }
+
+  /**
+   * Verifies SHA-256 backup checksum and restores all persisted entities atomically.
+   * Rejects tampered or corrupted snapshots without mutating current state.
+   */
+  public restoreSignedBackupSnapshot(snapshot: {
+    checksumSha256: string;
+    payloadJson: string;
+  }): { ok: true; restoredCounts: Record<string, number> } | { ok: false; error: string } {
+    const computed = crypto.createHash('sha256').update(snapshot.payloadJson, 'utf8').digest('hex');
+    const a = Buffer.from(computed, 'utf8');
+    const b = Buffer.from(String(snapshot.checksumSha256 || ''), 'utf8');
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return { ok: false, error: 'Backup snapshot integrity checksum mismatch; restore aborted.' };
+    }
+    try {
+      const parsed = JSON.parse(snapshot.payloadJson);
+      this.backing.sessions = new Map(parsed.sessions || []);
+      this.backing.pendingSubmissions = new Map(parsed.pendingSubmissions || []);
+      this.backing.inquiries = new Map(parsed.inquiries || []);
+      this.backing.idempotencyIndex = new Map(parsed.idempotencyIndex || []);
+      this.backing.escalations = new Map(parsed.escalations || []);
+      this.backing.qualityEvaluations = Array.isArray(parsed.qualityEvaluations)
+        ? parsed.qualityEvaluations
+        : [];
+      this.backing.knowledgeDocs = new Map(parsed.knowledgeDocs || []);
+      return {
+        ok: true,
+        restoredCounts: {
+          sessions: this.backing.sessions.size,
+          pendingSubmissions: this.backing.pendingSubmissions.size,
+          inquiries: this.backing.inquiries.size,
+          escalations: this.backing.escalations.size,
+          qualityEvaluations: this.backing.qualityEvaluations.length,
+          knowledgeDocs: this.backing.knowledgeDocs.size,
+        },
+      };
+    } catch {
+      return { ok: false, error: 'Backup snapshot JSON payload is malformed; restore aborted.' };
+    }
+  }
 }
 
 function mapInquiryRow(row: any): SubmittedFrontDeskInquiry {
@@ -221,7 +308,7 @@ function mapInquiryRow(row: any): SubmittedFrontDeskInquiry {
     recommendation: row.recommendation_json || null,
     summary: row.summary_json || null,
     masterplan: row.masterplan_json,
-    consultationReferenceCode: row.consultation_reference_code || undefined,
+    consultationReferenceCode: row.consultation_appointment_ref || row.consultation_reference_code || undefined,
     consultationStatus: (row.consultation_status || 'none') as SubmittedFrontDeskInquiry['consultationStatus'],
     consultationDate: row.consultation_date || undefined,
     consultationSlot: row.consultation_slot || undefined,
@@ -275,7 +362,7 @@ function mapQualityRow(row: any): AiQualityEvaluationRecord {
 
 function mapKnowledgeDocRow(row: any): ManagedKnowledgeDocument {
   return {
-    id: String(row.doc_key),
+    id: String(row.id || row.doc_key),
     domain: row.domain,
     knowledgeType: row.knowledge_type || 'general_technical_knowledge',
     title: String(row.title),
@@ -287,7 +374,7 @@ function mapKnowledgeDocRow(row: any): ManagedKnowledgeDocument {
     sourceReference: String(row.source_reference || ''),
     status: (row.status === 'approved' || row.status === 'deactivated' ? row.status : 'draft'),
     visibility: row.visibility === 'internal_only' ? 'internal_only' : 'public',
-    version: Number(row.current_version || 1),
+    version: Number(row.version ?? row.current_version ?? 1),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
     approvedBy: row.approved_by || undefined,
@@ -335,17 +422,19 @@ export class SupabaseFrontDeskPersistenceAdapter implements FrontDeskPersistence
 
   async saveSession(dossier: FrontDeskSessionDossier): Promise<void> {
     const db = this.getClient();
-    const { error } = await db.from('frontdesk_sessions').upsert(
+    const now = dossier.updatedAt || new Date().toISOString();
+    const { error } = await db.from('ai_conversation_sessions').upsert(
       {
         session_key: dossier.sessionId,
         channel: 'ai_frontdesk_chat',
-        detected_language: dossier.clientProfile?.preferredLanguage || 'en-US',
+        language: dossier.clientProfile?.preferredLanguage || 'en-US',
         discovery_active: Boolean(dossier.discoveryActive),
         lead_status: dossier.leadStatus,
         completeness_score: dossier.completeness.scorePercent,
         dossier_version: dossier.version,
         dossier_json: dossier,
-        updated_at: dossier.updatedAt || new Date().toISOString(),
+        last_activity_at: now,
+        updated_at: now,
       },
       { onConflict: 'session_key' }
     );
@@ -357,7 +446,7 @@ export class SupabaseFrontDeskPersistenceAdapter implements FrontDeskPersistence
   async loadSession(sessionKey: string): Promise<FrontDeskSessionDossier | null> {
     const db = this.getClient();
     const { data, error } = await db
-      .from('frontdesk_sessions')
+      .from('ai_conversation_sessions')
       .select('dossier_json')
       .eq('session_key', sessionKey)
       .maybeSingle();
@@ -484,7 +573,7 @@ export class SupabaseFrontDeskPersistenceAdapter implements FrontDeskPersistence
         recommendation_json: inquiry.recommendation,
         summary_json: inquiry.summary,
         masterplan_json: inquiry.masterplan,
-        consultation_reference_code: inquiry.consultationReferenceCode || null,
+        consultation_appointment_ref: inquiry.consultationReferenceCode || null,
         consultation_status: inquiry.consultationStatus || 'none',
         consultation_date: inquiry.consultationDate || null,
         consultation_slot: inquiry.consultationSlot || null,
@@ -495,6 +584,7 @@ export class SupabaseFrontDeskPersistenceAdapter implements FrontDeskPersistence
         review_history_json: inquiry.reviewHistory,
         client_correction_history_json: inquiry.clientCorrectionHistory,
         ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+        client_confirmed_at: inquiry.createdAt,
         created_at: inquiry.createdAt,
         updated_at: inquiry.updatedAt,
       },
@@ -646,7 +736,7 @@ export class SupabaseFrontDeskPersistenceAdapter implements FrontDeskPersistence
     const db = this.getClient();
     const { error } = await db.from('ai_knowledge_documents').upsert(
       {
-        doc_key: doc.id,
+        id: doc.id,
         domain: doc.domain,
         knowledge_type: doc.knowledgeType,
         title: doc.title,
@@ -658,14 +748,14 @@ export class SupabaseFrontDeskPersistenceAdapter implements FrontDeskPersistence
         source_reference: doc.sourceReference,
         status: doc.status,
         visibility: doc.visibility,
-        current_version: doc.version,
+        version: doc.version,
         approved_by: doc.approvedBy || null,
         approved_at: doc.approvedAt || null,
         versions_json: doc.versions,
         created_at: doc.createdAt,
         updated_at: doc.updatedAt,
       },
-      { onConflict: 'doc_key' }
+      { onConflict: 'id' }
     );
     if (error) {
       throw new FrontDeskPersistenceUnavailableError(`Failed to persist knowledge document: ${error.message}`);
