@@ -285,6 +285,9 @@ export class AIVoiceService {
   private sessionSeq = 0;
   private responseSeq = 0;
   private sessionId = '';
+  private sessionToken: string | null = null;
+  private externalSessionBound = false;
+  private unifiedVoiceStreamPath: string | null = null;
   private turnCount = 0;
 
   // Audio capture & playback resources
@@ -412,6 +415,29 @@ export class AIVoiceService {
 
   public getSessionId(): string {
     return this.sessionId;
+  }
+
+  public getSessionToken(): string | null {
+    return this.sessionToken;
+  }
+
+  public getUnifiedVoiceStreamPath(): string | null {
+    return this.unifiedVoiceStreamPath;
+  }
+
+  /**
+   * Binds the voice engine to an existing canonical Front Desk / Chat session ID
+   * (and optional session-scoped HMAC token) so voice and chat share one timeline.
+   */
+  public setSessionIdentity(sessionId: string, sessionToken?: string | null) {
+    const clean = String(sessionId || '').trim();
+    if (clean) {
+      this.sessionId = clean;
+      this.externalSessionBound = true;
+    }
+    if (sessionToken !== undefined) {
+      this.sessionToken = sessionToken ? String(sessionToken).trim() : null;
+    }
   }
 
   public getTurnCount(): number {
@@ -936,12 +962,17 @@ export class AIVoiceService {
       }
     }, this.sessionPreflightTimeoutMs);
 
+    const voiceSessionEndpoint = apiUrl('/api/voice/session');
     try {
-      const res = await this.getFetch()(apiUrl('/api/voice/session'), {
+      const res = await this.getFetch()(voiceSessionEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.sessionToken ? { 'X-FrontDesk-Session-Token': this.sessionToken } : {}),
+        },
         signal: preflightController.signal,
         body: JSON.stringify({
+          sessionId: this.externalSessionBound ? this.sessionId : undefined,
           language: this.language,
           stateContext: this.sharedContext,
         }),
@@ -975,6 +1006,12 @@ export class AIVoiceService {
       }
 
       this.sessionId = data.sessionId.trim();
+      if (typeof data.sessionToken === 'string' && data.sessionToken.trim()) {
+        this.sessionToken = data.sessionToken.trim();
+      }
+      if (typeof data.unifiedVoiceStreamPath === 'string' && data.unifiedVoiceStreamPath.trim()) {
+        this.unifiedVoiceStreamPath = data.unifiedVoiceStreamPath.trim();
+      }
       liveStreamingAvailable = Boolean(data.liveStreamingAvailable);
       if (typeof data.liveWebSocketPath === 'string' && data.liveWebSocketPath) {
         liveWebSocketPath = data.liveWebSocketPath;
@@ -990,7 +1027,7 @@ export class AIVoiceService {
       this.callbacks.onError?.(
         isTimeout
           ? 'DESTRIA AI voice service timed out during startup check. Please retry or continue via text chat.'
-          : 'DESTRIA AI voice service is currently unreachable. Please check your connection or continue via text chat.'
+          : `DESTRIA AI voice backend (${voiceSessionEndpoint}) is unreachable—please verify API connectivity or continue via text chat.`
       );
       return false;
     }
@@ -1325,6 +1362,20 @@ export class AIVoiceService {
       } catch {
         // Ignore
       }
+    }
+
+    if (this.sessionId && this.sessionToken) {
+      void this.getFetch()(
+        apiUrl(`/api/frontdesk/sessions/${encodeURIComponent(this.sessionId)}/interrupt`),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-FrontDesk-Session-Token': this.sessionToken,
+          },
+          body: JSON.stringify({ reason: initiatedBySpeech ? 'user_barge_in' : 'manual_interrupt' }),
+        }
+      ).catch(() => {});
     }
 
     if (initiatedBySpeech) {

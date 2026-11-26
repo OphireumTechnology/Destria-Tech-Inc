@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Activity,
   Award,
   BarChart3,
   BookOpen,
+  CalendarClock,
   CheckCircle2,
   ClipboardCheck,
   Download,
@@ -11,6 +13,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Users,
 } from 'lucide-react';
 import { apiUrl } from '../lib/apiClient';
 
@@ -19,7 +22,9 @@ interface AdminFrontDeskConsoleProps {
 }
 
 export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ adminToken }) => {
-  const [subTab, setSubTab] = useState<'overview' | 'inquiries' | 'escalations' | 'knowledge' | 'quality'>('overview');
+  const [subTab, setSubTab] = useState<
+    'overview' | 'inquiries' | 'escalations' | 'agents' | 'operations' | 'inference' | 'knowledge' | 'quality'
+  >('overview');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -35,6 +40,23 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
 
   // Escalations
   const [escalations, setEscalations] = useState<any[]>([]);
+
+  // Departments, Human Agents & Assignments
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [humanAgents, setHumanAgents] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [newAgentName, setNewAgentName] = useState('');
+  const [newAgentEmail, setNewAgentEmail] = useState('');
+  const [newAgentDept, setNewAgentDept] = useState('general_reception');
+
+  // Callbacks & Business Hours / Holidays
+  const [callbacks, setCallbacks] = useState<any[]>([]);
+  const [scheduleData, setScheduleData] = useState<any | null>(null);
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [newHolidayName, setNewHolidayName] = useState('');
+
+  // Local AI Inference Worker Health
+  const [inferenceHealth, setInferenceHealth] = useState<any | null>(null);
 
   // Knowledge Base Administration
   const [knowledgeDocs, setKnowledgeDocs] = useState<any[]>([]);
@@ -70,28 +92,47 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
     setLoading(true);
     try {
       const headers = buildHeaders();
-      const [ovRes, inqRes, escRes, kbRes, qaRes] = await Promise.all([
-        fetch(apiUrl('/api/admin/frontdesk/overview'), { headers, credentials: 'include' }),
-        fetch(
-          apiUrl(`/api/admin/frontdesk/inquiries?limit=50&offset=0&q=${encodeURIComponent(inquirySearch)}`),
-          { headers, credentials: 'include' }
-        ),
-        fetch(apiUrl('/api/admin/frontdesk/escalations'), { headers, credentials: 'include' }),
-        fetch(apiUrl('/api/admin/frontdesk/knowledge'), { headers, credentials: 'include' }),
-        fetch(apiUrl('/api/admin/frontdesk/quality'), { headers, credentials: 'include' }),
-      ]);
-      const [ov, inq, esc, kb, qa] = await Promise.all([
+      const [ovRes, inqRes, escRes, kbRes, qaRes, deptRes, agentRes, cbRes, schedRes, infRes] =
+        await Promise.all([
+          fetch(apiUrl('/api/admin/frontdesk/overview'), { headers, credentials: 'include' }),
+          fetch(
+            apiUrl(`/api/admin/frontdesk/inquiries?limit=50&offset=0&q=${encodeURIComponent(inquirySearch)}`),
+            { headers, credentials: 'include' }
+          ),
+          fetch(apiUrl('/api/admin/frontdesk/escalations'), { headers, credentials: 'include' }),
+          fetch(apiUrl('/api/admin/frontdesk/knowledge'), { headers, credentials: 'include' }),
+          fetch(apiUrl('/api/admin/frontdesk/quality'), { headers, credentials: 'include' }),
+          fetch(apiUrl('/api/admin/frontdesk/departments'), { headers, credentials: 'include' }),
+          fetch(apiUrl('/api/admin/frontdesk/agents'), { headers, credentials: 'include' }),
+          fetch(apiUrl('/api/admin/frontdesk/callbacks'), { headers, credentials: 'include' }),
+          fetch(apiUrl('/api/admin/frontdesk/schedule'), { headers, credentials: 'include' }),
+          fetch(apiUrl('/api/admin/frontdesk/inference-health'), { headers, credentials: 'include' }),
+        ]);
+      const [ov, inq, esc, kb, qa, dept, ag, cb, sched, inf] = await Promise.all([
         ovRes.json().catch(() => ({})),
         inqRes.json().catch(() => ({})),
         escRes.json().catch(() => ({})),
         kbRes.json().catch(() => ({})),
         qaRes.json().catch(() => ({})),
+        deptRes.json().catch(() => ({})),
+        agentRes.json().catch(() => ({})),
+        cbRes.json().catch(() => ({})),
+        schedRes.json().catch(() => ({})),
+        infRes.json().catch(() => ({})),
       ]);
       if (ov.success) setOverview(ov);
       if (inq.success) setInquiries(Array.isArray(inq.records) ? inq.records : []);
       if (esc.success) setEscalations(Array.isArray(esc.records) ? esc.records : []);
       if (kb.success) setKnowledgeDocs(Array.isArray(kb.documents) ? kb.documents : []);
       if (qa.success) setQualityRecords(Array.isArray(qa.records) ? qa.records : []);
+      if (dept.success) setDepartments(Array.isArray(dept.departments) ? dept.departments : []);
+      if (ag.success) {
+        setHumanAgents(Array.isArray(ag.agents) ? ag.agents : []);
+        setAssignments(Array.isArray(ag.assignments) ? ag.assignments : []);
+      }
+      if (cb.success) setCallbacks(Array.isArray(cb.callbacks) ? cb.callbacks : []);
+      if (sched.success) setScheduleData(sched);
+      if (inf.success) setInferenceHealth(inf);
     } finally {
       setLoading(false);
     }
@@ -225,6 +266,95 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
     }
   };
 
+  const handleCreateHumanAgent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFeedback(null);
+    const res = await fetch(apiUrl('/api/admin/frontdesk/agents'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildHeaders(true),
+      body: JSON.stringify({
+        displayName: newAgentName,
+        adminUserEmail: newAgentEmail,
+        departmentSlug: newAgentDept,
+        availabilityState: 'available',
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      setNewAgentName('');
+      setNewAgentEmail('');
+      setFeedback(`Human specialist "${data.agent.displayName}" registered.`);
+      void loadAll();
+    } else {
+      setFeedback(data.error || 'Could not register specialist.');
+    }
+  };
+
+  const handleUpdateAgentPresence = async (agentId: string, availabilityState: string) => {
+    const res = await fetch(apiUrl(`/api/admin/frontdesk/agents/${encodeURIComponent(agentId)}`), {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: buildHeaders(true),
+      body: JSON.stringify({ availabilityState }),
+    });
+    if (res.ok) {
+      setFeedback(`Agent presence updated to ${availabilityState}.`);
+      void loadAll();
+    }
+  };
+
+  const handleAssignmentAction = async (assignmentId: string, action: 'accept' | 'release') => {
+    const res = await fetch(
+      apiUrl(`/api/admin/frontdesk/assignments/${encodeURIComponent(assignmentId)}/${action}`),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: buildHeaders(true),
+        body: JSON.stringify({ status: 'completed' }),
+      }
+    );
+    if (res.ok) {
+      setFeedback(`Assignment ${action === 'accept' ? 'accepted' : 'released'}.`);
+      void loadAll();
+    }
+  };
+
+  const handleUpdateCallbackStatus = async (callbackId: string, status: string) => {
+    const res = await fetch(apiUrl(`/api/admin/frontdesk/callbacks/${encodeURIComponent(callbackId)}`), {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: buildHeaders(true),
+      body: JSON.stringify({ status }),
+    });
+    if (res.ok) {
+      setFeedback(`Callback status set to ${status}.`);
+      void loadAll();
+    }
+  };
+
+  const handleAddHoliday = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newHolidayDate || !newHolidayName.trim()) return;
+    const res = await fetch(apiUrl('/api/admin/frontdesk/schedule'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildHeaders(true),
+      body: JSON.stringify({
+        entryType: 'holiday',
+        holidayDate: newHolidayDate,
+        holidayName: newHolidayName.trim(),
+        isClosed: true,
+      }),
+    });
+    if (res.ok) {
+      setNewHolidayDate('');
+      setNewHolidayName('');
+      setFeedback('Corporate holiday saved.');
+      void loadAll();
+    }
+  };
+
   const analytics = overview?.analytics;
   const reviewStages: string[] = overview?.executiveReviewStages || [
     'Project inquiry received',
@@ -244,6 +374,9 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
             { id: 'overview', label: 'Analytics & Overview', icon: BarChart3 },
             { id: 'inquiries', label: `Qualified Inquiries (${inquiries.length})`, icon: ClipboardCheck },
             { id: 'escalations', label: `Human Escalations (${escalations.length})`, icon: Headphones },
+            { id: 'agents', label: `Departments & Agents (${humanAgents.length})`, icon: Users },
+            { id: 'operations', label: `Callbacks & Hours (${callbacks.length})`, icon: CalendarClock },
+            { id: 'inference', label: 'AI Worker Health', icon: Activity },
             { id: 'knowledge', label: `AI Knowledge (${knowledgeDocs.length})`, icon: BookOpen },
             { id: 'quality', label: `AI Quality (${qualityRecords.length})`, icon: Award },
           ].map((tab) => {
@@ -640,6 +773,265 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* TAB 6: DEPARTMENTS, HUMAN AGENTS & ATOMIC ASSIGNMENTS */}
+      {subTab === 'agents' && (
+        <div className="space-y-5 text-xs">
+          <form onSubmit={handleCreateHumanAgent} className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+            <div className="font-mono text-[11px] uppercase text-[#00C2C7] font-bold flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" />
+              <span>Register Human Front Desk Specialist</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <input
+                required
+                value={newAgentName}
+                onChange={(e) => setNewAgentName(e.target.value)}
+                placeholder="Specialist full name"
+                className="px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-white"
+              />
+              <input
+                required
+                type="email"
+                value={newAgentEmail}
+                onChange={(e) => setNewAgentEmail(e.target.value)}
+                placeholder="specialist@destriatech.com"
+                className="px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-white"
+              />
+              <select
+                value={newAgentDept}
+                onChange={(e) => setNewAgentDept(e.target.value)}
+                className="px-3 py-2 rounded-lg bg-[#0B1220] border border-slate-700 text-white"
+              >
+                {(departments.length > 0
+                  ? departments
+                  : [{ slug: 'client_support', name: 'Client Support' }]
+                ).map((d) => (
+                  <option key={d.slug} value={d.slug}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-[#00C2C7] text-[#0B1220] font-bold cursor-pointer"
+              >
+                Add Specialist
+              </button>
+            </div>
+          </form>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <div className="font-mono text-[11px] uppercase text-[#D4AF37] font-bold">
+                Human Specialist Presence ({humanAgents.length})
+              </div>
+              {humanAgents.map((agent) => (
+                <div
+                  key={agent.id}
+                  className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-2"
+                >
+                  <div>
+                    <div className="font-bold text-white">{agent.displayName}</div>
+                    <div className="text-[11px] font-mono text-slate-400">
+                      {agent.departmentSlug} · {agent.activeSessionCount}/{agent.maxConcurrentSessions} active ·{' '}
+                      <span className="text-[#00C2C7]">{String(agent.availabilityState || '').toUpperCase()}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {(['available', 'busy', 'break', 'offline'] as const).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => void handleUpdateAgentPresence(agent.id, st)}
+                        className={`px-2 py-1 rounded text-[10px] font-mono cursor-pointer border ${
+                          agent.availabilityState === st
+                            ? 'bg-[#00C2C7] text-[#0B1220] border-[#00C2C7] font-bold'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
+                        }`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <div className="font-mono text-[11px] uppercase text-[#00C2C7] font-bold">
+                Active &amp; Recent Assignments ({assignments.length})
+              </div>
+              {assignments.length === 0 ? (
+                <div className="p-6 text-center text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                  No active human-agent assignments yet.
+                </div>
+              ) : (
+                assignments.map((asg) => (
+                  <div
+                    key={asg.id}
+                    className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <div>
+                      <div className="font-mono text-[#D4AF37] font-bold">
+                        {asg.agentName} · {String(asg.status || '').toUpperCase()}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Session: {asg.sessionKey} · Dept: {asg.departmentSlug}
+                      </div>
+                    </div>
+                    {(asg.status === 'offered' || asg.status === 'active') && (
+                      <div className="flex items-center gap-1.5">
+                        {asg.status === 'offered' && (
+                          <button
+                            type="button"
+                            onClick={() => void handleAssignmentAction(asg.id, 'accept')}
+                            className="px-2.5 py-1 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-mono text-[11px] cursor-pointer"
+                          >
+                            Accept
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void handleAssignmentAction(asg.id, 'release')}
+                          className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-slate-200 font-mono text-[11px] cursor-pointer"
+                        >
+                          Release
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: CALLBACK QUEUE & BUSINESS HOURS / HOLIDAYS */}
+      {subTab === 'operations' && (
+        <div className="space-y-5 text-xs">
+          <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="font-mono text-[11px] uppercase text-[#00C2C7] font-bold">
+                Current Business Hours Status ({scheduleData?.businessHours?.timezone || 'UTC'})
+              </div>
+              <div className="text-slate-300 mt-1">
+                {scheduleData?.businessHours?.isOpen
+                  ? 'Desk is currently OPEN for live specialist assignment.'
+                  : `Desk is currently CLOSED (${scheduleData?.businessHours?.reason || 'after hours'}).`}
+              </div>
+            </div>
+            <form onSubmit={handleAddHoliday} className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                required
+                value={newHolidayDate}
+                onChange={(e) => setNewHolidayDate(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg bg-[#0B1220] border border-slate-700 text-white"
+              />
+              <input
+                type="text"
+                required
+                value={newHolidayName}
+                onChange={(e) => setNewHolidayName(e.target.value)}
+                placeholder="Holiday name"
+                className="px-2.5 py-1.5 rounded-lg bg-[#0B1220] border border-slate-700 text-white"
+              />
+              <button
+                type="submit"
+                className="px-3 py-1.5 rounded-lg bg-[#D4AF37] text-[#0B1220] font-bold cursor-pointer"
+              >
+                Add Holiday
+              </button>
+            </form>
+          </div>
+
+          <div className="space-y-2">
+            <div className="font-mono text-[11px] uppercase text-[#D4AF37] font-bold">
+              Callback Requests ({callbacks.length})
+            </div>
+            {callbacks.length === 0 ? (
+              <div className="p-6 text-center text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                No callback requests recorded.
+              </div>
+            ) : (
+              callbacks.map((cb) => (
+                <div
+                  key={cb.id}
+                  className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-2"
+                >
+                  <div>
+                    <div className="font-bold text-white">
+                      {cb.visitorName} · {cb.visitorPhone || cb.visitorEmail}
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-400">
+                      {cb.departmentSlug} · Window: {cb.preferredWindow || 'Next available'} · Status:{' '}
+                      <span className="text-[#00C2C7]">{String(cb.state || '').toUpperCase()}</span>
+                    </div>
+                    <div className="text-slate-300 mt-0.5">{cb.reason}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {(['scheduled', 'completed', 'cancelled'] as const).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => void handleUpdateCallbackStatus(cb.id, st)}
+                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-[11px] cursor-pointer"
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 8: LOCAL AI INFERENCE WORKER HEALTH */}
+      {subTab === 'inference' && (
+        <div className="space-y-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+              <div className="font-mono text-[10.5px] uppercase text-slate-400">AI Provider Mode</div>
+              <div className="text-base font-mono font-bold text-[#00C2C7]">
+                {inferenceHealth?.providerMode || 'local_only'}
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Paid Fallback Auto-Activation: DISABLED
+              </div>
+            </div>
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+              <div className="font-mono text-[10.5px] uppercase text-slate-400">Local Worker Status</div>
+              <div className="text-base font-mono font-bold text-white">
+                {inferenceHealth?.localWorker?.ready
+                  ? 'READY'
+                  : inferenceHealth?.localWorker?.configured
+                  ? 'DEGRADED / STANDBY'
+                  : 'NOT CONFIGURED (DEFERRED)'}
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Circuit Breaker: {inferenceHealth?.localWorker?.circuitOpen ? 'OPEN' : 'CLOSED'}
+              </div>
+            </div>
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+              <div className="font-mono text-[10.5px] uppercase text-slate-400">License Guardrail</div>
+              <div className="text-base font-mono font-bold text-emerald-300">espeak-ng DISABLED</div>
+              <div className="text-[11px] text-slate-400">
+                Model: Qwen2.5 7B Instruct (Apache-2.0)
+              </div>
+            </div>
+          </div>
+
+          {inferenceHealth?.localWorker?.detail && (
+            <pre className="p-3.5 rounded-xl bg-[#0B1220] border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto">
+              {JSON.stringify(inferenceHealth.localWorker.detail, null, 2)}
+            </pre>
+          )}
         </div>
       )}
     </div>

@@ -1,10 +1,10 @@
 # DESTRIA TECH INC — Upstream Helix Source Extraction & Attribution Manifest
 
-**Directive:** `DTI-HELIX-INTEGRATION-001` (Section 4)  
+**Directive:** `DTI-HELIX-INTEGRATION-001` / `DTI-HELIX-IMPLEMENTATION-002` (Owner Approved for Non-Production Development)  
 **Upstream Repository:** `https://github.com/ClownRyda/helix-ai-virtual-receptionist`  
 **Verified Upstream Pin:** Tag `v2.0.6` (`da9e3f9fbb2511bd8a105d53ec7d4e1627e688dc`) | Directive reference `v1.9.2` (`e4b257d735262486aec0f5d018b09fe2ecacc8bb`)  
 **Upstream License:** MIT License (`Copyright (c) 2026 Helix AI Virtual Receptionist`)  
-**Extraction Status:** **`AUDITED ONLY — ZERO FILES EXTRACTED INTO WORKSPACE PENDING OWNER APPROVAL`**
+**Extraction Status:** **`SELECTIVELY EXTRACTED & HARDENED`** (`services/ai-inference/THIRD_PARTY_NOTICES.md` + `services/ai-inference/app/engines/` + TypeScript/PostgreSQL adaptations; zero Asterisk/SQLite/easter-egg files imported; `espeak-ng` disabled)
 
 ---
 

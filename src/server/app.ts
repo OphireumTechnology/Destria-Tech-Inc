@@ -100,6 +100,14 @@ import {
   KnowledgeVisibility,
   formatManagedKnowledgeEntry,
 } from './frontDeskKnowledgeStore';
+import { FrontDeskOperationsStore } from './services/frontDeskOperationsStore';
+import { LocalInferenceClient } from './services/localInferenceClient';
+import {
+  FrontDeskSessionTokenSigner,
+  FrontDeskUnifiedGateway,
+  mountFrontDeskUnifiedGateway,
+} from './frontDeskUnifiedGateway';
+import { FRONTDESK_VOICE_STREAM_WS_PATH } from './frontDeskVoiceStreamBridge';
 
 export interface AppDependencies {
   db?: DatabaseRepository;
@@ -113,6 +121,9 @@ export interface AppDependencies {
   frontDeskStore?: FrontDeskStore;
   frontDeskKnowledgeStore?: FrontDeskKnowledgeStore;
   frontDeskPersistence?: FrontDeskPersistenceAdapter | null;
+  frontDeskOperationsStore?: FrontDeskOperationsStore;
+  localInferenceClient?: LocalInferenceClient;
+  frontDeskTokenSigner?: FrontDeskSessionTokenSigner;
   productionStrictMode?: boolean;
   sessionSecret?: string;
   rateLimitMaxOverride?: number;
@@ -217,6 +228,10 @@ export function createApp(deps: AppDependencies = {}): {
   aiToolsExecutor: AIToolsExecutor;
   frontDeskStore: FrontDeskStore;
   frontDeskKnowledgeStore: FrontDeskKnowledgeStore;
+  frontDeskOperationsStore: FrontDeskOperationsStore;
+  localInferenceClient: LocalInferenceClient;
+  frontDeskTokenSigner: FrontDeskSessionTokenSigner;
+  frontDeskUnifiedGateway: FrontDeskUnifiedGateway;
   allowedOrigins: string[];
 } {
   const app = express();
@@ -292,6 +307,13 @@ export function createApp(deps: AppDependencies = {}): {
       persistence: defaultFrontDeskPersistence,
       productionStrictMode,
     });
+  const frontDeskOperationsStore =
+    deps.frontDeskOperationsStore || new FrontDeskOperationsStore();
+  const localInferenceClient =
+    deps.localInferenceClient || new LocalInferenceClient();
+  const frontDeskTokenSigner =
+    deps.frontDeskTokenSigner ||
+    new FrontDeskSessionTokenSigner(deps.sessionSecret);
 
   const inquiryLimiter = new SlidingWindowRateLimiter(
     15 * 60 * 1000,
@@ -382,7 +404,7 @@ export function createApp(deps: AppDependencies = {}): {
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
         res.setHeader(
           'Access-Control-Allow-Headers',
-          'Content-Type, Authorization, Idempotency-Key, X-Request-Id, X-Requested-With, X-API-Compatibility-Version'
+          'Content-Type, Authorization, Idempotency-Key, X-Request-Id, X-Requested-With, X-API-Compatibility-Version, X-FrontDesk-Session-Token, X-CSRF-Token'
         );
         res.setHeader('Access-Control-Max-Age', '600');
       }
@@ -456,7 +478,7 @@ export function createApp(deps: AppDependencies = {}): {
     if (req.path === '/api/portal/files/upload') {
       return next();
     }
-    if (req.path === '/api/voice/transcribe') {
+    if (req.path === '/api/voice/transcribe' || /^\/api\/frontdesk\/sessions\/[^/]+\/voice$/.test(req.path)) {
       return audioJsonParser(req, res, next);
     }
     return strictJsonParser(req, res, next);
@@ -494,11 +516,12 @@ export function createApp(deps: AppDependencies = {}): {
     });
   });
 
-  app.get('/ready', async (req: Request & { correlationId?: string }, res: Response) => {
+  const readyHandler = async (req: Request & { correlationId?: string }, res: Response) => {
     const dbPing = await db.ping();
     const portalReady = portalRepo.mode !== 'unconfigured';
     const frontDeskPersistence = frontDeskStore.getPersistenceStatus();
     const geminiProviderStatus = aiRuntimeConfig.getCanonicalProviderStatus();
+    const localInferenceHealth = await localInferenceClient.probeHealth();
     const isReady = dbPing.ok && portalReady && (!productionStrictMode || frontDeskPersistence.durable);
     const status = isReady
       ? 'healthy'
@@ -513,7 +536,8 @@ export function createApp(deps: AppDependencies = {}): {
       platform: 'DESTRIA TECH INC API Gateway',
       version: APP_VERSION,
       apiCompatibilityVersion: API_COMPATIBILITY_VERSION,
-      databaseMigrationVersion: '009',
+      databaseMigrationVersion: '010',
+      aiProviderMode: localInferenceClient.providerMode,
       timestamp: new Date().toISOString(),
       correlationId: req.correlationId,
       checks: {
@@ -521,6 +545,8 @@ export function createApp(deps: AppDependencies = {}): {
         appReady: isReady,
         databaseReady: dbPing.ok,
         frontDeskDurableReady: frontDeskPersistence.durable,
+        localInferenceReady: localInferenceHealth.ready,
+        voiceChannelReady: localInferenceHealth.ready || (localInferenceClient.isPaidGeminiAuthorized() && geminiProviderStatus === 'READY'),
         geminiReady: geminiProviderStatus === 'READY',
         emailReady: emailService.isConfigured(),
         calendarReady: calendarService.isConfigured(),
@@ -537,13 +563,22 @@ export function createApp(deps: AppDependencies = {}): {
           durable: portalRepo.mode === 'supabase',
           ready: portalReady,
         },
+        localInference: {
+          configured: localInferenceHealth.configured,
+          reachable: localInferenceHealth.reachable,
+          ready: localInferenceHealth.ready,
+          providerMode: localInferenceHealth.providerMode,
+          circuitBreakerOpen: localInferenceHealth.circuitBreakerOpen,
+        },
         gemini: {
           configured: Boolean(ai),
           providerStatus: geminiProviderStatus,
         },
       },
     });
-  });
+  };
+  app.get('/ready', readyHandler);
+  app.get('/api/ready', readyHandler);
 
   const healthHandler = async (req: Request & { correlationId?: string }, res: Response) => {
     const dbPing = await db.ping();
@@ -557,12 +592,14 @@ export function createApp(deps: AppDependencies = {}): {
         ? 'unconfigured'
         : 'degraded';
 
+    const localInferenceHealth = await localInferenceClient.probeHealth();
     res.status(200).json({
       status: overallStatus,
       platform: 'DESTRIA NETWORK API Gateway',
       version: APP_VERSION,
       apiCompatibilityVersion: API_COMPATIBILITY_VERSION,
-      databaseMigrationVersion: '009',
+      databaseMigrationVersion: '010',
+      aiProviderMode: localInferenceClient.providerMode,
       uptimeSeconds: Math.floor((Date.now() - APP_STARTED_AT) / 1000),
       timestamp: new Date().toISOString(),
       correlationId: req.correlationId,
@@ -571,6 +608,8 @@ export function createApp(deps: AppDependencies = {}): {
         appReady: dbPing.ok && portalReady && (!productionStrictMode || frontDeskPersistence.durable),
         databaseReady: dbPing.ok,
         frontDeskDurableReady: frontDeskPersistence.durable,
+        localInferenceReady: localInferenceHealth.ready,
+        voiceChannelReady: localInferenceHealth.ready || (localInferenceClient.isPaidGeminiAuthorized() && geminiProviderStatus === 'READY'),
         geminiReady: geminiProviderStatus === 'READY',
         emailReady: emailService.isConfigured(),
         calendarReady: calendarService.isConfigured(),
@@ -586,6 +625,12 @@ export function createApp(deps: AppDependencies = {}): {
           mode: portalRepo.mode,
           supabaseWritePersistenceImplemented: portalRepo.mode === 'supabase',
           durable: portalRepo.mode === 'supabase',
+        },
+        localInference: {
+          configured: localInferenceHealth.configured,
+          reachable: localInferenceHealth.reachable,
+          ready: localInferenceHealth.ready,
+          providerMode: localInferenceHealth.providerMode,
         },
         email: {
           configured: emailService.isConfigured(),
@@ -1057,7 +1102,7 @@ export function createApp(deps: AppDependencies = {}): {
               'workspace-local',
             buildTimestamp: new Date(APP_STARTED_AT).toISOString(),
             apiCompatibilityVersion: API_COMPATIBILITY_VERSION,
-            databaseMigrationVersion: '009',
+            databaseMigrationVersion: '010',
             nodeVersion: process.version,
             environment: process.env.NODE_ENV || 'development',
           },
@@ -2780,7 +2825,7 @@ SECURITY BOUNDARIES:
     });
   });
 
-  app.post('/api/voice/session', (req: Request, res: Response) => {
+  app.post('/api/voice/session', async (req: Request, res: Response) => {
     const settings = aiRuntimeConfig.getSettings();
     const language =
       typeof req.body?.language === 'string' && req.body.language.trim()
@@ -2790,20 +2835,38 @@ SECURITY BOUNDARIES:
       req.body?.stateContext && typeof req.body.stateContext === 'object'
         ? (req.body.stateContext as Record<string, unknown>)
         : {};
+    const requestedSessionId =
+      typeof req.body?.sessionId === 'string' && /^dti-[a-zA-Z0-9_-]{6,64}$/.test(req.body.sessionId.trim())
+        ? req.body.sessionId.trim()
+        : '';
+
     const session = voiceSessionStore.createSession(language, {
       selectedService: sanitizePlainText(rawContext.selectedService, 120) || undefined,
       category: sanitizePlainText(rawContext.category, 120) || undefined,
       businessProblem: sanitizePlainText(rawContext.businessProblem, 500) || undefined,
       currentStage: sanitizePlainText(rawContext.currentStage, 60) || 'welcome',
     });
+    const canonicalSessionId = requestedSessionId || session.sessionId;
+    frontDeskOperationsStore.getOrCreateSessionMeta(canonicalSessionId, 'ai_frontdesk_voice', language);
+    const sessionToken = frontDeskTokenSigner.issue(canonicalSessionId);
 
+    const localHealth = await localInferenceClient.probeHealth();
     const liveQuota = aiRuntimeConfig.canAcceptLiveSession();
     const liveStreamingAvailable = Boolean(ai) && settings.geminiLiveEnabled && liveQuota.allowed;
+    const transportMode = localHealth.ready
+      ? 'unified_local_duplex'
+      : liveStreamingAvailable
+      ? 'gemini_live_duplex'
+      : 'turn_based_continuous';
 
     res.json({
-      sessionId: session.sessionId,
+      sessionId: canonicalSessionId,
+      sessionToken,
       status: 'ready',
-      transportMode: liveStreamingAvailable ? 'gemini_live_duplex' : 'turn_based_continuous',
+      transportMode,
+      providerMode: localInferenceClient.providerMode,
+      localInferenceReady: localHealth.ready,
+      unifiedVoiceStreamPath: FRONTDESK_VOICE_STREAM_WS_PATH,
       liveStreamingAvailable,
       liveUnavailableReason: liveStreamingAvailable ? undefined : liveQuota.reason,
       liveWebSocketPath: VOICE_LIVE_WS_PATH,
@@ -2821,7 +2884,7 @@ SECURITY BOUNDARIES:
       inputSampleRate: 16000,
       serverGeminiAvailable: Boolean(ai),
       disclaimer:
-        'Voice Disclosure: DESTRIA TECH INC AI Corporate Solutions Consultant voice mode is active. Responses are informational only and do not constitute formal proposals, contractual commitments, or legal/financial advice. Microphone audio is used strictly for real-time consultation and is not permanently retained.',
+        'Voice Disclosure: DESTRIA TECH INC AI Front Desk Receptionist voice mode is active. Responses are informational only and do not constitute formal proposals, contractual commitments, or legal/financial advice. Microphone audio is used strictly for real-time consultation and is not permanently retained.',
     });
   });
 
@@ -3990,6 +4053,23 @@ SECURITY BOUNDARIES:
   );
 
   // -----------------------------------------------------------------------
+  // 6A. UNIFIED AI FRONT DESK CONVERSATION GATEWAY & RECEPTIONIST OPS (010)
+  // -----------------------------------------------------------------------
+  const frontDeskUnifiedGateway = mountFrontDeskUnifiedGateway(app, {
+    db,
+    authService,
+    frontDeskStore,
+    frontDeskKnowledgeStore,
+    operationsStore: frontDeskOperationsStore,
+    localInferenceClient,
+    calendarService,
+    emailService,
+    tokenSigner: frontDeskTokenSigner,
+    checkAiRateLimit: (req) => aiLimiter.check(getClientIp(req)),
+    checkInquiryRateLimit: (req) => inquiryLimiter.check(getClientIp(req)),
+  });
+
+  // -----------------------------------------------------------------------
   // 6B. CLIENT PORTAL API ROUTER (/api/portal/*)
   // -----------------------------------------------------------------------
   app.use(
@@ -4074,6 +4154,10 @@ SECURITY BOUNDARIES:
     aiToolsExecutor,
     frontDeskStore,
     frontDeskKnowledgeStore,
+    frontDeskOperationsStore,
+    localInferenceClient,
+    frontDeskTokenSigner,
+    frontDeskUnifiedGateway,
     allowedOrigins: configuredOrigins,
   };
 }

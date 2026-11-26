@@ -340,6 +340,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       setIsVoiceSessionActive(false);
     } else {
       setVoiceError(null);
+      aiVoiceService.setSessionIdentity(aiConsultantService.getSessionId());
       aiVoiceService.syncConversationContext(
         messagesRef.current.map((m) => ({ sender: m.sender, text: m.text })),
         {
@@ -529,6 +530,9 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
       );
 
       setIsTyping(false);
+      if (sessionId) {
+        aiVoiceService.setSessionIdentity(sessionId);
+      }
       setMessages((prev) => [...prev, aiMessage]);
       setState(updatedState);
       if (updatedState.generatedBrief) {

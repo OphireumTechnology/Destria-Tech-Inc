@@ -364,7 +364,7 @@ describe('DTI-MASTER-COMPLETION-003 Verification & Failure-Injection Suite', () 
         const healthyReady = await fetch(`${baseUrl}/ready`);
         assert.equal(healthyReady.status, 200);
         const healthyBody = await healthyReady.json();
-        assert.equal(healthyBody.databaseMigrationVersion, '009');
+        assert.equal(healthyBody.databaseMigrationVersion, '010');
         assert.equal(healthyBody.checks.serverAlive, true);
         assert.equal(healthyBody.checks.appReady, true);
         assert.equal(healthyBody.checks.databaseReady, true);

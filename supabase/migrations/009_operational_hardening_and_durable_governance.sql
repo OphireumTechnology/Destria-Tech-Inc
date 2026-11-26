@@ -55,9 +55,9 @@ BEGIN
 END;
 $$;
 
-INSERT INTO public.schema_migration_metadata (migration_id, description)
+INSERT INTO public.schema_migration_metadata (migration_version, description)
 VALUES (
   '009',
   'Durable multi-instance admin session revocation (admin_revoked_sessions), RLS hardening, and operational governance'
 )
-ON CONFLICT (migration_id) DO NOTHING;
+ON CONFLICT (migration_version) DO NOTHING;

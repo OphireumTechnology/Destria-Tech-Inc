@@ -241,12 +241,36 @@ export const AIFrontDeskPage: React.FC = () => {
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [submissionReceipt, setSubmissionReceipt] = useState<any | null>(null);
 
-  // Human Escalation
+  // Unified Front Desk Gateway session token, departments, hours & consent
+  const [unifiedSessionToken, setUnifiedSessionToken] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<
+    Array<{ slug: string; name: string; description: string; liveSpecialistAvailable: boolean; currentlyOpen: boolean }>
+  >([]);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('client_support');
+  const [businessHours, setBusinessHours] = useState<{
+    isOpen: boolean;
+    timezone: string;
+    reason?: string;
+    nextOpenHint?: string;
+  } | null>(null);
+  const [voicePrivacyConsent, setVoicePrivacyConsent] = useState<boolean>(false);
+
+  // Human Escalation, Atomic Handoff & Callback State
   const [showEscalationModal, setShowEscalationModal] = useState(false);
   const [escalationReason, setEscalationReason] = useState('');
   const [escalationTrack, setEscalationTrack] = useState<'general' | 'ceo' | 'cto' | 'pricing' | 'technical'>('general');
   const [escalationReceipt, setEscalationReceipt] = useState<string | null>(null);
   const [isEscalating, setIsEscalating] = useState(false);
+  const [handoffResult, setHandoffResult] = useState<{
+    assigned: boolean;
+    message: string;
+    agentName?: string;
+    callbackRecommended?: boolean;
+  } | null>(null);
+  const [callbackPhone, setCallbackPhone] = useState('');
+  const [callbackPreferredWindow, setCallbackPreferredWindow] = useState('Next business day morning');
+  const [callbackReceipt, setCallbackReceipt] = useState<string | null>(null);
+  const [isSubmittingCallback, setIsSubmittingCallback] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -270,16 +294,60 @@ export const AIFrontDeskPage: React.FC = () => {
     }));
   }, []);
 
-  // Load initial empty session dossier
+  // Initialize canonical unified Front Desk session, load dossier, departments & business hours
   useEffect(() => {
+    let active = true;
+    aiVoiceService.setSessionIdentity(sessionId);
+
+    fetch(apiUrl('/api/frontdesk/sessions'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId,
+        channel: 'chat',
+        language: voiceLanguage,
+        departmentCode: selectedDepartment,
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!active) return;
+        if (data.success && typeof data.sessionToken === 'string') {
+          setUnifiedSessionToken(data.sessionToken);
+          aiVoiceService.setSessionIdentity(data.sessionId || sessionId, data.sessionToken);
+        }
+        if (data.businessHours) {
+          setBusinessHours(data.businessHours);
+        }
+      })
+      .catch(() => {});
+
+    fetch(apiUrl('/api/frontdesk/departments'))
+      .then((r) => r.json())
+      .then((data) => {
+        if (!active) return;
+        if (data.success && Array.isArray(data.departments)) {
+          setDepartments(data.departments);
+        }
+        if (data.businessHours) {
+          setBusinessHours(data.businessHours);
+        }
+      })
+      .catch(() => {});
+
     fetch(apiUrl(`/api/frontdesk/session/${encodeURIComponent(sessionId)}`))
       .then((r) => r.json())
       .then((data) => {
+        if (!active) return;
         if (data.success && data.dossier) {
           setDossier(data.dossier);
         }
       })
       .catch(() => {});
+
+    return () => {
+      active = false;
+    };
   }, [sessionId]);
 
   // Load available consultation slots when date changes
@@ -386,16 +454,34 @@ export const AIFrontDeskPage: React.FC = () => {
     setMessages(nextHistory);
 
     try {
-      const res = await fetch(apiUrl('/api/consultant/chat'), {
+      const useUnified = Boolean(unifiedSessionToken);
+      const endpoint = useUnified
+        ? apiUrl(`/api/frontdesk/sessions/${encodeURIComponent(sessionId)}/messages`)
+        : apiUrl('/api/consultant/chat');
+      const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          userMessage: text,
-          language: voiceLanguage,
-          history: nextHistory.slice(-14).map((m) => ({ sender: m.sender, text: m.text })),
-          stateContext: { currentStage: 'frontdesk' },
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(useUnified && unifiedSessionToken
+            ? { 'X-FrontDesk-Session-Token': unifiedSessionToken }
+            : {}),
+        },
+        body: JSON.stringify(
+          useUnified
+            ? {
+                message: text,
+                channel: 'ai_frontdesk_chat',
+                language: voiceLanguage,
+                departmentSlug: selectedDepartment,
+              }
+            : {
+                sessionId,
+                userMessage: text,
+                language: voiceLanguage,
+                history: nextHistory.slice(-14).map((m) => ({ sender: m.sender, text: m.text })),
+                stateContext: { currentStage: 'frontdesk' },
+              }
+        ),
       });
       const data = await res.json().catch(() => ({}));
       const replyText =
@@ -417,6 +503,16 @@ export const AIFrontDeskPage: React.FC = () => {
       if (data.frontDeskDossier) {
         setDossier(data.frontDeskDossier);
         syncDraftFromDossier(data.frontDeskDossier);
+      } else if (useUnified) {
+        fetch(apiUrl(`/api/frontdesk/session/${encodeURIComponent(sessionId)}`))
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success && d.dossier) {
+              setDossier(d.dossier);
+              syncDraftFromDossier(d.dossier);
+            }
+          })
+          .catch(() => {});
       }
     } catch {
       setMessages((prev) => [
@@ -439,13 +535,30 @@ export const AIFrontDeskPage: React.FC = () => {
     if (isVoiceActive) {
       aiVoiceService.stopSession();
     } else {
+      aiVoiceService.setSessionIdentity(sessionId, unifiedSessionToken);
       aiVoiceService.setLanguage(voiceLanguage);
+      if (unifiedSessionToken && !voicePrivacyConsent) {
+        setVoicePrivacyConsent(true);
+        void fetch(apiUrl(`/api/frontdesk/sessions/${encodeURIComponent(sessionId)}/consent`), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-FrontDesk-Session-Token': unifiedSessionToken,
+          },
+          body: JSON.stringify({
+            consentType: 'voice_processing',
+            granted: true,
+            policyVersion: '2026-frontdesk-v1',
+          }),
+        }).catch(() => {});
+      }
       await aiVoiceService.startSession();
     }
   };
 
   const handleRetryVoice = async () => {
     setVoiceError(null);
+    aiVoiceService.setSessionIdentity(sessionId, unifiedSessionToken);
     await aiVoiceService.retryConnection();
   };
 
@@ -602,7 +715,39 @@ export const AIFrontDeskPage: React.FC = () => {
     e.preventDefault();
     if (!escalationReason.trim() || isEscalating) return;
     setIsEscalating(true);
+    setHandoffResult(null);
     try {
+      // First attempt real atomic human-agent handoff when unified session token is active
+      if (unifiedSessionToken) {
+        const handoffRes = await fetch(
+          apiUrl(`/api/frontdesk/sessions/${encodeURIComponent(sessionId)}/escalate`),
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-FrontDesk-Session-Token': unifiedSessionToken,
+            },
+            body: JSON.stringify({
+              departmentSlug: selectedDepartment,
+              reason: escalationReason,
+              idempotencyKey: `handoff-${sessionId}-${Date.now()}`,
+            }),
+          }
+        );
+        const handoffData = await handoffRes.json().catch(() => ({}));
+        if (handoffRes.ok && handoffData.success) {
+          const isAssigned = handoffData.status === 'assigned';
+          setHandoffResult({
+            assigned: isAssigned,
+            message: isAssigned
+              ? `Connected to ${handoffData.assignment?.agentName || 'a DESTRIA specialist'} (${selectedDepartment}).`
+              : handoffData.reason || 'All specialists are currently occupied. You can submit a callback request below.',
+            agentName: handoffData.assignment?.agentName,
+            callbackRecommended: !isAssigned,
+          });
+        }
+      }
+
       const res = await fetch(apiUrl(`/api/frontdesk/session/${encodeURIComponent(sessionId)}/escalate`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -622,6 +767,48 @@ export const AIFrontDeskPage: React.FC = () => {
       }
     } finally {
       setIsEscalating(false);
+    }
+  };
+
+  const handleSubmitCallback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!unifiedSessionToken || isSubmittingCallback) return;
+    const phone = (callbackPhone || profileDraft.phone).trim();
+    const email = profileDraft.email.trim();
+    if (!phone && !email) {
+      setCallbackReceipt('Please provide a callback phone number or business email.');
+      return;
+    }
+    setIsSubmittingCallback(true);
+    try {
+      const res = await fetch(
+        apiUrl(`/api/frontdesk/sessions/${encodeURIComponent(sessionId)}/callback`),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-FrontDesk-Session-Token': unifiedSessionToken,
+          },
+          body: JSON.stringify({
+            departmentSlug: selectedDepartment,
+            visitorName: profileDraft.fullName || 'Website Visitor',
+            visitorEmail: email || undefined,
+            visitorPhone: phone || undefined,
+            preferredWindow: callbackPreferredWindow,
+            timezone: clientTimezone,
+            reason: escalationReason || 'Requested follow-up callback from DESTRIA Front Desk',
+            idempotencyKey: `cb-${sessionId}-${Date.now()}`,
+          }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setCallbackReceipt(data.message || 'Callback request logged.');
+      } else {
+        setCallbackReceipt(data.error || 'Could not log callback request right now.');
+      }
+    } finally {
+      setIsSubmittingCallback(false);
     }
   };
 
@@ -726,8 +913,19 @@ export const AIFrontDeskPage: React.FC = () => {
                     AI ASSISTANT
                   </span>
                 </div>
-                <div className="text-[11px] text-slate-400 font-mono">
-                  {voiceStatusLabel[voiceStatus]}
+                <div className="text-[11px] text-slate-400 font-mono flex items-center gap-2 flex-wrap">
+                  <span>{voiceStatusLabel[voiceStatus]}</span>
+                  {businessHours && (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                        businessHours.isOpen
+                          ? 'text-emerald-300 bg-emerald-950/40 border-emerald-500/30'
+                          : 'text-amber-300 bg-amber-950/40 border-amber-500/30'
+                      }`}
+                    >
+                      {businessHours.isOpen ? 'Desk Open' : 'After Hours — Callbacks Active'}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1460,14 +1658,49 @@ export const AIFrontDeskPage: React.FC = () => {
               </div>
             </div>
 
+            {handoffResult && (
+              <div
+                className={`p-3.5 rounded-lg border text-xs space-y-1 ${
+                  handoffResult.assigned
+                    ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                    : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                }`}
+              >
+                <div className="font-bold">
+                  {handoffResult.assigned
+                    ? `Live Specialist Assigned${handoffResult.agentName ? `: ${handoffResult.agentName}` : ''}`
+                    : 'No Live Specialist Immediately Available'}
+                </div>
+                <div>{handoffResult.message}</div>
+              </div>
+            )}
+
             {escalationReceipt ? (
               <div className="p-3.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 text-xs text-emerald-200">
                 {escalationReceipt}
               </div>
             ) : (
               <form onSubmit={handleSubmitEscalation} className="space-y-3 text-xs">
+                {departments.length > 0 && (
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                      Corporate Department
+                    </label>
+                    <select
+                      value={selectedDepartment}
+                      onChange={(e) => setSelectedDepartment(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white"
+                    >
+                      {departments.map((dept) => (
+                        <option key={dept.slug} value={dept.slug}>
+                          {dept.name} ({dept.liveSpecialistAvailable ? 'Live specialist ready' : 'Callback queue'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
-                  <label className="block text-[11px] font-mono text-slate-400 mb-1">Routing Department</label>
+                  <label className="block text-[11px] font-mono text-slate-400 mb-1">Routing Track</label>
                   <select
                     value={escalationTrack}
                     onChange={(e) => setEscalationTrack(e.target.value as any)}
@@ -1496,8 +1729,46 @@ export const AIFrontDeskPage: React.FC = () => {
                   disabled={isEscalating}
                   className="w-full py-2.5 rounded-lg bg-[#D4AF37] hover:bg-amber-400 text-[#0B1220] font-bold cursor-pointer disabled:opacity-50"
                 >
-                  {isEscalating ? 'Submitting Handover...' : 'Request Human Representative'}
+                  {isEscalating ? 'Connecting with Human Desk...' : 'Request Human Representative'}
                 </button>
+              </form>
+            )}
+
+            {/* Instant Callback Request Form */}
+            {unifiedSessionToken && (
+              <form
+                onSubmit={handleSubmitCallback}
+                className="pt-3 border-t border-slate-800 space-y-2.5 text-xs"
+              >
+                <div className="font-mono text-[11px] text-[#00C2C7] uppercase font-bold">
+                  Or Schedule a Priority Callback
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="tel"
+                    value={callbackPhone}
+                    onChange={(e) => setCallbackPhone(e.target.value)}
+                    placeholder={profileDraft.phone || 'Callback phone (+1 ...)'}
+                    className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white"
+                  />
+                  <input
+                    type="text"
+                    value={callbackPreferredWindow}
+                    onChange={(e) => setCallbackPreferredWindow(e.target.value)}
+                    placeholder="Preferred time window"
+                    className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmittingCallback}
+                  className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-[#00C2C7]/40 text-[#00C2C7] font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingCallback ? 'Saving Callback...' : 'Request Callback'}
+                </button>
+                {callbackReceipt && (
+                  <p className="text-[11px] font-mono text-emerald-300">{callbackReceipt}</p>
+                )}
               </form>
             )}
           </div>

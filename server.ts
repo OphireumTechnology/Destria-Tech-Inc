@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { createApp } from './src/server/app';
 import { logStructured } from './src/server/logger';
 import { attachVoiceLiveBridge } from './src/server/voiceLiveBridge';
+import { attachFrontDeskVoiceStreamBridge } from './src/server/frontDeskVoiceStreamBridge';
 
 dotenv.config();
 
@@ -49,6 +50,10 @@ async function startServer() {
     aiRuntimeConfig,
     aiToolsExecutor,
     frontDeskStore,
+    frontDeskOperationsStore,
+    localInferenceClient,
+    frontDeskTokenSigner,
+    frontDeskUnifiedGateway,
     allowedOrigins,
   } = createApp();
   const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
@@ -119,7 +124,9 @@ async function startServer() {
       databaseConfigured: db.isConfigured,
       frontDeskDurable: frontDeskPersistence.durable,
       frontDeskMode: frontDeskPersistence.mode,
-      databaseMigrationVersion: '009',
+      databaseMigrationVersion: '010',
+      aiProviderMode: localInferenceClient.providerMode,
+      localInferenceConfigured: localInferenceClient.isConfigured,
       geminiConfigured: Boolean(ai),
       geminiProviderStatus: aiRuntimeConfig.getCanonicalProviderStatus(),
       emailConfigured: emailService.isConfigured(),
@@ -135,6 +142,14 @@ async function startServer() {
     allowedOrigins,
   });
 
+  const frontDeskVoiceStreamBridge = attachFrontDeskVoiceStreamBridge(server, {
+    gateway: frontDeskUnifiedGateway,
+    operationsStore: frontDeskOperationsStore,
+    localInferenceClient,
+    tokenSigner: frontDeskTokenSigner,
+    allowedOrigins,
+  });
+
   // Harden HTTP server socket & header timeouts against slowloris / hung upstream connections
   server.requestTimeout = 30_000;
   server.headersTimeout = 15_000;
@@ -146,6 +161,7 @@ async function startServer() {
     isShuttingDown = true;
     logStructured('info', 'server_shutdown_initiated', { signal, workerId });
     voiceLiveBridge.close();
+    frontDeskVoiceStreamBridge.close();
     if (retryTimer) {
       clearInterval(retryTimer);
       retryTimer = null;

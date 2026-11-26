@@ -1,0 +1,44 @@
+# Private isolated AI Inference Stack (Ollama + FastAPI Worker)
+# NEVER bind ports to public internet interfaces; bind 127.0.0.1 / private VPC only.
+services:
+  ollama:
+    image: ollama/ollama:0.5.7
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  ai-inference:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_started
+    environment:
+      INFERENCE_HOST: 0.0.0.0
+      INFERENCE_PORT: 8000
+      AI_INFERENCE_SHARED_SECRET: ${AI_INFERENCE_SHARED_SECRET:?Required shared secret}
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      WHISPER_BEAM_SIZE: ${WHISPER_BEAM_SIZE:-2}
+      ALLOW_ESPEAK_GPL_FALLBACK: "false"
+      PREWARM_MODELS_ON_STARTUP: "true"
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/v1/livez"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  ollama_models:
