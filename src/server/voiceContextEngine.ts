@@ -19,7 +19,7 @@ import {
   formatTextForVoiceSpeech,
   sanitizeConversationHistory,
 } from './aiCommercialPolicy';
-import { AiRuntimeConfigRegistry } from './aiRuntimeConfig';
+import { AiRuntimeConfigRegistry, classifyGeminiProviderError } from './aiRuntimeConfig';
 import { AIToolsExecutor, getGeminiFunctionDeclarations } from './aiToolsEngine';
 import {
   buildDeterministicConversationalReply,
@@ -1543,10 +1543,11 @@ NATURAL TWO-WAY VOICE CONVERSATION RULES:
         };
       }
     } catch (err: any) {
+      const classified = classifyGeminiProviderError(err);
       runtimeConfig?.recordFailure(
-        'voice_process_fallback',
+        `voice_${classified.category.toLowerCase()}`,
         'turn_based',
-        err?.message || 'Gemini voice turn failed'
+        `${classified.category}: ${classified.safeMessage}`
       );
     }
   }

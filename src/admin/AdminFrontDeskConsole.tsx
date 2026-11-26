@@ -50,20 +50,35 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
   const [qaRating, setQaRating] = useState(5);
   const [qaNotes, setQaNotes] = useState('');
 
+  const buildHeaders = useCallback(
+    (includeJson = false): Record<string, string> => {
+      const headers: Record<string, string> = {
+        'X-Requested-With': 'XMLHttpRequest',
+      };
+      if (adminToken) {
+        headers.Authorization = `Bearer ${adminToken}`;
+      }
+      if (includeJson) {
+        headers['Content-Type'] = 'application/json';
+      }
+      return headers;
+    },
+    [adminToken]
+  );
+
   const loadAll = useCallback(async () => {
-    if (!adminToken) return;
     setLoading(true);
     try {
-      const headers = { Authorization: `Bearer ${adminToken}` };
+      const headers = buildHeaders();
       const [ovRes, inqRes, escRes, kbRes, qaRes] = await Promise.all([
-        fetch(apiUrl('/api/admin/frontdesk/overview'), { headers }),
+        fetch(apiUrl('/api/admin/frontdesk/overview'), { headers, credentials: 'include' }),
         fetch(
           apiUrl(`/api/admin/frontdesk/inquiries?limit=50&offset=0&q=${encodeURIComponent(inquirySearch)}`),
-          { headers }
+          { headers, credentials: 'include' }
         ),
-        fetch(apiUrl('/api/admin/frontdesk/escalations'), { headers }),
-        fetch(apiUrl('/api/admin/frontdesk/knowledge'), { headers }),
-        fetch(apiUrl('/api/admin/frontdesk/quality'), { headers }),
+        fetch(apiUrl('/api/admin/frontdesk/escalations'), { headers, credentials: 'include' }),
+        fetch(apiUrl('/api/admin/frontdesk/knowledge'), { headers, credentials: 'include' }),
+        fetch(apiUrl('/api/admin/frontdesk/quality'), { headers, credentials: 'include' }),
       ]);
       const [ov, inq, esc, kb, qa] = await Promise.all([
         ovRes.json().catch(() => ({})),
@@ -80,7 +95,7 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
     } finally {
       setLoading(false);
     }
-  }, [adminToken, inquirySearch]);
+  }, [buildHeaders, inquirySearch]);
 
   useEffect(() => {
     void loadAll();
@@ -94,10 +109,8 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
       apiUrl(`/api/admin/frontdesk/inquiries/${encodeURIComponent(selectedInquiry.referenceCode)}/review`),
       {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${adminToken}`,
-          'Content-Type': 'application/json',
-        },
+        credentials: 'include',
+        headers: buildHeaders(true),
         body: JSON.stringify({
           stage: reviewStage,
           notes: reviewNotes || `Updated executive stage to ${reviewStage}`,
@@ -132,10 +145,8 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
     setFeedback(null);
     const res = await fetch(apiUrl('/api/admin/frontdesk/knowledge'), {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
-      },
+      credentials: 'include',
+      headers: buildHeaders(true),
       body: JSON.stringify({
         title: newKbTitle,
         domain: newKbDomain,
@@ -164,10 +175,8 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
     setFeedback(null);
     const res = await fetch(apiUrl(`/api/admin/frontdesk/knowledge/${encodeURIComponent(doc.id)}`), {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
-      },
+      credentials: 'include',
+      headers: buildHeaders(true),
       body: JSON.stringify({
         status: nextStatus,
         changeNote: `Admin set status to ${nextStatus}`,
@@ -185,10 +194,8 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
   const handleResolveEscalation = async (id: string, status: 'in_progress' | 'resolved') => {
     const res = await fetch(apiUrl(`/api/admin/frontdesk/escalations/${encodeURIComponent(id)}`), {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
-      },
+      credentials: 'include',
+      headers: buildHeaders(true),
       body: JSON.stringify({ status }),
     });
     if (res.ok) {
@@ -201,10 +208,8 @@ export const AdminFrontDeskConsole: React.FC<AdminFrontDeskConsoleProps> = ({ ad
     e.preventDefault();
     const res = await fetch(apiUrl('/api/admin/frontdesk/quality'), {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
-      },
+      credentials: 'include',
+      headers: buildHeaders(true),
       body: JSON.stringify({
         rating: qaRating,
         naturalnessScore: qaRating,

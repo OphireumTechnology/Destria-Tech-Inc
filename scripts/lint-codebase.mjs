@@ -149,6 +149,18 @@ function lintSourceFile(filePath) {
         `Avoid window.${dialogCall[1]}() in embedded enterprise web apps.`
       );
     }
+
+    const webStorageToken = codeOnly.match(
+      /\b(?:localStorage|sessionStorage)\.(?:getItem|setItem|removeItem)\s*\(\s*['"`][^'"`]*(?:admin_token|portal_token|auth_token|bearer_token|session_token)[^'"`]*['"`]/i
+    );
+    if (webStorageToken && webStorageToken.index !== undefined) {
+      addViolation(
+        filePath,
+        getLineNumber(codeOnly, webStorageToken.index),
+        'no-webstorage-auth-token',
+        'Authentication/session tokens must never be stored in localStorage or sessionStorage; use HttpOnly cookies and in-memory state.'
+      );
+    }
   }
 
   // 4. TSX JSX security rules (target="_blank" noopener & dangerouslySetInnerHTML guard)
@@ -270,6 +282,27 @@ function lintWorkflows() {
   }
 }
 
+function lintPublicAssets() {
+  const publicDir = path.join(ROOT, 'public');
+  if (!fs.existsSync(publicDir)) return;
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (/^Paste_/i.test(entry.name)) {
+        addViolation(
+          full,
+          1,
+          'no-proprietary-public-paste',
+          'Internal AI Studio prompt paste files (Paste_*) must never be committed or published in public/.'
+        );
+      }
+    }
+  };
+  walk(publicDir);
+}
+
 const filesToLint = [
   ...SCAN_DIRS.flatMap((d) => collectFiles(path.join(ROOT, d))),
   ...ROOT_FILES.map((f) => path.join(ROOT, f)).filter((f) => fs.existsSync(f)),
@@ -279,6 +312,7 @@ for (const file of filesToLint) {
   lintSourceFile(file);
 }
 lintWorkflows();
+lintPublicAssets();
 
 if (violations.length > 0) {
   console.error(`\n[DESTRIA LINT] Failed with ${violations.length} violation(s):\n`);
@@ -290,5 +324,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `[DESTRIA LINT] Passed: ${filesToLint.length} source files + GitHub workflows verified with 0 violations.`
+  `[DESTRIA LINT] Passed: ${filesToLint.length} source files + GitHub workflows + public assets verified with 0 violations.`
 );

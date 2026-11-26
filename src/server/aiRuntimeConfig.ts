@@ -80,6 +80,141 @@ export interface TranscriptionErrorReport {
   reportedAt: string;
 }
 
+export type GeminiErrorCategory =
+  | 'INVALID_CREDENTIALS'
+  | 'UNSUPPORTED_MODEL'
+  | 'QUOTA_EXCEEDED'
+  | 'RATE_LIMITED'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'INVALID_REQUEST'
+  | 'NETWORK_TIMEOUT'
+  | 'MALFORMED_RESPONSE'
+  | 'UNKNOWN_PROVIDER_ERROR';
+
+export interface GeminiProviderErrorClassification {
+  category: GeminiErrorCategory;
+  httpStatus?: number;
+  retryable: boolean;
+  safeMessage: string;
+}
+
+/**
+ * Classifies Gemini SDK / upstream HTTP errors into structured operational categories
+ * while stripping any accidental secret strings or stack traces.
+ */
+export function classifyGeminiProviderError(err: unknown): GeminiProviderErrorClassification {
+  const rawMessage =
+    typeof err === 'object' && err !== null && 'message' in err
+      ? String((err as { message?: unknown }).message || '')
+      : String(err || '');
+  const statusVal =
+    typeof err === 'object' && err !== null && 'status' in err
+      ? Number((err as { status?: unknown }).status)
+      : typeof err === 'object' && err !== null && 'code' in err
+      ? Number((err as { code?: unknown }).code)
+      : undefined;
+  const httpStatus = Number.isFinite(statusVal) ? statusVal : undefined;
+
+  const redacted = rawMessage
+    .replace(/\bAIzaSy[0-9A-Za-z_-]{10,}\b/g, '[REDACTED_API_KEY]')
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [REDACTED]')
+    .slice(0, 220);
+  const lower = redacted.toLowerCase();
+
+  if (
+    httpStatus === 401 ||
+    httpStatus === 403 ||
+    /\b(?:401|403)\b|api[_\s]*key[_\s]*(?:not[_\s]*valid|invalid|expired|missing)|unauthenticated|permission_denied|invalid\s+credentials/i.test(
+      lower
+    )
+  ) {
+    return {
+      category: 'INVALID_CREDENTIALS',
+      httpStatus: httpStatus || 401,
+      retryable: false,
+      safeMessage: 'Gemini API authentication failed; verify server GEMINI_API_KEY credentials.',
+    };
+  }
+
+  if (
+    httpStatus === 404 ||
+    /model\s+.*not\s+found|is\s+not\s+found\s+for\s+api\s+version|unsupported\s+model|deprecated\s+model/i.test(
+      lower
+    )
+  ) {
+    return {
+      category: 'UNSUPPORTED_MODEL',
+      httpStatus: httpStatus || 404,
+      retryable: false,
+      safeMessage: 'Configured Gemini model is unavailable or unsupported by the upstream API.',
+    };
+  }
+
+  if (/quota\s+exceeded|billing|insufficient\s+quota|resource_exhausted.*quota/i.test(lower)) {
+    return {
+      category: 'QUOTA_EXCEEDED',
+      httpStatus: httpStatus || 429,
+      retryable: false,
+      safeMessage: 'Gemini API quota limit exceeded on the configured provider account.',
+    };
+  }
+
+  if (httpStatus === 429 || /rate\s*limit|too\s+many\s+requests|resource_exhausted/i.test(lower)) {
+    return {
+      category: 'RATE_LIMITED',
+      httpStatus: 429,
+      retryable: true,
+      safeMessage: 'Gemini API temporarily rate-limited the request; retry with backoff.',
+    };
+  }
+
+  if (/timeout|timed\s*out|aborted|econnreset|etimedout|enotfound|fetch\s+failed|network/i.test(lower)) {
+    return {
+      category: 'NETWORK_TIMEOUT',
+      httpStatus,
+      retryable: true,
+      safeMessage: 'Upstream Gemini request timed out or encountered a transient network error.',
+    };
+  }
+
+  if (
+    (httpStatus !== undefined && httpStatus >= 500) ||
+    /unavailable|overloaded|internal\s+error|bad\s+gateway|service\s+unavailable/i.test(lower)
+  ) {
+    return {
+      category: 'PROVIDER_UNAVAILABLE',
+      httpStatus: httpStatus || 503,
+      retryable: true,
+      safeMessage: 'Gemini AI provider is temporarily unavailable.',
+    };
+  }
+
+  if (httpStatus === 400 || /invalid_argument|invalid\s+request|malformed\s+request/i.test(lower)) {
+    return {
+      category: 'INVALID_REQUEST',
+      httpStatus: 400,
+      retryable: false,
+      safeMessage: 'Gemini rejected the request payload as invalid.',
+    };
+  }
+
+  if (/malformed|json\s+parse|unexpected\s+token|empty\s+response/i.test(lower)) {
+    return {
+      category: 'MALFORMED_RESPONSE',
+      httpStatus,
+      retryable: true,
+      safeMessage: 'Gemini returned an incomplete or malformed response payload.',
+    };
+  }
+
+  return {
+    category: 'UNKNOWN_PROVIDER_ERROR',
+    httpStatus,
+    retryable: true,
+    safeMessage: redacted || 'Unexpected Gemini provider error.',
+  };
+}
+
 export interface AiFailureEvent {
   id: string;
   category: string;

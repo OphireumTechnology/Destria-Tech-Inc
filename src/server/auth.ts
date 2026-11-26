@@ -3,8 +3,12 @@ import { Request, Response, NextFunction } from 'express';
 import { DatabaseRepository, AdminUserRecord } from './db/types';
 import { logStructured } from './logger';
 
+export const ADMIN_SESSION_COOKIE_NAME = 'dti_admin_session';
+
 export interface AuthenticatedAdminRequest extends Request {
   adminUser?: AdminUserRecord;
+  adminAuthSource?: 'bearer' | 'cookie';
+  adminRawToken?: string;
   correlationId?: string;
 }
 
@@ -12,11 +16,78 @@ interface SessionTokenPayload {
   sub: string;
   email: string;
   role: 'admin' | 'super_admin';
+  jti?: string;
   exp: number;
+}
+
+function parseCookieHeader(cookieHeader?: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!cookieHeader) return result;
+  for (const part of cookieHeader.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (key) {
+      try {
+        result[key] = decodeURIComponent(value);
+      } catch {
+        result[key] = value;
+      }
+    }
+  }
+  return result;
+}
+
+export function setAdminSessionCookie(
+  req: Request,
+  res: Response,
+  token: string,
+  maxAgeSeconds = 3600
+): void {
+  const isSecureContext =
+    process.env.NODE_ENV === 'production' ||
+    req.secure ||
+    String(req.headers['x-forwarded-proto'] || '').toLowerCase() === 'https';
+
+  const parts = [
+    `${ADMIN_SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    `Max-Age=${Math.max(60, Math.floor(maxAgeSeconds))}`,
+  ];
+  if (isSecureContext) {
+    parts.push('Secure', 'SameSite=None', 'Partitioned');
+  } else {
+    parts.push('SameSite=Lax');
+  }
+  res.append('Set-Cookie', parts.join('; '));
+}
+
+export function clearAdminSessionCookie(req: Request, res: Response): void {
+  const isSecureContext =
+    process.env.NODE_ENV === 'production' ||
+    req.secure ||
+    String(req.headers['x-forwarded-proto'] || '').toLowerCase() === 'https';
+
+  const parts = [
+    `${ADMIN_SESSION_COOKIE_NAME}=`,
+    'Path=/',
+    'HttpOnly',
+    'Max-Age=0',
+    'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+  ];
+  if (isSecureContext) {
+    parts.push('Secure', 'SameSite=None', 'Partitioned');
+  } else {
+    parts.push('SameSite=Lax');
+  }
+  res.append('Set-Cookie', parts.join('; '));
 }
 
 export class AdminAuthService {
   private readonly sessionSecret: string;
+  private readonly revokedTokens = new Map<string, number>();
 
   constructor(private readonly db: DatabaseRepository, sessionSecret?: string) {
     // Only read from server environment; generate ephemeral random key in non-configured dev instances
@@ -25,6 +96,15 @@ export class AdminAuthService {
       sessionSecret ||
       process.env.ADMIN_SESSION_SECRET ||
       crypto.randomBytes(32).toString('hex');
+  }
+
+  private pruneRevokedTokens(): void {
+    const nowSec = Math.floor(Date.now() / 1000);
+    for (const [id, exp] of this.revokedTokens.entries()) {
+      if (exp < nowSec) {
+        this.revokedTokens.delete(id);
+      }
+    }
   }
 
   public isBootstrapLoginConfigured(): boolean {
@@ -38,6 +118,7 @@ export class AdminAuthService {
       sub: admin.id,
       email: admin.email,
       role: admin.role,
+      jti: crypto.randomBytes(12).toString('hex'),
       exp: Math.floor(Date.now() / 1000) + ttlSeconds,
     };
     const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
@@ -46,6 +127,15 @@ export class AdminAuthService {
       .update(encodedPayload)
       .digest('base64url');
     return `${encodedPayload}.${sig}`;
+  }
+
+  public revokeSessionToken(token: string): boolean {
+    const payload = this.verifySessionToken(token);
+    if (!payload) return false;
+    this.pruneRevokedTokens();
+    const key = payload.jti || crypto.createHash('sha256').update(token).digest('hex');
+    this.revokedTokens.set(key, payload.exp);
+    return true;
   }
 
   public verifySessionToken(token: string): SessionTokenPayload | null {
@@ -72,6 +162,10 @@ export class AdminAuthService {
       if (payload.exp < Math.floor(Date.now() / 1000)) {
         return null;
       }
+      const key = payload.jti || crypto.createHash('sha256').update(token).digest('hex');
+      if (this.revokedTokens.has(key)) {
+        return null;
+      }
       return payload;
     } catch {
       return null;
@@ -93,20 +187,32 @@ export class AdminAuthService {
     return emailMatches && crypto.timingSafeEqual(passBuf, expectedBuf);
   }
 
+  public extractTokenFromRequest(req: Request): { token: string; source: 'bearer' | 'cookie' } | null {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice('Bearer '.length).trim();
+      if (token) return { token, source: 'bearer' };
+    }
+    const cookies = parseCookieHeader(req.headers.cookie);
+    const cookieToken = (cookies[ADMIN_SESSION_COOKIE_NAME] || '').trim();
+    if (cookieToken) {
+      return { token: cookieToken, source: 'cookie' };
+    }
+    return null;
+  }
+
   public async resolveAuthenticatedPrincipal(req: Request): Promise<{
     authenticated: boolean;
     adminUser?: AdminUserRecord;
     identityEmail?: string;
+    authSource?: 'bearer' | 'cookie';
+    rawToken?: string;
   }> {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const extracted = this.extractTokenFromRequest(req);
+    if (!extracted) {
       return { authenticated: false };
     }
-
-    const token = authHeader.slice('Bearer '.length).trim();
-    if (!token) {
-      return { authenticated: false };
-    }
+    const { token, source } = extracted;
 
     // 1. Check server-signed admin session token
     const sessionPayload = this.verifySessionToken(token);
@@ -117,9 +223,16 @@ export class AdminAuthService {
           authenticated: true,
           adminUser: adminRecord,
           identityEmail: adminRecord.email,
+          authSource: source,
+          rawToken: token,
         };
       }
-      return { authenticated: true, identityEmail: sessionPayload.email };
+      return {
+        authenticated: true,
+        identityEmail: sessionPayload.email,
+        authSource: source,
+        rawToken: token,
+      };
     }
 
     // 2. Check Supabase-issued JWT via server-side auth.getUser(token) + admin_users RBAC lookup
@@ -131,11 +244,15 @@ export class AdminAuthService {
           authenticated: true,
           adminUser: adminRecord,
           identityEmail: supaUser.email,
+          authSource: source,
+          rawToken: token,
         };
       }
       return {
         authenticated: true,
         identityEmail: supaUser.email,
+        authSource: source,
+        rawToken: token,
       };
     }
 
@@ -178,7 +295,28 @@ export class AdminAuthService {
         return;
       }
 
+      // CSRF defense-in-depth on state-mutating requests authenticated exclusively via cookie
+      const isMutating = !['GET', 'HEAD', 'OPTIONS'].includes(req.method.toUpperCase());
+      if (isMutating && resolved.authSource === 'cookie') {
+        const xrw = String(req.headers['x-requested-with'] || '').trim();
+        if (!xrw) {
+          logStructured('warn', 'admin_csrf_header_missing', {
+            correlationId: req.correlationId,
+            path: req.path,
+            email: resolved.adminUser.email,
+          });
+          res.status(403).json({
+            success: false,
+            code: 'CSRF_CHECK_FAILED',
+            error: 'Missing required CSRF protection header on cookie-authenticated administrative mutation.',
+          });
+          return;
+        }
+      }
+
       req.adminUser = resolved.adminUser;
+      req.adminAuthSource = resolved.authSource;
+      req.adminRawToken = resolved.rawToken;
       next();
     } catch (err: any) {
       logStructured('error', 'admin_auth_middleware_error', {

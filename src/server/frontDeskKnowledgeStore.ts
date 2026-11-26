@@ -6,6 +6,11 @@ import {
   KnowledgeClassification,
   KnowledgeDomainId,
 } from '../data/corporateKnowledgeBase';
+import {
+  FrontDeskPersistenceAdapter,
+  FrontDeskPersistenceStatus,
+  FrontDeskPersistenceUnavailableError,
+} from './frontDeskRepository';
 
 /**
  * M06 / M07 / M22 / M27: Administrator-Controlled Versioned AI Knowledge Management Store
@@ -13,6 +18,8 @@ import {
  * Security & Governance Guarantees:
  * - Wraps verified canonical corporate & technology knowledge entries with version tracking.
  * - Supports admin CRUD (create, update, approve, deactivate) with full version history.
+ * - Supports durable Supabase PostgreSQL persistence via `FrontDeskPersistenceAdapter` with
+ *   fail-closed production enforcement when persistence is unconfigured.
  * - Strictly blocks prompt-injection override phrases in uploaded/edited knowledge entries.
  * - Strictly isolates `visibility: 'internal_only'` and non-approved (`draft`, `deactivated`)
  *   records so confidential or unapproved documents are NEVER retrieved into public AI replies.
@@ -55,6 +62,11 @@ export interface ManagedKnowledgeDocument {
   versions: KnowledgeVersionSnapshot[];
 }
 
+export interface FrontDeskKnowledgeStoreOptions {
+  persistence?: FrontDeskPersistenceAdapter | null;
+  productionStrictMode?: boolean;
+}
+
 const PROMPT_INJECTION_PATTERNS: RegExp[] = [
   /ignore\s+(?:all\s+)?(?:previous|prior|above|system)\s+instructions?/i,
   /disregard\s+(?:the\s+)?(?:system\s+prompt|security\s+policy|pricing\s+policy)/i,
@@ -86,9 +98,40 @@ function sanitizeText(raw: unknown, maxLen: number): string {
 
 export class FrontDeskKnowledgeStore {
   private readonly docs = new Map<string, ManagedKnowledgeDocument>();
+  private readonly persistence: FrontDeskPersistenceAdapter | null;
+  private readonly productionStrictMode: boolean;
 
-  constructor() {
+  constructor(options: FrontDeskKnowledgeStoreOptions = {}) {
+    this.persistence = options.persistence ?? null;
+    this.productionStrictMode = Boolean(options.productionStrictMode);
     this.seedFromCanonicalBase();
+  }
+
+  public getPersistenceStatus(): FrontDeskPersistenceStatus {
+    if (this.persistence?.isDurable) {
+      return { mode: this.persistence.mode, durable: true, configured: true };
+    }
+    if (this.productionStrictMode) {
+      return { mode: 'unconfigured', durable: false, configured: false };
+    }
+    return { mode: 'memory', durable: false, configured: true };
+  }
+
+  private assertDurablePersistenceAvailable(operation: string): void {
+    if (this.productionStrictMode && (!this.persistence || !this.persistence.isDurable)) {
+      throw new FrontDeskPersistenceUnavailableError(
+        `AI Knowledge ${operation} requires durable Supabase persistence in production.`
+      );
+    }
+  }
+
+  public async hydrateFromPersistence(): Promise<number> {
+    if (!this.persistence?.isDurable) return 0;
+    const persisted = await this.persistence.listKnowledgeDocuments();
+    for (const doc of persisted) {
+      this.docs.set(doc.id, doc);
+    }
+    return persisted.length;
   }
 
   private seedFromCanonicalBase() {
@@ -159,6 +202,18 @@ export class FrontDeskKnowledgeStore {
     return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  public async listDocumentsDurable(filters?: {
+    domain?: string;
+    status?: KnowledgeStatus;
+    visibility?: KnowledgeVisibility;
+    query?: string;
+  }): Promise<ManagedKnowledgeDocument[]> {
+    if (this.persistence?.isDurable) {
+      await this.hydrateFromPersistence();
+    }
+    return this.listDocuments(filters);
+  }
+
   public getDocument(id: string): ManagedKnowledgeDocument | null {
     return this.docs.get(id) || null;
   }
@@ -226,6 +281,7 @@ export class FrontDeskKnowledgeStore {
     actorEmail: string;
     changeNote?: string;
   }): { ok: true; document: ManagedKnowledgeDocument } | { ok: false; error: string } {
+    this.assertDurablePersistenceAvailable('document creation');
     const title = sanitizeText(input.title, 180);
     const summary = sanitizeText(input.summary, 1200);
     const facts = (Array.isArray(input.facts) ? input.facts : [])
@@ -251,7 +307,6 @@ export class FrontDeskKnowledgeStore {
     const id = `kb-custom-${crypto.randomBytes(5).toString('hex')}`;
     const visibility: KnowledgeVisibility =
       input.visibility === 'internal_only' ? 'internal_only' : 'public';
-    // Confidential documents default safely; newly uploaded docs can be draft or explicitly approved by admin
     const status: KnowledgeStatus =
       input.status === 'approved' || input.status === 'deactivated' ? input.status : 'draft';
 
@@ -292,6 +347,17 @@ export class FrontDeskKnowledgeStore {
     return { ok: true, document: doc };
   }
 
+  public async createDocumentDurable(
+    input: Parameters<FrontDeskKnowledgeStore['createDocument']>[0]
+  ): Promise<{ ok: true; document: ManagedKnowledgeDocument } | { ok: false; error: string }> {
+    this.assertDurablePersistenceAvailable('document creation');
+    const created = this.createDocument(input);
+    if (created.ok && this.persistence?.isDurable) {
+      await this.persistence.saveKnowledgeDocument(created.document);
+    }
+    return created;
+  }
+
   public updateDocument(
     id: string,
     patch: {
@@ -305,6 +371,7 @@ export class FrontDeskKnowledgeStore {
       actorEmail: string;
     }
   ): { ok: true; document: ManagedKnowledgeDocument } | { ok: false; error: string } {
+    this.assertDurablePersistenceAvailable('document update');
     const existing = this.docs.get(id);
     if (!existing) {
       return { ok: false, error: `Knowledge document "${id}" not found.` };
@@ -365,6 +432,21 @@ export class FrontDeskKnowledgeStore {
     return { ok: true, document: updated };
   }
 
+  public async updateDocumentDurable(
+    id: string,
+    patch: Parameters<FrontDeskKnowledgeStore['updateDocument']>[1]
+  ): Promise<{ ok: true; document: ManagedKnowledgeDocument } | { ok: false; error: string }> {
+    this.assertDurablePersistenceAvailable('document update');
+    if (this.persistence?.isDurable && !this.docs.has(id)) {
+      await this.hydrateFromPersistence();
+    }
+    const updated = this.updateDocument(id, patch);
+    if (updated.ok && this.persistence?.isDurable) {
+      await this.persistence.saveKnowledgeDocument(updated.document);
+    }
+    return updated;
+  }
+
   public getStats() {
     const all = Array.from(this.docs.values());
     return {
@@ -374,6 +456,7 @@ export class FrontDeskKnowledgeStore {
       internalOnlyCount: all.filter((d) => d.visibility === 'internal_only').length,
       draftCount: all.filter((d) => d.status === 'draft').length,
       deactivatedCount: all.filter((d) => d.status === 'deactivated').length,
+      persistence: this.getPersistenceStatus(),
     };
   }
 }

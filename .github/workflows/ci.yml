@@ -44,15 +44,23 @@ jobs:
       - name: Verify compiled clean URL static routes, 404.html, CNAME, and SEO artifacts
         run: npm run verify:routing:dist
 
-      - name: Verify zero secret, internal email, or outdated identity leakage in dist/ bundle
+      - name: Verify zero secret, internal email, localhost API, proprietary paste, or outdated identity leakage in dist/ bundle
         run: |
+          if find public dist -type f -name 'Paste_*' | grep -q .; then
+            echo "ERROR: Proprietary internal Paste_* prompt files found in public/ or dist/!"
+            exit 1
+          fi
           if grep -rnE "artaxsvcs@gmail\.com|dhenze\.languisan@gmail\.com|SUPABASE_SERVICE_ROLE_KEY|RESEND_API_KEY|GEMINI_API_KEY|ADMIN_BOOTSTRAP_PASSWORD|ADMIN_SESSION_SECRET|PORTAL_SIGNING_SECRET|api\.ophireummultimedia\.com|Desmond Hines" dist/; then
             echo "ERROR: Forbidden secret, legacy domain, outdated identity, or internal notification email leaked into dist/ bundle!"
             exit 1
           fi
-          echo "PASS: Zero forbidden secrets, legacy URLs, outdated identities, or internal notification emails in dist/."
+          if grep -rnE "http://localhost:3000|http://127\.0\.0\.1:3000" dist/assets/; then
+            echo "ERROR: Hardcoded localhost API URL leaked into production dist/assets/!"
+            exit 1
+          fi
+          echo "PASS: Zero forbidden secrets, Paste_* artifacts, localhost API URLs, legacy domains, or internal emails in dist/."
 
-      - name: Verify SQL migration hygiene (additive, idempotent, RLS enabled)
+      - name: Verify SQL migration hygiene (additive, idempotent, RLS enabled, 001-008)
         run: |
           for f in supabase/migrations/*.sql; do
             echo "Checking $f"
@@ -62,7 +70,11 @@ jobs:
           grep -q "notification_webhook_events" supabase/migrations/005_enterprise_production_readiness.sql
           grep -q "portal_payment_refunds" supabase/migrations/005_enterprise_production_readiness.sql
           grep -q "Desmond Hinds" supabase/migrations/006_ceo_identity_correction.sql
-          echo "PASS: SQL migrations 001-006 present and verified."
+          grep -q "frontdesk_project_inquiries" supabase/migrations/007_ai_frontdesk_platform.sql
+          grep -q "frontdesk_pending_submissions" supabase/migrations/008_ai_frontdesk_durability_hardening.sql
+          grep -q "idempotency_key" supabase/migrations/008_ai_frontdesk_durability_hardening.sql
+          grep -q "dti_set_updated_at_timestamp" supabase/migrations/008_ai_frontdesk_durability_hardening.sql
+          echo "PASS: SQL migrations 001-008 present and verified."
 
       - name: Run unit test suite
         run: npm run test:unit

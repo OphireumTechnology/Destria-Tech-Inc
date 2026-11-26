@@ -639,6 +639,7 @@ export const AIFrontDeskPage: React.FC = () => {
 
   const voiceStatusLabel: Record<VoiceSessionState, string> = {
     disconnected: 'Voice Ready',
+    checking_service: 'Checking Voice Service...',
     connecting: 'Connecting Voice...',
     connected: 'Voice Connected',
     listening: 'Listening — Speak Naturally',
@@ -847,14 +848,29 @@ export const AIFrontDeskPage: React.FC = () => {
                         'Voice service paused to prevent repeated audio prompts. You can continue typing below or manually retry voice.'}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleRetryVoice}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/50 text-amber-200 font-semibold cursor-pointer"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Retry Voice</span>
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {aiVoiceService.getLastUnansweredQuestion() && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVoiceError(null);
+                          void aiVoiceService.retryLastUnansweredQuestion();
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-cyan-400/20 hover:bg-cyan-400/30 border border-cyan-400/50 text-cyan-200 font-semibold cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Retry Last Question</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleRetryVoice}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/50 text-amber-200 font-semibold cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Retry Voice</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { logStructured } from '../logger';
+import { computeEquivalentUtcSlot } from '../utils/timezoneUtc';
 
 interface ServiceAccountCredentials {
   client_email: string;
@@ -11,6 +12,13 @@ export interface CalendarCreateResult {
   calendarSyncStatus: 'synced' | 'failed' | 'unconfigured';
   eventId?: string;
   meetingLink?: string;
+  error?: string;
+}
+
+export interface CalendarSlotCheckResult {
+  configured: boolean;
+  available: boolean;
+  busyWindows: Array<{ start: string; end: string }>;
   error?: string;
 }
 
@@ -52,7 +60,7 @@ export class GoogleCalendarService {
     const claimSet = Buffer.from(
       JSON.stringify({
         iss: this.credentials.client_email,
-        scope: 'https://www.googleapis.com/auth/calendar.events',
+        scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
         aud: 'https://oauth2.googleapis.com/token',
         iat: now,
         exp: now + 3600,
@@ -81,6 +89,98 @@ export class GoogleCalendarService {
     return String(tokenData.access_token);
   }
 
+  /**
+   * Computes exact DST-aware UTC start/end ISO strings using the validated client IANA timezone.
+   */
+  public resolveSlotWindow(
+    scheduledDate: string,
+    scheduledTimeSlot: string,
+    clientTimezone: string
+  ): { startUtcIso: string; endUtcIso: string; timeZone: string } {
+    const computed = computeEquivalentUtcSlot(scheduledDate, scheduledTimeSlot, clientTimezone);
+    if (computed) {
+      return {
+        startUtcIso: computed.startUtcIso,
+        endUtcIso: computed.endUtcIso,
+        timeZone: computed.validTimezone,
+      };
+    }
+
+    // Fallback parsing for non-standard slot labels
+    const [startTimeStr] = scheduledTimeSlot.split(' - ');
+    const [timePart, period] = startTimeStr.trim().split(' ');
+    const [h, m] = timePart.split(':').map(Number);
+    let hours = Number.isFinite(h) ? h : 9;
+    if (period === 'PM' && hours < 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    const hh = String(hours).padStart(2, '0');
+    const mm = String(Number.isFinite(m) ? m : 0).padStart(2, '0');
+    const startUtc = new Date(`${scheduledDate}T${hh}:${mm}:00Z`);
+    const endUtc = new Date(startUtc.getTime() + 30 * 60 * 1000);
+    return {
+      startUtcIso: startUtc.toISOString(),
+      endUtcIso: endUtc.toISOString(),
+      timeZone: 'UTC',
+    };
+  }
+
+  /**
+   * Queries Google Calendar FreeBusy API to detect real calendar conflicts before event creation.
+   */
+  public async checkSlotAvailability(params: {
+    scheduledDate: string;
+    scheduledTimeSlot: string;
+    clientTimezone: string;
+  }): Promise<CalendarSlotCheckResult> {
+    if (!this.isConfigured()) {
+      return { configured: false, available: true, busyWindows: [] };
+    }
+    try {
+      const accessToken = await this.getAccessToken();
+      const window = this.resolveSlotWindow(
+        params.scheduledDate,
+        params.scheduledTimeSlot,
+        params.clientTimezone
+      );
+      const res = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          timeMin: window.startUtcIso,
+          timeMax: window.endUtcIso,
+          items: [{ id: this.calendarId }],
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          configured: true,
+          available: true,
+          busyWindows: [],
+          error: data?.error?.message || `Google Calendar FreeBusy HTTP ${res.status}`,
+        };
+      }
+      const busy = Array.isArray(data?.calendars?.[this.calendarId]?.busy)
+        ? data.calendars[this.calendarId].busy
+        : [];
+      return {
+        configured: true,
+        available: busy.length === 0,
+        busyWindows: busy,
+      };
+    } catch (err: any) {
+      return {
+        configured: true,
+        available: true,
+        busyWindows: [],
+        error: err?.message || 'Unable to verify Google Calendar availability',
+      };
+    }
+  }
+
   public async createConsultationEvent(params: {
     referenceCode: string;
     fullName: string;
@@ -103,24 +203,17 @@ export class GoogleCalendarService {
 
     try {
       const accessToken = await this.getAccessToken();
-      const [startTimeStr] = params.scheduledTimeSlot.split(' - ');
-      const [timePart, period] = startTimeStr.trim().split(' ');
-      const [h, m] = timePart.split(':').map(Number);
-      let hours = h;
-      if (period === 'PM' && hours < 12) hours += 12;
-      if (period === 'AM' && hours === 12) hours = 0;
-
-      // Manila / PHT (+08:00) authoritative slot window
-      const hh = String(hours).padStart(2, '0');
-      const mm = String(m || 0).padStart(2, '0');
-      const startIso = `${params.scheduledDate}T${hh}:${mm}:00+08:00`;
-      const endDate = new Date(new Date(startIso).getTime() + 30 * 60 * 1000);
+      const window = this.resolveSlotWindow(
+        params.scheduledDate,
+        params.scheduledTimeSlot,
+        params.clientTimezone
+      );
 
       const eventBody: Record<string, unknown> = {
         summary: `DESTRIA TECH INC Consultation (${params.referenceCode}) - ${params.companyName}`,
-        description: `Client: ${params.fullName} (${params.email})\nChannel: ${params.consultationType}\nClient Timezone: ${params.clientTimezone}\nRef: ${params.referenceCode}`,
-        start: { dateTime: startIso, timeZone: 'Asia/Manila' },
-        end: { dateTime: endDate.toISOString(), timeZone: 'Asia/Manila' },
+        description: `Client: ${params.fullName} (${params.email})\nChannel: ${params.consultationType}\nClient Timezone: ${window.timeZone}\nRef: ${params.referenceCode}`,
+        start: { dateTime: window.startUtcIso, timeZone: window.timeZone },
+        end: { dateTime: window.endUtcIso, timeZone: window.timeZone },
         attendees: [{ email: params.email, displayName: params.fullName }],
         location: params.location,
       };
@@ -180,6 +273,101 @@ export class GoogleCalendarService {
         calendarSyncStatus: 'failed',
         error: err?.message || 'Google Calendar integration error',
       };
+    }
+  }
+
+  public async updateConsultationEvent(params: {
+    eventId: string;
+    scheduledDate: string;
+    scheduledTimeSlot: string;
+    clientTimezone: string;
+    referenceCode: string;
+    correlationId?: string;
+  }): Promise<CalendarCreateResult> {
+    if (!this.isConfigured() || !params.eventId) {
+      return {
+        synced: false,
+        calendarSyncStatus: 'unconfigured',
+        error: 'Google Calendar event update skipped because credentials or event ID are absent.',
+      };
+    }
+    try {
+      const accessToken = await this.getAccessToken();
+      const window = this.resolveSlotWindow(
+        params.scheduledDate,
+        params.scheduledTimeSlot,
+        params.clientTimezone
+      );
+      const calRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+          this.calendarId
+        )}/events/${encodeURIComponent(params.eventId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            start: { dateTime: window.startUtcIso, timeZone: window.timeZone },
+            end: { dateTime: window.endUtcIso, timeZone: window.timeZone },
+          }),
+        }
+      );
+      const calData = await calRes.json().catch(() => ({}));
+      if (!calRes.ok) {
+        return {
+          synced: false,
+          calendarSyncStatus: 'failed',
+          error: calData?.error?.message || `Google Calendar update HTTP ${calRes.status}`,
+        };
+      }
+      return {
+        synced: true,
+        calendarSyncStatus: 'synced',
+        eventId: calData.id || params.eventId,
+        meetingLink: calData.hangoutLink || calData.htmlLink || undefined,
+      };
+    } catch (err: any) {
+      return {
+        synced: false,
+        calendarSyncStatus: 'failed',
+        error: err?.message || 'Google Calendar update error',
+      };
+    }
+  }
+
+  public async cancelConsultationEvent(params: {
+    eventId: string;
+    referenceCode: string;
+    correlationId?: string;
+  }): Promise<{ ok: boolean; error?: string }> {
+    if (!this.isConfigured() || !params.eventId) {
+      return { ok: false, error: 'Google Calendar not configured or no event ID.' };
+    }
+    try {
+      const accessToken = await this.getAccessToken();
+      const calRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+          this.calendarId
+        )}/events/${encodeURIComponent(params.eventId)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+      if (calRes.ok || calRes.status === 404 || calRes.status === 410) {
+        return { ok: true };
+      }
+      const calData = await calRes.json().catch(() => ({}));
+      return {
+        ok: false,
+        error: calData?.error?.message || `Google Calendar cancel HTTP ${calRes.status}`,
+      };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Google Calendar cancel error' };
     }
   }
 }

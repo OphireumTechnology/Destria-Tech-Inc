@@ -554,9 +554,22 @@ describe('DESTRIA TECH INC — Master AI Front Desk Platform Suite (Section 36)'
         },
       } as unknown as SpeechSynthesis;
 
-      let failNetwork = true;
+      let failNetwork = false;
       const fakeFetch = (async (url: string) => {
-        if (String(url).includes('/api/voice/tts')) {
+        if (String(url).includes('/api/voice/session')) {
+          if (failNetwork) {
+            throw new Error('Simulated backend network outage');
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              sessionId: 'dti-voice-outage-test',
+              liveStreamingAvailable: false,
+            }),
+          } as any;
+        }
+        if (String(url).includes('/api/voice/tts') || String(url).includes('/api/voice/speak')) {
           return { ok: false, status: 503, json: async () => ({}) } as any;
         }
         if (failNetwork) {
@@ -595,8 +608,11 @@ describe('DESTRIA TECH INC — Master AI Front Desk Platform Suite (Section 36)'
 
       try {
         const started = await voice.startSession();
-        assert.equal(started, true, 'Voice session must start in turn-based mode');
+        assert.equal(started, true, 'Voice session must start cleanly when backend pre-flight succeeds');
         await new Promise((r) => setTimeout(r, 40));
+
+        // Now simulate a mid-session backend outage
+        failNetwork = true;
 
         // Emit 3 consecutive utterances during backend outage -> circuit breaker must open after failure #2
         recHolder.current?.emitFinal('Hello, are you connected right now?');

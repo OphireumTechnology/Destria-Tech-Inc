@@ -34,14 +34,17 @@ interface AdminProfile {
   role: string;
 }
 
-const ADMIN_TOKEN_KEY = 'opm_admin_token';
-
-function readStoredAdminToken(): string {
-  try {
-    return sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
-  } catch {
-    return '';
+function buildAdminHeaders(token?: string, includeJsonContentType = false): Record<string, string> {
+  const headers: Record<string, string> = {
+    'X-Requested-With': 'XMLHttpRequest',
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
+  if (includeJsonContentType) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
 }
 
 export const AdminPortalApp: React.FC = () => {
@@ -49,9 +52,10 @@ export const AdminPortalApp: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const [adminToken, setAdminToken] = useState<string>(readStoredAdminToken);
+  // SECURITY: Admin session token is kept in memory only; persistent session continuity relies on HttpOnly cookie.
+  const [adminToken, setAdminToken] = useState<string>('');
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
-  const [checkingSession, setCheckingSession] = useState<boolean>(Boolean(readStoredAdminToken()));
+  const [checkingSession, setCheckingSession] = useState<boolean>(true);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
@@ -73,27 +77,23 @@ export const AdminPortalApp: React.FC = () => {
   const [adminDataError, setAdminDataError] = useState<string | null>(null);
   const [isLoadingAdminData, setIsLoadingAdminData] = useState(false);
 
-  const loadAuthorizedAdminData = useCallback(async (tokenToUse: string) => {
-    if (!tokenToUse) {
-      setAdminProfile(null);
-      setCheckingSession(false);
-      return false;
-    }
-
+  const loadAuthorizedAdminData = useCallback(async (tokenToUse?: string, silentOnUnauthenticated = false) => {
     setIsLoadingAdminData(true);
     setAdminDataError(null);
 
     try {
-      const headers = { Authorization: `Bearer ${tokenToUse}` };
-      const sessionRes = await fetch(apiUrl('/api/admin/auth/session'), { headers });
+      const headers = buildAdminHeaders(tokenToUse);
+      const sessionRes = await fetch(apiUrl('/api/admin/auth/session'), {
+        headers,
+        credentials: 'include',
+      });
       if (!sessionRes.ok) {
         const errData = await sessionRes.json().catch(() => ({}));
         setAdminToken('');
         setAdminProfile(null);
-        try {
-          sessionStorage.removeItem(ADMIN_TOKEN_KEY);
-        } catch {}
-        setAuthError(errData.error || 'Administrator session expired. Please sign in again.');
+        if (!silentOnUnauthenticated) {
+          setAuthError(errData.error || 'Administrator session expired. Please sign in again.');
+        }
         return false;
       }
 
@@ -101,12 +101,12 @@ export const AdminPortalApp: React.FC = () => {
       setAdminProfile(sessionJson.admin || null);
 
       const [reqRes, aptRes, auditRes, notifRes, healthRes, aiRes] = await Promise.all([
-        fetch(apiUrl('/api/admin/solution-requests?limit=25&offset=0'), { headers }),
-        fetch(apiUrl('/api/admin/appointments?limit=25&offset=0'), { headers }),
-        fetch(apiUrl('/api/admin/audit-logs?limit=25&offset=0'), { headers }),
-        fetch(apiUrl('/api/admin/notifications?limit=50&offset=0'), { headers }),
-        fetch(apiUrl('/api/admin/system-health'), { headers }),
-        fetch(apiUrl('/api/admin/ai/overview'), { headers }),
+        fetch(apiUrl('/api/admin/solution-requests?limit=25&offset=0'), { headers, credentials: 'include' }),
+        fetch(apiUrl('/api/admin/appointments?limit=25&offset=0'), { headers, credentials: 'include' }),
+        fetch(apiUrl('/api/admin/audit-logs?limit=25&offset=0'), { headers, credentials: 'include' }),
+        fetch(apiUrl('/api/admin/notifications?limit=50&offset=0'), { headers, credentials: 'include' }),
+        fetch(apiUrl('/api/admin/system-health'), { headers, credentials: 'include' }),
+        fetch(apiUrl('/api/admin/ai/overview'), { headers, credentials: 'include' }),
       ]);
 
       const reqJson = await reqRes.json().catch(() => ({}));
@@ -136,7 +136,9 @@ export const AdminPortalApp: React.FC = () => {
       }
       return true;
     } catch {
-      setAdminDataError('Unable to connect to the authorized admin API endpoints.');
+      if (!silentOnUnauthenticated) {
+        setAdminDataError('Unable to connect to the authorized admin API endpoints.');
+      }
       return false;
     } finally {
       setIsLoadingAdminData(false);
@@ -146,16 +148,14 @@ export const AdminPortalApp: React.FC = () => {
 
   const handleSaveAiConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adminToken || !aiConfigDraft || isSavingAiConfig) return;
+    if ((!adminToken && !adminProfile) || !aiConfigDraft || isSavingAiConfig) return;
     setIsSavingAiConfig(true);
     setAiFeedback(null);
     try {
       const res = await fetch(apiUrl('/api/admin/ai/config'), {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${adminToken}`,
-          'Content-Type': 'application/json',
-        },
+        credentials: 'include',
+        headers: buildAdminHeaders(adminToken, true),
         body: JSON.stringify({
           geminiLiveEnabled: Boolean(aiConfigDraft.geminiLiveEnabled),
           geminiLiveModel: aiConfigDraft.geminiLiveModel,
@@ -185,7 +185,7 @@ export const AdminPortalApp: React.FC = () => {
   };
 
   const handleTerminateAiSession = async (sessionId: string) => {
-    if (!adminToken || terminatingSessionId) return;
+    if ((!adminToken && !adminProfile) || terminatingSessionId) return;
     setTerminatingSessionId(sessionId);
     setAiFeedback(null);
     try {
@@ -193,10 +193,8 @@ export const AdminPortalApp: React.FC = () => {
         apiUrl(`/api/admin/ai/sessions/${encodeURIComponent(sessionId)}/terminate`),
         {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${adminToken}`,
-            'Content-Type': 'application/json',
-          },
+          credentials: 'include',
+          headers: buildAdminHeaders(adminToken, true),
         }
       );
       const data = await res.json().catch(() => ({}));
@@ -214,16 +212,14 @@ export const AdminPortalApp: React.FC = () => {
   };
 
   const handleRetryNotification = async (outboxId: string) => {
-    if (!adminToken || retryingId) return;
+    if ((!adminToken && !adminProfile) || retryingId) return;
     setRetryingId(outboxId);
     setRetryFeedback(null);
     try {
       const res = await fetch(apiUrl(`/api/admin/notifications/${encodeURIComponent(outboxId)}/retry`), {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${adminToken}`,
-          'Content-Type': 'application/json',
-        },
+        credentials: 'include',
+        headers: buildAdminHeaders(adminToken, true),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
@@ -240,12 +236,8 @@ export const AdminPortalApp: React.FC = () => {
   };
 
   useEffect(() => {
-    if (adminToken) {
-      void loadAuthorizedAdminData(adminToken);
-    } else {
-      setCheckingSession(false);
-    }
-  }, [adminToken, loadAuthorizedAdminData]);
+    void loadAuthorizedAdminData(adminToken || undefined, true);
+  }, [loadAuthorizedAdminData]);
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,7 +247,11 @@ export const AdminPortalApp: React.FC = () => {
     try {
       const res = await fetch(apiUrl('/api/admin/auth/login'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
         body: JSON.stringify({
           email: loginEmail.trim(),
           password: loginPassword,
@@ -269,9 +265,6 @@ export const AdminPortalApp: React.FC = () => {
       setAdminToken(data.token);
       setAdminProfile(data.admin || null);
       setLoginPassword('');
-      try {
-        sessionStorage.setItem(ADMIN_TOKEN_KEY, data.token);
-      } catch {}
 
       const verified = await loadAuthorizedAdminData(data.token);
       if (verified) {
@@ -286,6 +279,13 @@ export const AdminPortalApp: React.FC = () => {
   };
 
   const handleAdminLogout = () => {
+    const tokenToRevoke = adminToken;
+    void fetch(apiUrl('/api/admin/auth/logout'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildAdminHeaders(tokenToRevoke, true),
+    }).catch(() => {});
+
     setAdminToken('');
     setAdminProfile(null);
     setSolutionRequests([]);
@@ -298,9 +298,6 @@ export const AdminPortalApp: React.FC = () => {
     setAiFeedback(null);
     setRetryFeedback(null);
     setAdminDataError(null);
-    try {
-      sessionStorage.removeItem(ADMIN_TOKEN_KEY);
-    } catch {}
     navigate(ROUTES.ADMIN.LOGIN, { replace: true });
   };
 

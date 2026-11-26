@@ -12,6 +12,11 @@ import {
   generatePreliminaryMasterplan,
   ingestUserTurnIntoDossier,
 } from './frontDeskEngine';
+import {
+  FrontDeskPersistenceAdapter,
+  FrontDeskPersistenceStatus,
+  FrontDeskPersistenceUnavailableError,
+} from './frontDeskRepository';
 
 /**
  * M16 / M20 / M23 / M25 / M26: AI Front Desk Operational Persistence Store
@@ -22,6 +27,11 @@ import {
  * - 16-Stage Executive Commercial Review workflow with human-only commercial approval & audit history
  * - Human Escalation handover requests
  * - AI Quality Evaluations & privacy-safe operational analytics
+ *
+ * Durability Guarantees:
+ * - Supports write-through Supabase PostgreSQL persistence via `FrontDeskPersistenceAdapter`.
+ * - In `productionStrictMode` (NODE_ENV === 'production'), refuses to silently persist production
+ *   inquiries, escalations, reviews, or evaluations in volatile memory if no durable adapter is configured.
  */
 
 export interface FrontDeskPendingSubmission {
@@ -112,16 +122,59 @@ export interface AiQualityEvaluationRecord {
   createdAt: string;
 }
 
+export interface FrontDeskStoreOptions {
+  persistence?: FrontDeskPersistenceAdapter | null;
+  productionStrictMode?: boolean;
+}
+
 const CONFIRMATION_TTL_MS = 20 * 60 * 1000;
 
 export class FrontDeskStore {
   private readonly sessions = new Map<string, FrontDeskSessionDossier>();
   private readonly pendingSubmissions = new Map<string, FrontDeskPendingSubmission>();
   private readonly inquiries = new Map<string, SubmittedFrontDeskInquiry>();
+  private readonly idempotencyIndex = new Map<string, string>();
   private readonly escalations = new Map<string, HumanEscalationRecord>();
   private readonly qualityEvaluations: AiQualityEvaluationRecord[] = [];
+  private readonly persistence: FrontDeskPersistenceAdapter | null;
+  private readonly productionStrictMode: boolean;
   private totalFrontDeskTurns = 0;
   private totalMasterplansGenerated = 0;
+
+  constructor(options: FrontDeskStoreOptions = {}) {
+    this.persistence = options.persistence ?? null;
+    this.productionStrictMode = Boolean(options.productionStrictMode);
+  }
+
+  public getPersistenceStatus(): FrontDeskPersistenceStatus {
+    if (this.persistence && this.persistence.isDurable) {
+      return {
+        mode: this.persistence.mode,
+        durable: true,
+        configured: true,
+      };
+    }
+    if (this.productionStrictMode) {
+      return {
+        mode: 'unconfigured',
+        durable: false,
+        configured: false,
+      };
+    }
+    return {
+      mode: 'memory',
+      durable: false,
+      configured: true,
+    };
+  }
+
+  public assertDurablePersistenceAvailable(operation: string): void {
+    if (this.productionStrictMode && (!this.persistence || !this.persistence.isDurable)) {
+      throw new FrontDeskPersistenceUnavailableError(
+        `AI Front Desk ${operation} requires durable Supabase persistence in production. Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.`
+      );
+    }
+  }
 
   public getOrCreateSession(sessionId: string): FrontDeskSessionDossier {
     const cleanId = sessionId.trim() || `dti-fd-${crypto.randomBytes(6).toString('hex')}`;
@@ -137,6 +190,21 @@ export class FrontDeskStore {
     return existing;
   }
 
+  public async getOrCreateSessionDurable(sessionId: string): Promise<FrontDeskSessionDossier> {
+    this.assertDurablePersistenceAvailable('session retrieval');
+    const cleanId = sessionId.trim() || `dti-fd-${crypto.randomBytes(6).toString('hex')}`;
+    const cached = this.sessions.get(cleanId);
+    if (cached) return cached;
+    if (this.persistence?.isDurable) {
+      const persisted = await this.persistence.loadSession(cleanId);
+      if (persisted) {
+        this.sessions.set(cleanId, persisted);
+        return persisted;
+      }
+    }
+    return this.getOrCreateSession(cleanId);
+  }
+
   public recordTurn(
     sessionId: string,
     userMessage: string,
@@ -146,6 +214,24 @@ export class FrontDeskStore {
     const current = this.getOrCreateSession(sessionId);
     const updated = ingestUserTurnIntoDossier(current, userMessage, options);
     this.sessions.set(current.sessionId, updated);
+    if (this.persistence?.isDurable) {
+      void this.persistence.saveSession(updated).catch(() => {});
+    }
+    return updated;
+  }
+
+  public async recordTurnDurable(
+    sessionId: string,
+    userMessage: string,
+    options?: { isProjectDiscoveryTurn?: boolean; detectedLanguage?: string }
+  ): Promise<FrontDeskSessionDossier> {
+    this.totalFrontDeskTurns += 1;
+    const current = await this.getOrCreateSessionDurable(sessionId);
+    const updated = ingestUserTurnIntoDossier(current, userMessage, options);
+    this.sessions.set(current.sessionId, updated);
+    if (this.persistence?.isDurable) {
+      await this.persistence.saveSession(updated);
+    }
     return updated;
   }
 
@@ -156,6 +242,22 @@ export class FrontDeskStore {
     const current = this.getOrCreateSession(sessionId);
     const updated = applyClientDossierCorrections(current, patch);
     this.sessions.set(current.sessionId, updated);
+    if (this.persistence?.isDurable) {
+      void this.persistence.saveSession(updated).catch(() => {});
+    }
+    return updated;
+  }
+
+  public async applySessionCorrectionsDurable(
+    sessionId: string,
+    patch: Parameters<typeof applyClientDossierCorrections>[1]
+  ): Promise<FrontDeskSessionDossier> {
+    const current = await this.getOrCreateSessionDurable(sessionId);
+    const updated = applyClientDossierCorrections(current, patch);
+    this.sessions.set(current.sessionId, updated);
+    if (this.persistence?.isDurable) {
+      await this.persistence.saveSession(updated);
+    }
     return updated;
   }
 
@@ -173,19 +275,45 @@ export class FrontDeskStore {
     };
     this.sessions.set(current.sessionId, updated);
     this.totalMasterplansGenerated += 1;
+    if (this.persistence?.isDurable) {
+      void this.persistence.saveSession(updated).catch(() => {});
+    }
     return { dossier: updated, masterplan };
   }
 
-  public prepareSubmissionConfirmation(sessionId: string): {
-    ok: true;
-    confirmationToken: string;
+  public async generateAndStoreMasterplanDurable(sessionId: string): Promise<{
     dossier: FrontDeskSessionDossier;
     masterplan: PreliminaryProjectMasterplan;
-  } | {
-    ok: false;
-    error: string;
-    missingFields?: string[];
-  } {
+  }> {
+    const current = await this.getOrCreateSessionDurable(sessionId);
+    const masterplan = generatePreliminaryMasterplan(current);
+    const updated: FrontDeskSessionDossier = {
+      ...current,
+      discoveryActive: true,
+      masterplan,
+      updatedAt: new Date().toISOString(),
+    };
+    this.sessions.set(current.sessionId, updated);
+    this.totalMasterplansGenerated += 1;
+    if (this.persistence?.isDurable) {
+      await this.persistence.saveSession(updated);
+    }
+    return { dossier: updated, masterplan };
+  }
+
+  public prepareSubmissionConfirmation(sessionId: string):
+    | {
+        ok: true;
+        confirmationToken: string;
+        dossier: FrontDeskSessionDossier;
+        masterplan: PreliminaryProjectMasterplan;
+      }
+    | {
+        ok: false;
+        error: string;
+        missingFields?: string[];
+      } {
+    this.assertDurablePersistenceAvailable('submission preparation');
     const { dossier, masterplan } = this.generateAndStoreMasterplan(sessionId);
     const missing: string[] = [];
     if (!dossier.clientProfile.fullName || dossier.clientProfile.fullName.trim().length < 2) {
@@ -208,13 +336,14 @@ export class FrontDeskStore {
 
     const token = `dti-fd-cfm-${crypto.randomBytes(12).toString('hex')}`;
     const now = Date.now();
-    this.pendingSubmissions.set(token, {
+    const pending: FrontDeskPendingSubmission = {
       confirmationToken: token,
       sessionId: dossier.sessionId,
       dossierSnapshotVersion: dossier.version,
       preparedAt: new Date(now).toISOString(),
       expiresAt: now + CONFIRMATION_TTL_MS,
-    });
+    };
+    this.pendingSubmissions.set(token, pending);
 
     dossier.leadStatus = 'Awaiting client confirmation';
     this.sessions.set(dossier.sessionId, dossier);
@@ -222,10 +351,39 @@ export class FrontDeskStore {
     return { ok: true, confirmationToken: token, dossier, masterplan };
   }
 
+  public async prepareSubmissionConfirmationDurable(sessionId: string): Promise<
+    | {
+        ok: true;
+        confirmationToken: string;
+        dossier: FrontDeskSessionDossier;
+        masterplan: PreliminaryProjectMasterplan;
+      }
+    | {
+        ok: false;
+        error: string;
+        missingFields?: string[];
+      }
+  > {
+    this.assertDurablePersistenceAvailable('submission preparation');
+    await this.getOrCreateSessionDurable(sessionId);
+    const prepared = this.prepareSubmissionConfirmation(sessionId);
+    if (!prepared.ok) return prepared;
+
+    if (this.persistence?.isDurable) {
+      const pending = this.pendingSubmissions.get(prepared.confirmationToken);
+      if (pending) {
+        await this.persistence.savePendingSubmission(pending);
+      }
+      await this.persistence.saveSession(prepared.dossier);
+    }
+    return prepared;
+  }
+
   public consumeSubmissionConfirmation(
     sessionId: string,
     confirmationToken: string
   ): { ok: true; pending: FrontDeskPendingSubmission } | { ok: false; error: string } {
+    this.assertDurablePersistenceAvailable('submission authorization');
     const now = Date.now();
     for (const [k, v] of this.pendingSubmissions.entries()) {
       if (now > v.expiresAt) this.pendingSubmissions.delete(k);
@@ -235,12 +393,46 @@ export class FrontDeskStore {
     if (!pending) {
       return { ok: false, error: 'Invalid or expired confirmation token. Please review and prepare submission again.' };
     }
-    // Strict cross-session isolation!
     if (pending.sessionId !== sessionId) {
       return { ok: false, error: 'Confirmation token does not belong to the active session.' };
     }
     this.pendingSubmissions.delete(confirmationToken);
     return { ok: true, pending };
+  }
+
+  public async consumeSubmissionConfirmationDurable(
+    sessionId: string,
+    confirmationToken: string
+  ): Promise<{ ok: true; pending: FrontDeskPendingSubmission } | { ok: false; error: string }> {
+    this.assertDurablePersistenceAvailable('submission authorization');
+    if (this.persistence?.isDurable) {
+      const outcome = await this.persistence.consumePendingSubmission(sessionId, confirmationToken);
+      if (outcome.ok) {
+        this.pendingSubmissions.delete(confirmationToken);
+      }
+      return outcome;
+    }
+    return this.consumeSubmissionConfirmation(sessionId, confirmationToken);
+  }
+
+  public async findInquiryByIdempotencyKeyDurable(
+    idempotencyKey?: string
+  ): Promise<SubmittedFrontDeskInquiry | null> {
+    if (!idempotencyKey) return null;
+    const cachedRef = this.idempotencyIndex.get(idempotencyKey);
+    if (cachedRef) {
+      const hit = this.inquiries.get(cachedRef);
+      if (hit) return hit;
+    }
+    if (this.persistence?.isDurable) {
+      const persisted = await this.persistence.findInquiryByIdempotencyKey(idempotencyKey);
+      if (persisted) {
+        this.inquiries.set(persisted.referenceCode, persisted);
+        this.idempotencyIndex.set(idempotencyKey, persisted.referenceCode);
+        return persisted;
+      }
+    }
+    return null;
   }
 
   public saveSubmittedInquiry(input: {
@@ -255,7 +447,17 @@ export class FrontDeskStore {
       clientTimezone?: string;
     };
     emailDeliveryState: string;
+    idempotencyKey?: string;
   }): SubmittedFrontDeskInquiry {
+    this.assertDurablePersistenceAvailable('inquiry submission');
+
+    if (input.idempotencyKey) {
+      const existingRef = this.idempotencyIndex.get(input.idempotencyKey);
+      if (existingRef && this.inquiries.has(existingRef)) {
+        return this.inquiries.get(existingRef)!;
+      }
+    }
+
     const now = new Date().toISOString();
     const ownerEmail = (input.dossier.clientProfile.email || '').trim().toLowerCase();
     const leadStatus: LeadQualificationStatus = input.consultation
@@ -309,8 +511,27 @@ export class FrontDeskStore {
     };
 
     this.inquiries.set(record.referenceCode, record);
+    if (input.idempotencyKey) {
+      this.idempotencyIndex.set(input.idempotencyKey, record.referenceCode);
+    }
     input.dossier.leadStatus = leadStatus;
     this.sessions.set(input.dossier.sessionId, input.dossier);
+    return record;
+  }
+
+  public async saveSubmittedInquiryDurable(
+    input: Parameters<FrontDeskStore['saveSubmittedInquiry']>[0]
+  ): Promise<SubmittedFrontDeskInquiry> {
+    this.assertDurablePersistenceAvailable('inquiry submission');
+    if (input.idempotencyKey) {
+      const existing = await this.findInquiryByIdempotencyKeyDurable(input.idempotencyKey);
+      if (existing) return existing;
+    }
+    const record = this.saveSubmittedInquiry(input);
+    if (this.persistence?.isDurable) {
+      await this.persistence.saveInquiry(record, input.idempotencyKey);
+      await this.persistence.saveSession(input.dossier);
+    }
     return record;
   }
 
@@ -346,6 +567,23 @@ export class FrontDeskStore {
     return { records: items.slice(offset, offset + limit), total };
   }
 
+  public async listInquiriesForAdminDurable(filters?: {
+    query?: string;
+    leadStatus?: string;
+    reviewStage?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ records: SubmittedFrontDeskInquiry[]; total: number }> {
+    this.assertDurablePersistenceAvailable('admin inquiry listing');
+    if (this.persistence?.isDurable) {
+      const persisted = await this.persistence.listInquiries();
+      for (const rec of persisted) {
+        this.inquiries.set(rec.referenceCode, rec);
+      }
+    }
+    return this.listInquiriesForAdmin(filters);
+  }
+
   /**
    * M23: Strict Client Portal ownership isolation — returns ONLY records matching normalized client email.
    */
@@ -357,26 +595,65 @@ export class FrontDeskStore {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  public async listInquiriesForClientEmailDurable(clientEmail: string): Promise<SubmittedFrontDeskInquiry[]> {
+    this.assertDurablePersistenceAvailable('client inquiry listing');
+    const normalized = clientEmail.trim().toLowerCase();
+    if (!normalized) return [];
+    if (this.persistence?.isDurable) {
+      const rows = await this.persistence.listInquiriesByOwnerEmail(normalized);
+      for (const r of rows) {
+        this.inquiries.set(r.referenceCode, r);
+      }
+      return rows;
+    }
+    return this.listInquiriesForClientEmail(normalized);
+  }
+
   public getInquiryByReference(referenceCode: string): SubmittedFrontDeskInquiry | null {
     return this.inquiries.get(referenceCode) || null;
   }
 
+  public async getInquiryByReferenceDurable(referenceCode: string): Promise<SubmittedFrontDeskInquiry | null> {
+    this.assertDurablePersistenceAvailable('inquiry retrieval');
+    if (this.persistence?.isDurable) {
+      const persisted = await this.persistence.loadInquiryByReference(referenceCode);
+      if (persisted) {
+        this.inquiries.set(persisted.referenceCode, persisted);
+        return persisted;
+      }
+    }
+    return this.getInquiryByReference(referenceCode);
+  }
+
   /**
    * M23: Authenticated client owner submits corrections to their own inquiry.
-   * Rejects cross-client access strictly!
+   * Rejects cross-client access strictly and optionally validates optimistic `expectedVersion`.
    */
   public applyClientPortalCorrection(params: {
     referenceCode: string;
     authenticatedEmail: string;
     patch: Parameters<typeof applyClientDossierCorrections>[1];
     note?: string;
+    expectedVersion?: number;
   }): { ok: true; record: SubmittedFrontDeskInquiry } | { ok: false; statusCode: number; error: string } {
+    this.assertDurablePersistenceAvailable('client inquiry correction');
     const record = this.inquiries.get(params.referenceCode);
     if (!record) {
       return { ok: false, statusCode: 404, error: 'Project inquiry not found.' };
     }
     if (record.ownerEmail !== params.authenticatedEmail.trim().toLowerCase()) {
       return { ok: false, statusCode: 403, error: 'Access denied: you may only update your own project inquiries.' };
+    }
+    if (
+      typeof params.expectedVersion === 'number' &&
+      Number.isInteger(params.expectedVersion) &&
+      params.expectedVersion !== record.dossierVersion
+    ) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: `Version conflict: inquiry is currently at version ${record.dossierVersion}. Please refresh before applying changes.`,
+      };
     }
 
     const baseSession = this.getOrCreateSession(record.sessionId);
@@ -426,6 +703,23 @@ export class FrontDeskStore {
     return { ok: true, record: updatedRecord };
   }
 
+  public async applyClientPortalCorrectionDurable(
+    params: Parameters<FrontDeskStore['applyClientPortalCorrection']>[0]
+  ): Promise<{ ok: true; record: SubmittedFrontDeskInquiry } | { ok: false; statusCode: number; error: string }> {
+    this.assertDurablePersistenceAvailable('client inquiry correction');
+    if (this.persistence?.isDurable) {
+      const persisted = await this.persistence.loadInquiryByReference(params.referenceCode);
+      if (persisted) {
+        this.inquiries.set(persisted.referenceCode, persisted);
+      }
+    }
+    const outcome = this.applyClientPortalCorrection(params);
+    if (outcome.ok && this.persistence?.isDurable) {
+      await this.persistence.saveInquiry(outcome.record);
+    }
+    return outcome;
+  }
+
   /**
    * M25: 16-Stage Executive Commercial Review Workflow Update (Human Admin Only!)
    */
@@ -437,17 +731,30 @@ export class FrontDeskStore {
     actorEmail: string;
     actorRole: string;
     approveCommercialTerms?: boolean;
-  }): { ok: true; record: SubmittedFrontDeskInquiry } | { ok: false; error: string } {
+  }): { ok: true; record: SubmittedFrontDeskInquiry } | { ok: false; error: string; statusCode?: number } {
+    this.assertDurablePersistenceAvailable('executive commercial review');
     const record = this.inquiries.get(params.referenceCode);
     if (!record) {
-      return { ok: false, error: `Inquiry "${params.referenceCode}" not found.` };
+      return { ok: false, statusCode: 404, error: `Inquiry "${params.referenceCode}" not found.` };
     }
     if (!EXECUTIVE_REVIEW_STAGES.includes(params.stage)) {
-      return { ok: false, error: `Invalid executive review stage "${params.stage}".` };
+      return { ok: false, statusCode: 400, error: `Invalid executive review stage "${params.stage}".` };
     }
     // Governance rule: AI actors may NEVER independently approve commercial terms!
     if (params.approveCommercialTerms && /ai|bot|assistant|system/i.test(params.actorRole)) {
-      return { ok: false, error: 'AI systems are strictly prohibited from independently approving commercial terms.' };
+      return {
+        ok: false,
+        statusCode: 403,
+        error: 'AI systems are strictly prohibited from independently approving commercial terms.',
+      };
+    }
+    // Prevent silent duplicate commercial approval overwriting original executive sign-off
+    if (params.approveCommercialTerms && record.commercialApprovedBy) {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: `Commercial terms for "${params.referenceCode}" were already approved by ${record.commercialApprovedBy} at ${record.commercialApprovedAt}.`,
+      };
     }
 
     const now = new Date().toISOString();
@@ -475,6 +782,23 @@ export class FrontDeskStore {
     return { ok: true, record: updated };
   }
 
+  public async advanceExecutiveCommercialReviewDurable(
+    params: Parameters<FrontDeskStore['advanceExecutiveCommercialReview']>[0]
+  ): Promise<{ ok: true; record: SubmittedFrontDeskInquiry } | { ok: false; error: string; statusCode?: number }> {
+    this.assertDurablePersistenceAvailable('executive commercial review');
+    if (this.persistence?.isDurable) {
+      const persisted = await this.persistence.loadInquiryByReference(params.referenceCode);
+      if (persisted) {
+        this.inquiries.set(persisted.referenceCode, persisted);
+      }
+    }
+    const outcome = this.advanceExecutiveCommercialReview(params);
+    if (outcome.ok && this.persistence?.isDurable) {
+      await this.persistence.saveInquiry(outcome.record);
+    }
+    return outcome;
+  }
+
   /**
    * M23: Human Escalation Handover
    */
@@ -488,6 +812,7 @@ export class FrontDeskStore {
     requestedTrack?: HumanEscalationRecord['requestedTrack'];
     preferredContactMethod?: HumanEscalationRecord['preferredContactMethod'];
   }): HumanEscalationRecord {
+    this.assertDurablePersistenceAvailable('human escalation creation');
     const now = new Date().toISOString();
     const ref = `DTI-ESC-${new Date().getFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const record: HumanEscalationRecord = {
@@ -509,6 +834,17 @@ export class FrontDeskStore {
     return record;
   }
 
+  public async createHumanEscalationDurable(
+    input: Parameters<FrontDeskStore['createHumanEscalation']>[0]
+  ): Promise<HumanEscalationRecord> {
+    this.assertDurablePersistenceAvailable('human escalation creation');
+    const record = this.createHumanEscalation(input);
+    if (this.persistence?.isDurable) {
+      await this.persistence.saveEscalation(record);
+    }
+    return record;
+  }
+
   public listHumanEscalations(statusFilter?: string): HumanEscalationRecord[] {
     let items = Array.from(this.escalations.values());
     if (statusFilter && statusFilter !== 'all') {
@@ -517,10 +853,22 @@ export class FrontDeskStore {
     return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  public async listHumanEscalationsDurable(statusFilter?: string): Promise<HumanEscalationRecord[]> {
+    this.assertDurablePersistenceAvailable('human escalation listing');
+    if (this.persistence?.isDurable) {
+      const persisted = await this.persistence.listEscalations();
+      for (const e of persisted) {
+        this.escalations.set(e.id, e);
+      }
+    }
+    return this.listHumanEscalations(statusFilter);
+  }
+
   public updateHumanEscalation(
     id: string,
     patch: { status?: HumanEscalationRecord['status']; assignedTo?: string; resolutionNotes?: string }
   ): HumanEscalationRecord | null {
+    this.assertDurablePersistenceAvailable('human escalation update');
     const existing = this.escalations.get(id);
     if (!existing) return null;
     const updated: HumanEscalationRecord = {
@@ -535,12 +883,29 @@ export class FrontDeskStore {
     return updated;
   }
 
+  public async updateHumanEscalationDurable(
+    id: string,
+    patch: { status?: HumanEscalationRecord['status']; assignedTo?: string; resolutionNotes?: string }
+  ): Promise<HumanEscalationRecord | null> {
+    this.assertDurablePersistenceAvailable('human escalation update');
+    if (this.persistence?.isDurable && !this.escalations.has(id)) {
+      const persisted = await this.persistence.listEscalations();
+      for (const e of persisted) this.escalations.set(e.id, e);
+    }
+    const updated = this.updateHumanEscalation(id, patch);
+    if (updated && this.persistence?.isDurable) {
+      await this.persistence.saveEscalation(updated);
+    }
+    return updated;
+  }
+
   /**
    * M26: AI Quality Assurance Evaluation Recording
    */
   public recordQualityEvaluation(
     input: Omit<AiQualityEvaluationRecord, 'id' | 'createdAt'>
   ): AiQualityEvaluationRecord {
+    this.assertDurablePersistenceAvailable('quality evaluation recording');
     const rec: AiQualityEvaluationRecord = {
       ...input,
       id: crypto.randomUUID(),
@@ -554,8 +919,29 @@ export class FrontDeskStore {
     return rec;
   }
 
+  public async recordQualityEvaluationDurable(
+    input: Omit<AiQualityEvaluationRecord, 'id' | 'createdAt'>
+  ): Promise<AiQualityEvaluationRecord> {
+    this.assertDurablePersistenceAvailable('quality evaluation recording');
+    const rec = this.recordQualityEvaluation(input);
+    if (this.persistence?.isDurable) {
+      await this.persistence.saveQualityEvaluation(rec);
+    }
+    return rec;
+  }
+
   public listQualityEvaluations(limit = 50): AiQualityEvaluationRecord[] {
     return this.qualityEvaluations.slice(0, Math.max(1, Math.min(100, limit)));
+  }
+
+  public async listQualityEvaluationsDurable(limit = 50): Promise<AiQualityEvaluationRecord[]> {
+    this.assertDurablePersistenceAvailable('quality evaluation listing');
+    if (this.persistence?.isDurable) {
+      const persisted = await this.persistence.listQualityEvaluations(limit);
+      this.qualityEvaluations.splice(0, this.qualityEvaluations.length, ...persisted);
+      return persisted;
+    }
+    return this.listQualityEvaluations(limit);
   }
 
   /**
@@ -612,6 +998,7 @@ export class FrontDeskStore {
       reviewStageBreakdown,
       qualityEvaluationsCount: this.qualityEvaluations.length,
       averageQualityRating: avgQualityRating,
+      persistence: this.getPersistenceStatus(),
       policyCompliancePassRate:
         this.qualityEvaluations.length > 0
           ? Math.round(

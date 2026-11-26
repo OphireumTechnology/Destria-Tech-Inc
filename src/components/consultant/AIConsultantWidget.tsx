@@ -80,6 +80,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
   const isVoiceActive =
     isVoiceSessionActive ||
     (voiceStatus !== 'disconnected' &&
+      voiceStatus !== 'checking_service' &&
       voiceStatus !== 'error' &&
       voiceStatus !== 'microphone_unavailable' &&
       voiceStatus !== 'service_unavailable' &&
@@ -742,7 +743,7 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                     voiceStatus === 'microphone_unavailable' ||
                     voiceStatus === 'service_unavailable'
                       ? 'text-rose-300 bg-rose-950/60 border-rose-500/40 font-bold'
-                      : voiceStatus === 'reconnecting' || voiceStatus === 'connecting'
+                      : voiceStatus === 'checking_service' || voiceStatus === 'reconnecting' || voiceStatus === 'connecting'
                       ? 'text-amber-300 bg-amber-950/60 border-amber-500/40 font-bold'
                       : isVoiceActive
                       ? 'text-[#00C2C7] bg-[#00C2C7]/15 border-[#00C2C7]/40 font-bold'
@@ -754,6 +755,8 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                       ? 'AI UNAVAILABLE'
                       : voiceStatus === 'error'
                       ? 'CONNECTION ERROR'
+                      : voiceStatus === 'checking_service'
+                      ? 'CHECKING SERVICE...'
                       : voiceStatus === 'reconnecting'
                       ? 'RECONNECTING...'
                       : voiceStatus === 'connecting'
@@ -886,16 +889,30 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                   <AlertCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                   <span className="text-[11px] leading-tight flex-1">{voiceError}</span>
                   {(voiceStatus === 'service_unavailable' || voiceStatus === 'error') && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVoiceError(null);
-                        aiVoiceService.retryConnection();
-                      }}
-                      className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-100 text-[10px] font-mono font-bold cursor-pointer shrink-0"
-                    >
-                      Retry Voice
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {aiVoiceService.getLastUnansweredQuestion() && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVoiceError(null);
+                            void aiVoiceService.retryLastUnansweredQuestion();
+                          }}
+                          className="px-2 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-100 text-[10px] font-mono font-bold cursor-pointer"
+                        >
+                          Retry Question
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVoiceError(null);
+                          void aiVoiceService.retryConnection();
+                        }}
+                        className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-100 text-[10px] font-mono font-bold cursor-pointer"
+                      >
+                        Retry Voice
+                      </button>
+                    </div>
                   )}
                   <button
                     type="button"
@@ -1231,6 +1248,12 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                   {/* Status & Live Audio Waveform Strip */}
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0">
+                      {voiceStatus === 'checking_service' && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                          <span>Checking Voice Service...</span>
+                        </span>
+                      )}
                       {voiceStatus === 'connecting' && (
                         <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
                           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
@@ -1267,7 +1290,8 @@ export const AIConsultantWidget: React.FC<AIConsultantWidgetProps> = ({ external
                           <span>Connection Unavailable</span>
                         </span>
                       )}
-                      {voiceStatus !== 'connecting' &&
+                      {voiceStatus !== 'checking_service' &&
+                        voiceStatus !== 'connecting' &&
                         voiceStatus !== 'reconnecting' &&
                         voiceStatus !== 'error' &&
                         voiceStatus !== 'microphone_unavailable' &&

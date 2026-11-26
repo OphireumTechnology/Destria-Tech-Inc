@@ -18,7 +18,7 @@ import {
   MANDATORY_AI_SYSTEM_INSTRUCTION,
   enforceCommercialPolicyOnOutput,
 } from './aiCommercialPolicy';
-import { AiRuntimeConfigRegistry } from './aiRuntimeConfig';
+import { AiRuntimeConfigRegistry, classifyGeminiProviderError } from './aiRuntimeConfig';
 import { AIToolsExecutor, getGeminiFunctionDeclarations } from './aiToolsEngine';
 import { logStructured } from './logger';
 
@@ -719,18 +719,23 @@ export function attachVoiceLiveBridge(
           // Ensure ready & session registration always occur even if SDK resolves connect() without firing onopen
           emitReadyOnce();
         } catch (err: any) {
+          const classified = classifyGeminiProviderError(err);
           logStructured('warn', 'voice_live_connect_failed', {
             sessionId,
-            error: err?.message,
+            category: classified.category,
+            retryable: classified.retryable,
+            error: classified.safeMessage,
           });
           runtimeConfig.recordFailure(
-            'live_connect_failed',
+            `live_${classified.category.toLowerCase()}`,
             'gemini_live',
-            err?.message || 'Unable to connect to Gemini Live'
+            `${classified.category}: ${classified.safeMessage}`
           );
           sendJsonSafe(clientWs, {
             type: 'error',
             code: 'LIVE_CONNECT_FAILED',
+            category: classified.category,
+            retryable: classified.retryable,
             fallbackAllowed: settings.browserFallbackEnabled,
             message: 'Unable to establish Gemini Live stream. Falling back to continuous turn-based voice mode.',
           });

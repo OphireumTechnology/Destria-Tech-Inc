@@ -40,7 +40,17 @@ function resolveDistDirectory(): string | null {
 }
 
 async function startServer() {
-  const { app, db, emailService, ai, aiRuntimeConfig, aiToolsExecutor, allowedOrigins } = createApp();
+  const {
+    app,
+    db,
+    emailService,
+    authService,
+    ai,
+    aiRuntimeConfig,
+    aiToolsExecutor,
+    frontDeskStore,
+    allowedOrigins,
+  } = createApp();
   const workerId = `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
   if (process.env.NODE_ENV !== 'production') {
@@ -101,12 +111,19 @@ async function startServer() {
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
+    const frontDeskPersistence = frontDeskStore.getPersistenceStatus();
     logStructured('info', 'server_started', {
       port: PORT,
       workerId,
       environment: process.env.NODE_ENV || 'development',
       databaseConfigured: db.isConfigured,
+      frontDeskDurable: frontDeskPersistence.durable,
+      frontDeskMode: frontDeskPersistence.mode,
+      databaseMigrationVersion: '008',
+      geminiConfigured: Boolean(ai),
       emailConfigured: emailService.isConfigured(),
+      adminBootstrapConfigured: authService.isBootstrapLoginConfigured(),
+      allowedOriginsCount: allowedOrigins.length,
     });
   });
 

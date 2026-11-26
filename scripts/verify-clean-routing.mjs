@@ -85,6 +85,20 @@ function scanSources() {
     });
   }
 
+  const checkNoPasteFiles = (dirRel) => {
+    const full = path.join(ROOT_DIR, dirRel);
+    if (!existsSync(full)) return;
+    for (const item of readdirSync(full, { withFileTypes: true })) {
+      const rel = path.join(dirRel, item.name);
+      if (item.isDirectory()) {
+        checkNoPasteFiles(rel);
+      } else if (/^Paste_/i.test(item.name)) {
+        violations.push(`${rel.replace(/\\/g, '/')} is a prohibited internal prompt artifact in public assets`);
+      }
+    }
+  };
+  checkNoPasteFiles('public');
+
   return violations;
 }
 
@@ -168,6 +182,19 @@ function verifyDistArtifact(requireDist) {
       violations.push(`dist/${relDir}/index.html missing compiled JS asset script`);
     }
   }
+
+  const checkNoDistPasteFiles = (dirAbs) => {
+    if (!existsSync(dirAbs)) return;
+    for (const item of readdirSync(dirAbs, { withFileTypes: true })) {
+      const full = path.join(dirAbs, item.name);
+      if (item.isDirectory()) {
+        checkNoDistPasteFiles(full);
+      } else if (/^Paste_/i.test(item.name)) {
+        violations.push(`${path.relative(ROOT_DIR, full).replace(/\\/g, '/')} must never be emitted into dist/`);
+      }
+    }
+  };
+  checkNoDistPasteFiles(distDir);
 
   return violations;
 }

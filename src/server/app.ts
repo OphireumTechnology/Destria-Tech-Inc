@@ -31,7 +31,12 @@ import {
   NotFoundError,
 } from './db/types';
 import { SupabaseDatabaseRepository } from './db/supabaseRepository';
-import { AdminAuthService, AuthenticatedAdminRequest } from './auth';
+import {
+  AdminAuthService,
+  AuthenticatedAdminRequest,
+  clearAdminSessionCookie,
+  setAdminSessionCookie,
+} from './auth';
 import {
   DualRecipientDeliveryOutcome,
   EmailTransport,
@@ -50,6 +55,7 @@ import {
   validateInquiryPayload,
 } from './validation';
 import { isValidIanaTimezone } from './utils/timezoneUtc';
+import { API_COMPATIBILITY_VERSION } from '../lib/apiClient';
 
 import path from 'path';
 import { FileScanStatus, PortalRepository } from './portal/types';
@@ -68,7 +74,7 @@ import {
   buildNaturalGeminiContextBlock,
   classifyConversationalTurn,
 } from './conversationalEngine';
-import { AiRuntimeConfigRegistry } from './aiRuntimeConfig';
+import { AiRuntimeConfigRegistry, classifyGeminiProviderError } from './aiRuntimeConfig';
 import { AIToolsExecutor, getGeminiFunctionDeclarations } from './aiToolsEngine';
 import {
   CORPORATE_KNOWLEDGE_VERSION,
@@ -82,6 +88,11 @@ import {
   LeadQualificationStatus,
   answerTechnicalFeasibilityQuestion,
 } from './frontDeskEngine';
+import {
+  FrontDeskPersistenceAdapter,
+  FrontDeskPersistenceUnavailableError,
+  SupabaseFrontDeskPersistenceAdapter,
+} from './frontDeskRepository';
 import { FrontDeskStore } from './frontDeskStore';
 import {
   FrontDeskKnowledgeStore,
@@ -101,6 +112,8 @@ export interface AppDependencies {
   aiRuntimeConfig?: AiRuntimeConfigRegistry;
   frontDeskStore?: FrontDeskStore;
   frontDeskKnowledgeStore?: FrontDeskKnowledgeStore;
+  frontDeskPersistence?: FrontDeskPersistenceAdapter | null;
+  productionStrictMode?: boolean;
   sessionSecret?: string;
   rateLimitMaxOverride?: number;
 }
@@ -240,8 +253,27 @@ export function createApp(deps: AppDependencies = {}): {
       geminiConfiguredOverride: Boolean(ai),
     });
   const aiToolsExecutor = new AIToolsExecutor(db, emailService, calendarService);
-  const frontDeskStore = deps.frontDeskStore || new FrontDeskStore();
-  const frontDeskKnowledgeStore = deps.frontDeskKnowledgeStore || new FrontDeskKnowledgeStore();
+  const productionStrictMode = deps.productionStrictMode ?? process.env.NODE_ENV === 'production';
+  const defaultFrontDeskPersistence: FrontDeskPersistenceAdapter | null =
+    deps.frontDeskPersistence !== undefined
+      ? deps.frontDeskPersistence
+      : (() => {
+          const adapter = new SupabaseFrontDeskPersistenceAdapter();
+          return adapter.isDurable ? adapter : null;
+        })();
+
+  const frontDeskStore =
+    deps.frontDeskStore ||
+    new FrontDeskStore({
+      persistence: defaultFrontDeskPersistence,
+      productionStrictMode,
+    });
+  const frontDeskKnowledgeStore =
+    deps.frontDeskKnowledgeStore ||
+    new FrontDeskKnowledgeStore({
+      persistence: defaultFrontDeskPersistence,
+      productionStrictMode,
+    });
 
   const inquiryLimiter = new SlidingWindowRateLimiter(
     15 * 60 * 1000,
@@ -331,7 +363,7 @@ export function createApp(deps: AppDependencies = {}): {
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
         res.setHeader(
           'Access-Control-Allow-Headers',
-          'Content-Type, Authorization, Idempotency-Key, X-Request-Id, X-Requested-With'
+          'Content-Type, Authorization, Idempotency-Key, X-Request-Id, X-Requested-With, X-API-Compatibility-Version'
         );
         res.setHeader('Access-Control-Max-Age', '600');
       }
@@ -580,6 +612,7 @@ export function createApp(deps: AppDependencies = {}): {
     };
 
     const token = authService.issueSessionToken(adminRecord, 3600);
+    setAdminSessionCookie(req, res, token, 3600);
     await db.writeAuditLog({
       correlationId: req.correlationId,
       actor: adminRecord.email,
@@ -587,7 +620,7 @@ export function createApp(deps: AppDependencies = {}): {
       action: 'admin_session_issued',
       entityType: 'admin_auth',
       entityId: adminRecord.id,
-      details: { ip: clientIp },
+      details: { ip: clientIp, httpOnlyCookieIssued: true },
     });
 
     res.json({
@@ -602,6 +635,33 @@ export function createApp(deps: AppDependencies = {}): {
     });
   });
 
+  app.post(
+    '/api/admin/auth/logout',
+    authService.requireAdmin,
+    async (req: AuthenticatedAdminRequest, res: Response) => {
+      if (req.adminRawToken) {
+        authService.revokeSessionToken(req.adminRawToken);
+      }
+      clearAdminSessionCookie(req, res);
+      await db
+        .writeAuditLog({
+          correlationId: req.correlationId,
+          actor: req.adminUser?.email || 'admin',
+          actorRole: req.adminUser?.role || 'admin',
+          action: 'admin_session_revoked',
+          entityType: 'admin_auth',
+          entityId: req.adminUser?.id,
+          details: { authSource: req.adminAuthSource || 'unknown' },
+        })
+        .catch(() => {});
+
+      res.json({
+        success: true,
+        revoked: true,
+      });
+    }
+  );
+
   app.get(
     '/api/admin/auth/session',
     authService.requireAdmin,
@@ -609,6 +669,7 @@ export function createApp(deps: AppDependencies = {}): {
       res.json({
         success: true,
         authenticated: true,
+        authSource: req.adminAuthSource || 'bearer',
         admin: {
           email: req.adminUser?.email,
           fullName: req.adminUser?.fullName,
@@ -867,12 +928,19 @@ export function createApp(deps: AppDependencies = {}): {
         const activeGateways = paymentProviders.filter((p) => p.isEnabled).length;
         const paymentsState = activeGateways > 0 ? 'HEALTHY' : 'UNCONFIGURED';
 
+        const frontDeskPersistenceStatus = frontDeskStore.getPersistenceStatus();
+        const frontDeskState = frontDeskPersistenceStatus.durable
+          ? 'HEALTHY'
+          : productionStrictMode
+          ? 'UNAVAILABLE'
+          : 'DEGRADED';
+
         const overallState =
-          dbState === 'UNAVAILABLE' || portalState === 'UNCONFIGURED'
+          dbState === 'UNAVAILABLE' || portalState === 'UNCONFIGURED' || frontDeskState === 'UNAVAILABLE'
             ? 'UNAVAILABLE'
             : dbState === 'UNCONFIGURED'
             ? 'UNCONFIGURED'
-            : emailState === 'DEGRADED' || portalState === 'DEGRADED'
+            : emailState === 'DEGRADED' || portalState === 'DEGRADED' || frontDeskState === 'DEGRADED'
             ? 'DEGRADED'
             : 'HEALTHY';
 
@@ -882,6 +950,18 @@ export function createApp(deps: AppDependencies = {}): {
           version: APP_VERSION,
           uptimeSeconds: Math.floor((Date.now() - APP_STARTED_AT) / 1000),
           timestamp: new Date().toISOString(),
+          deployment: {
+            backendCommit:
+              process.env.RAILWAY_GIT_COMMIT_SHA ||
+              process.env.GITHUB_SHA ||
+              process.env.GIT_COMMIT_SHA ||
+              'workspace-local',
+            buildTimestamp: new Date(APP_STARTED_AT).toISOString(),
+            apiCompatibilityVersion: API_COMPATIBILITY_VERSION,
+            databaseMigrationVersion: '008',
+            nodeVersion: process.version,
+            environment: process.env.NODE_ENV || 'development',
+          },
           subsystems: {
             database: {
               state: dbState,
@@ -893,6 +973,10 @@ export function createApp(deps: AppDependencies = {}): {
               state: portalState,
               mode: portalRepo.mode,
               durable: portalRepo.mode === 'supabase',
+            },
+            frontDeskPersistence: {
+              state: frontDeskState,
+              ...frontDeskPersistenceStatus,
             },
             emailDelivery: {
               state: emailState,
@@ -1616,6 +1700,22 @@ export function createApp(deps: AppDependencies = {}): {
             ? `Executive Briefing (By Prior Arrangement — Corporate Reference: ${corporateIdentity.headquarters.fullAddress})`
             : undefined;
 
+        if (calendarService.isConfigured()) {
+          const availability = await calendarService.checkSlotAvailability({
+            scheduledDate: data.scheduledDate,
+            scheduledTimeSlot: data.scheduledTimeSlot,
+            clientTimezone: data.clientTimezone,
+          });
+          if (availability.configured && !availability.available) {
+            res.status(409).json({
+              success: false,
+              code: 'CALENDAR_SLOT_BUSY',
+              error: 'The selected consultation slot is unavailable on the executive calendar. Please choose another time.',
+            });
+            return;
+          }
+        }
+
         const calResult = await calendarService.createConsultationEvent({
           referenceCode,
           fullName: data.fullName,
@@ -1915,7 +2015,19 @@ export function createApp(deps: AppDependencies = {}): {
 
         const action = typeof req.body?.action === 'string' ? req.body.action.trim() : '';
         if (action === 'cancel') {
-          const updated = await db.updateAppointment(referenceCode, { status: 'cancelled' });
+          let calendarCancelSyncStatus = existing.calendarSyncStatus;
+          if (existing.calendarEventId && calendarService.isConfigured()) {
+            const cancelOutcome = await calendarService.cancelConsultationEvent({
+              eventId: existing.calendarEventId,
+              referenceCode,
+              correlationId: req.correlationId,
+            });
+            calendarCancelSyncStatus = cancelOutcome.ok ? 'synced' : 'failed';
+          }
+          const updated = await db.updateAppointment(referenceCode, {
+            status: 'cancelled',
+            calendarSyncStatus: calendarCancelSyncStatus,
+          });
           const { managementTokenHash: _hidden, ...safeUpdated } = updated;
           res.json({ success: true, appointment: safeUpdated });
           return;
@@ -1933,11 +2045,42 @@ export function createApp(deps: AppDependencies = {}): {
             res.status(409).json({ success: false, error: 'Requested replacement slot is already booked.' });
             return;
           }
+          if (calendarService.isConfigured()) {
+            const availability = await calendarService.checkSlotAvailability({
+              scheduledDate: newDate,
+              scheduledTimeSlot: newSlot,
+              clientTimezone: existing.clientTimezone,
+            });
+            if (availability.configured && !availability.available) {
+              res.status(409).json({
+                success: false,
+                code: 'CALENDAR_SLOT_BUSY',
+                error: 'Requested replacement slot is busy on the executive calendar.',
+              });
+              return;
+            }
+          }
+
+          let nextCalendarStatus: 'synced' | 'pending' | 'failed' | 'unconfigured' = 'pending';
+          let nextStatus: 'confirmed' | 'pending_review' = 'pending_review';
+          if (existing.calendarEventId && calendarService.isConfigured()) {
+            const calUpdate = await calendarService.updateConsultationEvent({
+              eventId: existing.calendarEventId,
+              referenceCode,
+              scheduledDate: newDate,
+              scheduledTimeSlot: newSlot,
+              clientTimezone: existing.clientTimezone,
+              correlationId: req.correlationId,
+            });
+            nextCalendarStatus = calUpdate.calendarSyncStatus;
+            nextStatus = calUpdate.synced ? 'confirmed' : 'pending_review';
+          }
+
           const updated = await db.updateAppointment(referenceCode, {
             scheduledDate: newDate,
             scheduledTimeSlot: newSlot,
-            status: 'pending_review',
-            calendarSyncStatus: 'pending',
+            status: nextStatus,
+            calendarSyncStatus: nextCalendarStatus,
           });
           const { managementTokenHash: _hidden, ...safeUpdated } = updated;
           res.json({ success: true, appointment: safeUpdated });
@@ -2034,11 +2177,23 @@ export function createApp(deps: AppDependencies = {}): {
     );
     const allowToolsThisTurn = conversationalClass.shouldAllowEnterpriseTools;
 
-    // Progressively update AI Front Desk session dossier (non-intrusive on casual turns)
-    const frontDeskDossier = frontDeskStore.recordTurn(chatSessionId, userMessage, {
-      isProjectDiscoveryTurn: allowToolsThisTurn,
-      detectedLanguage: conversationalClass.language,
-    });
+    // Progressively update AI Front Desk session dossier (write-through when durable persistence is configured)
+    const frontDeskDossier = frontDeskStore.getPersistenceStatus().durable
+      ? await frontDeskStore
+          .recordTurnDurable(chatSessionId, userMessage, {
+            isProjectDiscoveryTurn: allowToolsThisTurn,
+            detectedLanguage: conversationalClass.language,
+          })
+          .catch(() =>
+            frontDeskStore.recordTurn(chatSessionId, userMessage, {
+              isProjectDiscoveryTurn: allowToolsThisTurn,
+              detectedLanguage: conversationalClass.language,
+            })
+          )
+      : frontDeskStore.recordTurn(chatSessionId, userMessage, {
+          isProjectDiscoveryTurn: allowToolsThisTurn,
+          detectedLanguage: conversationalClass.language,
+        });
 
     // Handle private executive/employee personal probes deterministically so LLM never speculates
     if (conversationalClass.isPrivateExecutiveProbe) {
@@ -2292,10 +2447,17 @@ SECURITY BOUNDARIES:
         }
       }
     } catch (err: any) {
-      aiRuntimeConfig.recordFailure('chat_fallback', 'chat', err?.message || 'Gemini chat failed');
+      const classified = classifyGeminiProviderError(err);
+      aiRuntimeConfig.recordFailure(
+        `chat_${classified.category.toLowerCase()}`,
+        'chat',
+        `${classified.category}: ${classified.safeMessage}`
+      );
       logStructured('warn', 'consultant_chat_fallback', {
         correlationId: req.correlationId,
-        error: err?.message,
+        category: classified.category,
+        retryable: classified.retryable,
+        error: classified.safeMessage,
       });
     }
 
@@ -2596,10 +2758,22 @@ SECURITY BOUNDARIES:
       sanitized.history,
       sanitized.stateContext as Record<string, unknown>
     );
-    const frontDeskDossier = frontDeskStore.recordTurn(turnResult.sessionId, sanitized.userMessage, {
-      isProjectDiscoveryTurn: voiceTurnClass.shouldAllowEnterpriseTools,
-      detectedLanguage: voiceTurnClass.language,
-    });
+    const frontDeskDossier = frontDeskStore.getPersistenceStatus().durable
+      ? await frontDeskStore
+          .recordTurnDurable(turnResult.sessionId, sanitized.userMessage, {
+            isProjectDiscoveryTurn: voiceTurnClass.shouldAllowEnterpriseTools,
+            detectedLanguage: voiceTurnClass.language,
+          })
+          .catch(() =>
+            frontDeskStore.recordTurn(turnResult.sessionId, sanitized.userMessage, {
+              isProjectDiscoveryTurn: voiceTurnClass.shouldAllowEnterpriseTools,
+              detectedLanguage: voiceTurnClass.language,
+            })
+          )
+      : frontDeskStore.recordTurn(turnResult.sessionId, sanitized.userMessage, {
+          isProjectDiscoveryTurn: voiceTurnClass.shouldAllowEnterpriseTools,
+          detectedLanguage: voiceTurnClass.language,
+        });
 
     res.json({
       ...turnResult,
@@ -2702,14 +2876,22 @@ SECURITY BOUNDARIES:
         ttsLatencyMs: Date.now() - startedAt,
       });
     } catch (err: any) {
-      aiRuntimeConfig.recordFailure('tts_fallback', 'turn_based', err?.message || 'Gemini TTS failed');
+      const classified = classifyGeminiProviderError(err);
+      aiRuntimeConfig.recordFailure(
+        `tts_${classified.category.toLowerCase()}`,
+        'turn_based',
+        `${classified.category}: ${classified.safeMessage}`
+      );
       logStructured('warn', 'voice_tts_fallback', {
         correlationId: req.correlationId,
-        error: err?.message,
+        category: classified.category,
+        retryable: classified.retryable,
+        error: classified.safeMessage,
       });
       res.json({
         success: false,
         fallback: 'browser_tts',
+        errorCategory: classified.category,
         spokenText,
         voice: 'natural-female-browser',
         ttsLatencyMs: Date.now() - startedAt,
@@ -2765,107 +2947,140 @@ SECURITY BOUNDARIES:
         transcriptionLatencyMs: Date.now() - startedAt,
       });
     } catch (error: any) {
+      const classified = classifyGeminiProviderError(error);
+      aiRuntimeConfig.recordFailure(
+        `transcribe_${classified.category.toLowerCase()}`,
+        'turn_based',
+        `${classified.category}: ${classified.safeMessage}`
+      );
       logStructured('error', 'voice_transcription_failed', {
         correlationId: req.correlationId,
-        error: error?.message,
+        category: classified.category,
+        retryable: classified.retryable,
+        error: classified.safeMessage,
       });
-      res.status(500).json({ error: 'Transcription failed' });
+      res.status(classified.httpStatus ?? 502).json({
+        error: 'Transcription failed',
+        category: classified.category,
+        retryable: classified.retryable,
+      });
     }
   });
 
   // -----------------------------------------------------------------------
-  // 6A. INTELLIGENT AI FRONT DESK PLATFORM ENDPOINTS (M01-M26)
+  // 6A. INTELLIGENT AI FRONT DESK PLATFORM ENDPOINTS (M01-M26 — DURABLE WRITE-THROUGH)
   // -----------------------------------------------------------------------
 
-  app.get('/api/frontdesk/knowledge/public', (req: Request, res: Response) => {
-    const query = sanitizePlainText(req.query.q, 200);
-    const hits = frontDeskKnowledgeStore.retrieveApprovedPublicKnowledge(query, { topK: 8 });
-    res.json({
-      success: true,
-      version: CORPORATE_KNOWLEDGE_VERSION,
-      count: hits.length,
-      documents: hits.map((h) => ({
-        id: h.entry.id,
-        domain: h.entry.domain,
-        knowledgeType: h.entry.knowledgeType,
-        title: h.entry.title,
-        summary: h.entry.summary,
-        facts: h.entry.facts,
-        canonicalLinks: h.entry.canonicalLinks,
-        version: h.entry.version,
-      })),
-    });
-  });
-
-  app.get('/api/frontdesk/session/:sessionId', (req: Request, res: Response) => {
-    const sessionId = sanitizePlainText(req.params.sessionId, 100);
-    if (!sessionId) {
-      res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
-      return;
-    }
-    const dossier = frontDeskStore.getOrCreateSession(sessionId);
-    res.json({ success: true, dossier });
-  });
-
-  app.patch('/api/frontdesk/session/:sessionId', (req: Request, res: Response) => {
-    const clientIp = getClientIp(req);
-    if (!aiLimiter.check(clientIp)) {
-      res.status(429).json({ success: false, error: 'Too many requests.' });
-      return;
-    }
-    const sessionId = sanitizePlainText(req.params.sessionId, 100);
-    if (!sessionId) {
-      res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
-      return;
-    }
-    const patch = req.body && typeof req.body === 'object' ? req.body : {};
-    const dossier = frontDeskStore.applySessionCorrections(sessionId, patch);
-    res.json({ success: true, dossier });
-  });
-
-  app.post('/api/frontdesk/session/:sessionId/masterplan', (req: Request, res: Response) => {
-    const sessionId = sanitizePlainText(req.params.sessionId, 100);
-    if (!sessionId) {
-      res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
-      return;
-    }
-    const { dossier, masterplan } = frontDeskStore.generateAndStoreMasterplan(sessionId);
-    res.json({ success: true, dossier, masterplan });
-  });
-
-  app.post('/api/frontdesk/session/:sessionId/prepare-submission', (req: Request, res: Response) => {
-    const clientIp = getClientIp(req);
-    if (!inquiryLimiter.check(clientIp)) {
-      res.status(429).json({ success: false, error: 'Rate limit exceeded. Please wait before retrying.' });
-      return;
-    }
-    const sessionId = sanitizePlainText(req.params.sessionId, 100);
-    if (!sessionId) {
-      res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
-      return;
-    }
-    // Allow final inline edits right before preparing confirmation token
-    if (req.body?.patch && typeof req.body.patch === 'object') {
-      frontDeskStore.applySessionCorrections(sessionId, req.body.patch);
-    }
-    const prepared = frontDeskStore.prepareSubmissionConfirmation(sessionId);
-    if (prepared.ok === false) {
-      res.status(400).json({
-        success: false,
-        error: prepared.error,
-        missingFields: prepared.missingFields,
+  app.get('/api/frontdesk/knowledge/public', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await frontDeskKnowledgeStore.hydrateFromPersistence().catch(() => {});
+      const query = sanitizePlainText(req.query.q, 200);
+      const hits = frontDeskKnowledgeStore.retrieveApprovedPublicKnowledge(query, { topK: 8 });
+      res.json({
+        success: true,
+        version: CORPORATE_KNOWLEDGE_VERSION,
+        count: hits.length,
+        documents: hits.map((h) => ({
+          id: h.entry.id,
+          domain: h.entry.domain,
+          knowledgeType: h.entry.knowledgeType,
+          title: h.entry.title,
+          summary: h.entry.summary,
+          facts: h.entry.facts,
+          canonicalLinks: h.entry.canonicalLinks,
+          version: h.entry.version,
+        })),
       });
-      return;
+    } catch (err) {
+      next(err);
     }
-    res.json({
-      success: true,
-      confirmationRequired: true,
-      confirmationToken: prepared.confirmationToken,
-      dossier: prepared.dossier,
-      masterplan: prepared.masterplan,
-      reviewPrompt:
-        'Please review your client profile, confirmed requirements, and preliminary project masterplan carefully. Nothing has been submitted yet—confirm explicitly to authorize submission and executive report dispatch.',
-    });
+  });
+
+  app.get('/api/frontdesk/session/:sessionId', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const sessionId = sanitizePlainText(req.params.sessionId, 100);
+      if (!sessionId) {
+        res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
+        return;
+      }
+      const dossier = await frontDeskStore.getOrCreateSessionDurable(sessionId);
+      res.json({ success: true, dossier });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.patch('/api/frontdesk/session/:sessionId', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const clientIp = getClientIp(req);
+      if (!aiLimiter.check(clientIp)) {
+        res.status(429).json({ success: false, error: 'Too many requests.' });
+        return;
+      }
+      const sessionId = sanitizePlainText(req.params.sessionId, 100);
+      if (!sessionId) {
+        res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
+        return;
+      }
+      const patch = req.body && typeof req.body === 'object' ? req.body : {};
+      const dossier = await frontDeskStore.applySessionCorrectionsDurable(sessionId, patch);
+      res.json({ success: true, dossier });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post('/api/frontdesk/session/:sessionId/masterplan', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const sessionId = sanitizePlainText(req.params.sessionId, 100);
+      if (!sessionId) {
+        res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
+        return;
+      }
+      const { dossier, masterplan } = await frontDeskStore.generateAndStoreMasterplanDurable(sessionId);
+      res.json({ success: true, dossier, masterplan });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post('/api/frontdesk/session/:sessionId/prepare-submission', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const clientIp = getClientIp(req);
+      if (!inquiryLimiter.check(clientIp)) {
+        res.status(429).json({ success: false, error: 'Rate limit exceeded. Please wait before retrying.' });
+        return;
+      }
+      const sessionId = sanitizePlainText(req.params.sessionId, 100);
+      if (!sessionId) {
+        res.status(400).json({ success: false, error: 'Valid sessionId is required.' });
+        return;
+      }
+      // Allow final inline edits right before preparing confirmation token
+      if (req.body?.patch && typeof req.body.patch === 'object') {
+        await frontDeskStore.applySessionCorrectionsDurable(sessionId, req.body.patch);
+      }
+      const prepared = await frontDeskStore.prepareSubmissionConfirmationDurable(sessionId);
+      if (prepared.ok === false) {
+        res.status(400).json({
+          success: false,
+          error: prepared.error,
+          missingFields: prepared.missingFields,
+        });
+        return;
+      }
+      res.json({
+        success: true,
+        confirmationRequired: true,
+        confirmationToken: prepared.confirmationToken,
+        dossier: prepared.dossier,
+        masterplan: prepared.masterplan,
+        reviewPrompt:
+          'Please review your client profile, confirmed requirements, and preliminary project masterplan carefully. Nothing has been submitted yet—confirm explicitly to authorize submission and executive report dispatch.',
+      });
+    } catch (err) {
+      next(err);
+    }
   });
 
   app.post(
@@ -2881,6 +3096,10 @@ SECURITY BOUNDARIES:
         const sessionId = sanitizePlainText(req.params.sessionId, 100);
         const confirmationToken = sanitizePlainText(req.body?.confirmationToken, 120);
         const clientConfirmed = req.body?.clientConfirmed === true;
+        const idempotencyKey =
+          sanitizePlainText(req.headers['idempotency-key'], 120) ||
+          sanitizePlainText(req.body?.idempotencyKey, 120) ||
+          undefined;
 
         if (!sessionId || !confirmationToken || !clientConfirmed) {
           res.status(400).json({
@@ -2892,7 +3111,32 @@ SECURITY BOUNDARIES:
           return;
         }
 
-        const tokenCheck = frontDeskStore.consumeSubmissionConfirmation(sessionId, confirmationToken);
+        // Check idempotent replay BEFORE failing on already-consumed confirmation token
+        if (idempotencyKey) {
+          const existingInquiry = await frontDeskStore.findInquiryByIdempotencyKeyDurable(idempotencyKey);
+          if (existingInquiry) {
+            res.status(200).json({
+              success: true,
+              deduplicated: true,
+              referenceCode: existingInquiry.referenceCode,
+              submittedAtUtc: existingInquiry.createdAt,
+              inquiry: existingInquiry,
+              consultation: existingInquiry.consultationReferenceCode
+                ? {
+                    referenceCode: existingInquiry.consultationReferenceCode,
+                    status: existingInquiry.consultationStatus,
+                    scheduledDate: existingInquiry.consultationDate,
+                    scheduledTimeSlot: existingInquiry.consultationSlot,
+                    clientTimezone: existingInquiry.consultationTimezone,
+                  }
+                : null,
+              confirmationMessage: `Your qualified project inquiry (${existingInquiry.referenceCode}) was already registered.`,
+            });
+            return;
+          }
+        }
+
+        const tokenCheck = await frontDeskStore.consumeSubmissionConfirmationDurable(sessionId, confirmationToken);
         if (tokenCheck.ok === false) {
           res.status(400).json({
             success: false,
@@ -2902,7 +3146,7 @@ SECURITY BOUNDARIES:
           return;
         }
 
-        const { dossier, masterplan } = frontDeskStore.generateAndStoreMasterplan(sessionId);
+        const { dossier, masterplan } = await frontDeskStore.generateAndStoreMasterplanDurable(sessionId);
         const cp = dossier.clientProfile;
         const pr = dossier.projectRequirements;
 
@@ -3028,7 +3272,7 @@ SECURITY BOUNDARIES:
         const fallbackServiceId = primaryService?.id || 'enterprise-software';
         await db.createSolutionRequest({
           referenceCode,
-          idempotencyKey: `fd-req-${sessionId}-${dossier.version}`,
+          idempotencyKey: idempotencyKey || `fd-req-${sessionId}-${dossier.version}`,
           type: 'solution_builder',
           fullName: cp.fullName || 'Prospective Client',
           company: cp.companyName || 'Prospective Client',
@@ -3086,8 +3330,8 @@ SECURITY BOUNDARIES:
           correlationId: req.correlationId,
         });
 
-        // Save complete submitted Front Desk Inquiry record (with Client Portal ownerEmail isolation)
-        const submittedInquiry = frontDeskStore.saveSubmittedInquiry({
+        // Save complete submitted Front Desk Inquiry record durably (with Client Portal ownerEmail isolation)
+        const submittedInquiry = await frontDeskStore.saveSubmittedInquiryDurable({
           referenceCode,
           dossier,
           masterplan,
@@ -3101,7 +3345,9 @@ SECURITY BOUNDARIES:
               }
             : undefined,
           emailDeliveryState: emailDispatch.outcome.deliveryState,
+          idempotencyKey,
         });
+        const wasDeduplicated = submittedInquiry.referenceCode !== referenceCode;
 
         await db.writeAuditLog({
           correlationId: req.correlationId,
@@ -3109,20 +3355,22 @@ SECURITY BOUNDARIES:
           actorRole: 'client',
           action: 'frontdesk_project_inquiry_authorized',
           entityType: 'frontdesk_inquiries',
-          entityId: referenceCode,
+          entityId: submittedInquiry.referenceCode,
           details: {
             sessionId,
             completenessScore: dossier.completeness.scorePercent,
             leadStatus: submittedInquiry.leadStatus,
             consultationReferenceCode: consultationDetails?.referenceCode,
             emailDeliveryState: emailDispatch.outcome.deliveryState,
+            deduplicated: wasDeduplicated,
           },
         });
 
-        res.status(201).json({
+        res.status(wasDeduplicated ? 200 : 201).json({
           success: true,
-          referenceCode,
-          submittedAtUtc,
+          deduplicated: wasDeduplicated,
+          referenceCode: submittedInquiry.referenceCode,
+          submittedAtUtc: submittedInquiry.createdAt,
           inquiry: submittedInquiry,
           consultation: consultationDetails || null,
           executiveEmailSubject: emailDispatch.executiveSubject,
@@ -3140,10 +3388,10 @@ SECURITY BOUNDARIES:
           },
           confirmationMessage:
             consultationDetails?.status === 'confirmed'
-              ? `Your project inquiry (${referenceCode}) and executive consultation (${consultationDetails.referenceCode}) have been registered.`
+              ? `Your project inquiry (${submittedInquiry.referenceCode}) and executive consultation (${consultationDetails.referenceCode}) have been registered.`
               : consultationDetails
-              ? `Your project inquiry (${referenceCode}) and consultation request (${consultationDetails.referenceCode}, pending executive scheduling confirmation) have been registered.`
-              : `Your qualified project inquiry (${referenceCode}) has been registered for executive review.`,
+              ? `Your project inquiry (${submittedInquiry.referenceCode}) and consultation request (${consultationDetails.referenceCode}, pending executive scheduling confirmation) have been registered.`
+              : `Your qualified project inquiry (${submittedInquiry.referenceCode}) has been registered for executive review.`,
         });
       } catch (err) {
         next(err);
@@ -3151,62 +3399,69 @@ SECURITY BOUNDARIES:
     }
   );
 
-  app.post('/api/frontdesk/session/:sessionId/escalate', async (req: Request & { correlationId?: string }, res: Response) => {
-    const clientIp = getClientIp(req);
-    if (!inquiryLimiter.check(clientIp)) {
-      res.status(429).json({ success: false, error: 'Too many escalation requests. Please wait a moment.' });
-      return;
+  app.post(
+    '/api/frontdesk/session/:sessionId/escalate',
+    async (req: Request & { correlationId?: string }, res: Response, next: NextFunction) => {
+      try {
+        const clientIp = getClientIp(req);
+        if (!inquiryLimiter.check(clientIp)) {
+          res.status(429).json({ success: false, error: 'Too many escalation requests. Please wait a moment.' });
+          return;
+        }
+        const sessionId = sanitizePlainText(req.params.sessionId, 100);
+        const dossier = await frontDeskStore.getOrCreateSessionDurable(sessionId);
+        const reason = sanitizePlainText(req.body?.reason, 500);
+        if (!reason || reason.length < 4) {
+          res.status(400).json({ success: false, error: 'Please describe how our human team can assist you.' });
+          return;
+        }
+
+        const escalation = await frontDeskStore.createHumanEscalationDurable({
+          sessionId,
+          clientName: sanitizePlainText(req.body?.clientName, 120) || dossier.clientProfile.fullName || 'Prospective Client',
+          clientEmail: sanitizePlainText(req.body?.clientEmail, 180) || dossier.clientProfile.email,
+          clientPhone: sanitizePlainText(req.body?.clientPhone, 40) || dossier.clientProfile.phone,
+          companyName: sanitizePlainText(req.body?.companyName, 140) || dossier.clientProfile.companyName,
+          reason,
+          requestedTrack:
+            req.body?.requestedTrack === 'ceo' ||
+            req.body?.requestedTrack === 'cto' ||
+            req.body?.requestedTrack === 'pricing' ||
+            req.body?.requestedTrack === 'technical'
+              ? req.body.requestedTrack
+              : 'general',
+          preferredContactMethod:
+            req.body?.preferredContactMethod === 'telephone' || req.body?.preferredContactMethod === 'scheduled_consultation'
+              ? req.body.preferredContactMethod
+              : 'email',
+        });
+
+        await db
+          .writeAuditLog({
+            correlationId: req.correlationId,
+            actor: 'ai_frontdesk_client',
+            actorRole: 'client',
+            action: 'frontdesk_human_escalation_requested',
+            entityType: 'human_escalations',
+            entityId: escalation.referenceCode,
+            details: { sessionId, requestedTrack: escalation.requestedTrack },
+          })
+          .catch(() => {});
+
+        res.status(201).json({
+          success: true,
+          escalation,
+          directContact: {
+            telephone: corporateIdentity.contact.telephone.display,
+            email: corporateIdentity.contact.email,
+          },
+          message: `Your human assistance request (${escalation.referenceCode}) has been logged for our team. You may also reach us directly at ${corporateIdentity.contact.telephone.display} or ${corporateIdentity.contact.email}.`,
+        });
+      } catch (err) {
+        next(err);
+      }
     }
-    const sessionId = sanitizePlainText(req.params.sessionId, 100);
-    const dossier = frontDeskStore.getOrCreateSession(sessionId);
-    const reason = sanitizePlainText(req.body?.reason, 500);
-    if (!reason || reason.length < 4) {
-      res.status(400).json({ success: false, error: 'Please describe how our human team can assist you.' });
-      return;
-    }
-
-    const escalation = frontDeskStore.createHumanEscalation({
-      sessionId,
-      clientName: sanitizePlainText(req.body?.clientName, 120) || dossier.clientProfile.fullName || 'Prospective Client',
-      clientEmail: sanitizePlainText(req.body?.clientEmail, 180) || dossier.clientProfile.email,
-      clientPhone: sanitizePlainText(req.body?.clientPhone, 40) || dossier.clientProfile.phone,
-      companyName: sanitizePlainText(req.body?.companyName, 140) || dossier.clientProfile.companyName,
-      reason,
-      requestedTrack:
-        req.body?.requestedTrack === 'ceo' ||
-        req.body?.requestedTrack === 'cto' ||
-        req.body?.requestedTrack === 'pricing' ||
-        req.body?.requestedTrack === 'technical'
-          ? req.body.requestedTrack
-          : 'general',
-      preferredContactMethod:
-        req.body?.preferredContactMethod === 'telephone' || req.body?.preferredContactMethod === 'scheduled_consultation'
-          ? req.body.preferredContactMethod
-          : 'email',
-    });
-
-    await db
-      .writeAuditLog({
-        correlationId: req.correlationId,
-        actor: 'ai_frontdesk_client',
-        actorRole: 'client',
-        action: 'frontdesk_human_escalation_requested',
-        entityType: 'human_escalations',
-        entityId: escalation.referenceCode,
-        details: { sessionId, requestedTrack: escalation.requestedTrack },
-      })
-      .catch(() => {});
-
-    res.status(201).json({
-      success: true,
-      escalation,
-      directContact: {
-        telephone: corporateIdentity.contact.telephone.display,
-        email: corporateIdentity.contact.email,
-      },
-      message: `Your human assistance request (${escalation.referenceCode}) has been logged for our team. You may also reach us directly at ${corporateIdentity.contact.telephone.display} or ${corporateIdentity.contact.email}.`,
-    });
-  });
+  );
 
   // -----------------------------------------------------------------------
   // 6A-ADMIN. PROTECTED ADMIN AI FRONT DESK COMMAND CENTER (M25 / M26)
@@ -3217,6 +3472,8 @@ SECURITY BOUNDARIES:
     authService.requireAdmin,
     async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
       try {
+        await frontDeskStore.listInquiriesForAdminDurable({ limit: 100, offset: 0 });
+        await frontDeskKnowledgeStore.listDocumentsDurable({});
         const analytics = frontDeskStore.getPrivacySafeAnalytics();
         const knowledgeStats = frontDeskKnowledgeStore.getStats();
         const aiOverview = aiRuntimeConfig.getAdminOverview();
@@ -3228,6 +3485,7 @@ SECURITY BOUNDARIES:
           success: true,
           analytics,
           knowledgeStats,
+          persistence: frontDeskStore.getPersistenceStatus(),
           aiRuntime: {
             config: aiOverview.config,
             metrics: aiOverview.metrics,
@@ -3254,259 +3512,300 @@ SECURITY BOUNDARIES:
   app.get(
     '/api/admin/frontdesk/inquiries',
     authService.requireAdmin,
-    async (req: AuthenticatedAdminRequest, res: Response) => {
-      const { limit, offset } = parsePagination(req);
-      const query = sanitizePlainText(req.query.q, 120) || undefined;
-      const leadStatus = sanitizePlainText(req.query.leadStatus, 80) || undefined;
-      const reviewStage = sanitizePlainText(req.query.reviewStage, 80) || undefined;
-      const result = frontDeskStore.listInquiriesForAdmin({ query, leadStatus, reviewStage, limit, offset });
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const { limit, offset } = parsePagination(req);
+        const query = sanitizePlainText(req.query.q, 120) || undefined;
+        const leadStatus = sanitizePlainText(req.query.leadStatus, 80) || undefined;
+        const reviewStage = sanitizePlainText(req.query.reviewStage, 80) || undefined;
+        const result = await frontDeskStore.listInquiriesForAdminDurable({ query, leadStatus, reviewStage, limit, offset });
 
-      await db
-        .writeAuditLog({
-          correlationId: req.correlationId,
-          actor: req.adminUser?.email || 'admin',
-          actorRole: req.adminUser?.role || 'admin',
-          action: 'admin_list_frontdesk_inquiries',
-          entityType: 'frontdesk_inquiries',
-          details: { total: result.total, limit, offset },
-        })
-        .catch(() => {});
+        await db
+          .writeAuditLog({
+            correlationId: req.correlationId,
+            actor: req.adminUser?.email || 'admin',
+            actorRole: req.adminUser?.role || 'admin',
+            action: 'admin_list_frontdesk_inquiries',
+            entityType: 'frontdesk_inquiries',
+            details: { total: result.total, limit, offset },
+          })
+          .catch(() => {});
 
-      res.json({
-        success: true,
-        total: result.total,
-        limit,
-        offset,
-        records: result.records,
-      });
+        res.json({
+          success: true,
+          total: result.total,
+          limit,
+          offset,
+          records: result.records,
+        });
+      } catch (err) {
+        next(err);
+      }
     }
   );
 
   app.get(
     '/api/admin/frontdesk/inquiries/:referenceCode',
     authService.requireAdmin,
-    (req: AuthenticatedAdminRequest, res: Response) => {
-      const ref = sanitizePlainText(req.params.referenceCode, 80);
-      const record = frontDeskStore.getInquiryByReference(ref);
-      if (!record) {
-        res.status(404).json({ success: false, error: 'Project inquiry not found.' });
-        return;
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const ref = sanitizePlainText(req.params.referenceCode, 80);
+        const record = await frontDeskStore.getInquiryByReferenceDurable(ref);
+        if (!record) {
+          res.status(404).json({ success: false, error: 'Project inquiry not found.' });
+          return;
+        }
+        res.json({ success: true, inquiry: record });
+      } catch (err) {
+        next(err);
       }
-      res.json({ success: true, inquiry: record });
     }
   );
 
   app.patch(
     '/api/admin/frontdesk/inquiries/:referenceCode/review',
     authService.requireAdmin,
-    async (req: AuthenticatedAdminRequest, res: Response) => {
-      const ref = sanitizePlainText(req.params.referenceCode, 80);
-      const stage = sanitizePlainText(req.body?.stage, 120) as ExecutiveReviewStage;
-      const leadStatus = sanitizePlainText(req.body?.leadStatus, 80) as LeadQualificationStatus | '';
-      const notes = sanitizePlainText(req.body?.notes, 500);
-      const approveCommercialTerms = req.body?.approveCommercialTerms === true;
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const ref = sanitizePlainText(req.params.referenceCode, 80);
+        const stage = sanitizePlainText(req.body?.stage, 120) as ExecutiveReviewStage;
+        const leadStatus = sanitizePlainText(req.body?.leadStatus, 80) as LeadQualificationStatus | '';
+        const notes = sanitizePlainText(req.body?.notes, 500);
+        const approveCommercialTerms = req.body?.approveCommercialTerms === true;
 
-      const outcome = frontDeskStore.advanceExecutiveCommercialReview({
-        referenceCode: ref,
-        stage,
-        leadStatus: leadStatus ? (leadStatus as LeadQualificationStatus) : undefined,
-        notes,
-        actorEmail: req.adminUser?.email || 'admin',
-        actorRole: req.adminUser?.role || 'admin',
-        approveCommercialTerms,
-      });
-
-      if (outcome.ok === false) {
-        res.status(400).json({ success: false, error: outcome.error });
-        return;
-      }
-
-      await db
-        .writeAuditLog({
-          correlationId: req.correlationId,
-          actor: req.adminUser?.email || 'admin',
+        const outcome = await frontDeskStore.advanceExecutiveCommercialReviewDurable({
+          referenceCode: ref,
+          stage,
+          leadStatus: leadStatus ? (leadStatus as LeadQualificationStatus) : undefined,
+          notes,
+          actorEmail: req.adminUser?.email || 'admin',
           actorRole: req.adminUser?.role || 'admin',
-          action: approveCommercialTerms ? 'admin_commercial_terms_approved' : 'admin_executive_review_updated',
-          entityType: 'frontdesk_inquiries',
-          entityId: ref,
-          details: { stage, leadStatus: outcome.record.leadStatus, approveCommercialTerms },
-        })
-        .catch(() => {});
+          approveCommercialTerms,
+        });
 
-      res.json({ success: true, inquiry: outcome.record });
+        if (outcome.ok === false) {
+          res.status(outcome.statusCode ?? 400).json({ success: false, error: outcome.error });
+          return;
+        }
+
+        await db
+          .writeAuditLog({
+            correlationId: req.correlationId,
+            actor: req.adminUser?.email || 'admin',
+            actorRole: req.adminUser?.role || 'admin',
+            action: approveCommercialTerms ? 'admin_commercial_terms_approved' : 'admin_executive_review_updated',
+            entityType: 'frontdesk_inquiries',
+            entityId: ref,
+            details: { stage, leadStatus: outcome.record.leadStatus, approveCommercialTerms },
+          })
+          .catch(() => {});
+
+        res.json({ success: true, inquiry: outcome.record });
+      } catch (err) {
+        next(err);
+      }
     }
   );
 
   app.get(
     '/api/admin/frontdesk/escalations',
     authService.requireAdmin,
-    (req: AuthenticatedAdminRequest, res: Response) => {
-      const status = sanitizePlainText(req.query.status, 40) || undefined;
-      const records = frontDeskStore.listHumanEscalations(status);
-      res.json({ success: true, count: records.length, records });
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const status = sanitizePlainText(req.query.status, 40) || undefined;
+        const records = await frontDeskStore.listHumanEscalationsDurable(status);
+        res.json({ success: true, count: records.length, records });
+      } catch (err) {
+        next(err);
+      }
     }
   );
 
   app.patch(
     '/api/admin/frontdesk/escalations/:id',
     authService.requireAdmin,
-    (req: AuthenticatedAdminRequest, res: Response) => {
-      const id = sanitizePlainText(req.params.id, 100);
-      const updated = frontDeskStore.updateHumanEscalation(id, {
-        status:
-          req.body?.status === 'in_progress' || req.body?.status === 'resolved' || req.body?.status === 'open'
-            ? req.body.status
-            : undefined,
-        assignedTo: typeof req.body?.assignedTo === 'string' ? req.body.assignedTo : undefined,
-        resolutionNotes: typeof req.body?.resolutionNotes === 'string' ? req.body.resolutionNotes : undefined,
-      });
-      if (!updated) {
-        res.status(404).json({ success: false, error: 'Escalation record not found.' });
-        return;
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const id = sanitizePlainText(req.params.id, 100);
+        const updated = await frontDeskStore.updateHumanEscalationDurable(id, {
+          status:
+            req.body?.status === 'in_progress' || req.body?.status === 'resolved' || req.body?.status === 'open'
+              ? req.body.status
+              : undefined,
+          assignedTo: typeof req.body?.assignedTo === 'string' ? req.body.assignedTo : undefined,
+          resolutionNotes: typeof req.body?.resolutionNotes === 'string' ? req.body.resolutionNotes : undefined,
+        });
+        if (!updated) {
+          res.status(404).json({ success: false, error: 'Escalation record not found.' });
+          return;
+        }
+        res.json({ success: true, escalation: updated });
+      } catch (err) {
+        next(err);
       }
-      res.json({ success: true, escalation: updated });
     }
   );
 
   app.get(
     '/api/admin/frontdesk/knowledge',
     authService.requireAdmin,
-    (req: AuthenticatedAdminRequest, res: Response) => {
-      const domain = sanitizePlainText(req.query.domain, 60) || undefined;
-      const status = (sanitizePlainText(req.query.status, 30) || undefined) as KnowledgeStatus | undefined;
-      const visibility = (sanitizePlainText(req.query.visibility, 30) || undefined) as KnowledgeVisibility | undefined;
-      const query = sanitizePlainText(req.query.q, 120) || undefined;
-      const documents = frontDeskKnowledgeStore.listDocuments({ domain, status, visibility, query });
-      res.json({
-        success: true,
-        stats: frontDeskKnowledgeStore.getStats(),
-        documents,
-      });
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const domain = sanitizePlainText(req.query.domain, 60) || undefined;
+        const status = (sanitizePlainText(req.query.status, 30) || undefined) as KnowledgeStatus | undefined;
+        const visibility = (sanitizePlainText(req.query.visibility, 30) || undefined) as KnowledgeVisibility | undefined;
+        const query = sanitizePlainText(req.query.q, 120) || undefined;
+        const documents = await frontDeskKnowledgeStore.listDocumentsDurable({ domain, status, visibility, query });
+        res.json({
+          success: true,
+          stats: frontDeskKnowledgeStore.getStats(),
+          documents,
+        });
+      } catch (err) {
+        next(err);
+      }
     }
   );
 
   app.post(
     '/api/admin/frontdesk/knowledge',
     authService.requireAdmin,
-    async (req: AuthenticatedAdminRequest, res: Response) => {
-      const result = frontDeskKnowledgeStore.createDocument({
-        domain: (sanitizePlainText(req.body?.domain, 60) || 'technical_qa') as any,
-        knowledgeType:
-          req.body?.knowledgeType === 'verified_corporate_offering'
-            ? 'verified_corporate_offering'
-            : 'general_technical_knowledge',
-        title: String(req.body?.title || ''),
-        summary: String(req.body?.summary || ''),
-        facts: Array.isArray(req.body?.facts) ? req.body.facts.map(String) : [],
-        keywords: Array.isArray(req.body?.keywords) ? req.body.keywords.map(String) : [],
-        canonicalLinks: Array.isArray(req.body?.canonicalLinks) ? req.body.canonicalLinks.map(String) : [],
-        sourceReference: typeof req.body?.sourceReference === 'string' ? req.body.sourceReference : undefined,
-        visibility: req.body?.visibility === 'internal_only' ? 'internal_only' : 'public',
-        status: req.body?.status === 'approved' ? 'approved' : 'draft',
-        actorEmail: req.adminUser?.email || 'admin',
-        changeNote: typeof req.body?.changeNote === 'string' ? req.body.changeNote : undefined,
-      });
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const result = await frontDeskKnowledgeStore.createDocumentDurable({
+          domain: (sanitizePlainText(req.body?.domain, 60) || 'technical_qa') as any,
+          knowledgeType:
+            req.body?.knowledgeType === 'verified_corporate_offering'
+              ? 'verified_corporate_offering'
+              : 'general_technical_knowledge',
+          title: String(req.body?.title || ''),
+          summary: String(req.body?.summary || ''),
+          facts: Array.isArray(req.body?.facts) ? req.body.facts.map(String) : [],
+          keywords: Array.isArray(req.body?.keywords) ? req.body.keywords.map(String) : [],
+          canonicalLinks: Array.isArray(req.body?.canonicalLinks) ? req.body.canonicalLinks.map(String) : [],
+          sourceReference: typeof req.body?.sourceReference === 'string' ? req.body.sourceReference : undefined,
+          visibility: req.body?.visibility === 'internal_only' ? 'internal_only' : 'public',
+          status: req.body?.status === 'approved' ? 'approved' : 'draft',
+          actorEmail: req.adminUser?.email || 'admin',
+          changeNote: typeof req.body?.changeNote === 'string' ? req.body.changeNote : undefined,
+        });
 
-      if (result.ok === false) {
-        res.status(400).json({ success: false, error: result.error });
-        return;
+        if (result.ok === false) {
+          res.status(400).json({ success: false, error: result.error });
+          return;
+        }
+
+        await db
+          .writeAuditLog({
+            correlationId: req.correlationId,
+            actor: req.adminUser?.email || 'admin',
+            actorRole: req.adminUser?.role || 'admin',
+            action: 'admin_knowledge_created',
+            entityType: 'knowledge_documents',
+            entityId: result.document.id,
+            details: { status: result.document.status, visibility: result.document.visibility },
+          })
+          .catch(() => {});
+
+        res.status(201).json({ success: true, document: result.document });
+      } catch (err) {
+        next(err);
       }
-
-      await db
-        .writeAuditLog({
-          correlationId: req.correlationId,
-          actor: req.adminUser?.email || 'admin',
-          actorRole: req.adminUser?.role || 'admin',
-          action: 'admin_knowledge_created',
-          entityType: 'knowledge_documents',
-          entityId: result.document.id,
-          details: { status: result.document.status, visibility: result.document.visibility },
-        })
-        .catch(() => {});
-
-      res.status(201).json({ success: true, document: result.document });
     }
   );
 
   app.patch(
     '/api/admin/frontdesk/knowledge/:id',
     authService.requireAdmin,
-    async (req: AuthenticatedAdminRequest, res: Response) => {
-      const id = sanitizePlainText(req.params.id, 100);
-      const result = frontDeskKnowledgeStore.updateDocument(id, {
-        title: typeof req.body?.title === 'string' ? req.body.title : undefined,
-        summary: typeof req.body?.summary === 'string' ? req.body.summary : undefined,
-        facts: Array.isArray(req.body?.facts) ? req.body.facts.map(String) : undefined,
-        keywords: Array.isArray(req.body?.keywords) ? req.body.keywords.map(String) : undefined,
-        status:
-          req.body?.status === 'approved' || req.body?.status === 'draft' || req.body?.status === 'deactivated'
-            ? req.body.status
-            : undefined,
-        visibility:
-          req.body?.visibility === 'public' || req.body?.visibility === 'internal_only'
-            ? req.body.visibility
-            : undefined,
-        changeNote: typeof req.body?.changeNote === 'string' ? req.body.changeNote : undefined,
-        actorEmail: req.adminUser?.email || 'admin',
-      });
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const id = sanitizePlainText(req.params.id, 100);
+        const result = await frontDeskKnowledgeStore.updateDocumentDurable(id, {
+          title: typeof req.body?.title === 'string' ? req.body.title : undefined,
+          summary: typeof req.body?.summary === 'string' ? req.body.summary : undefined,
+          facts: Array.isArray(req.body?.facts) ? req.body.facts.map(String) : undefined,
+          keywords: Array.isArray(req.body?.keywords) ? req.body.keywords.map(String) : undefined,
+          status:
+            req.body?.status === 'approved' || req.body?.status === 'draft' || req.body?.status === 'deactivated'
+              ? req.body.status
+              : undefined,
+          visibility:
+            req.body?.visibility === 'public' || req.body?.visibility === 'internal_only'
+              ? req.body.visibility
+              : undefined,
+          changeNote: typeof req.body?.changeNote === 'string' ? req.body.changeNote : undefined,
+          actorEmail: req.adminUser?.email || 'admin',
+        });
 
-      if (result.ok === false) {
-        res.status(result.error.includes('not found') ? 404 : 400).json({ success: false, error: result.error });
-        return;
+        if (result.ok === false) {
+          res.status(result.error.includes('not found') ? 404 : 400).json({ success: false, error: result.error });
+          return;
+        }
+
+        await db
+          .writeAuditLog({
+            correlationId: req.correlationId,
+            actor: req.adminUser?.email || 'admin',
+            actorRole: req.adminUser?.role || 'admin',
+            action: 'admin_knowledge_updated',
+            entityType: 'knowledge_documents',
+            entityId: id,
+            details: { version: result.document.version, status: result.document.status },
+          })
+          .catch(() => {});
+
+        res.json({ success: true, document: result.document });
+      } catch (err) {
+        next(err);
       }
-
-      await db
-        .writeAuditLog({
-          correlationId: req.correlationId,
-          actor: req.adminUser?.email || 'admin',
-          actorRole: req.adminUser?.role || 'admin',
-          action: 'admin_knowledge_updated',
-          entityType: 'knowledge_documents',
-          entityId: id,
-          details: { version: result.document.version, status: result.document.status },
-        })
-        .catch(() => {});
-
-      res.json({ success: true, document: result.document });
     }
   );
 
   app.get(
     '/api/admin/frontdesk/quality',
     authService.requireAdmin,
-    (req: AuthenticatedAdminRequest, res: Response) => {
-      const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
-      res.json({
-        success: true,
-        records: frontDeskStore.listQualityEvaluations(limit),
-      });
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
+        const records = await frontDeskStore.listQualityEvaluationsDurable(limit);
+        res.json({
+          success: true,
+          records,
+        });
+      } catch (err) {
+        next(err);
+      }
     }
   );
 
   app.post(
     '/api/admin/frontdesk/quality',
     authService.requireAdmin,
-    (req: AuthenticatedAdminRequest, res: Response) => {
-      const clampRating = (v: unknown): 1 | 2 | 3 | 4 | 5 => {
-        const n = Math.max(1, Math.min(5, Math.round(Number(v) || 5)));
-        return n as 1 | 2 | 3 | 4 | 5;
-      };
-      const rec = frontDeskStore.recordQualityEvaluation({
-        sessionId: sanitizePlainText(req.body?.sessionId, 100) || 'manual-audit',
-        channel:
-          req.body?.channel === 'ai_frontdesk_voice' ||
-          req.body?.channel === 'widget_chat' ||
-          req.body?.channel === 'widget_voice'
-            ? req.body.channel
-            : 'ai_frontdesk_chat',
-        rating: clampRating(req.body?.rating),
-        naturalnessScore: clampRating(req.body?.naturalnessScore),
-        accuracyScore: clampRating(req.body?.accuracyScore),
-        policyCompliancePassed: req.body?.policyCompliancePassed !== false,
-        evaluatorEmail: req.adminUser?.email || 'admin',
-        notes: sanitizePlainText(req.body?.notes, 500) || 'Reviewed for quality & commercial compliance.',
-      });
-      res.status(201).json({ success: true, evaluation: rec });
+    async (req: AuthenticatedAdminRequest, res: Response, next: NextFunction) => {
+      try {
+        const clampRating = (v: unknown): 1 | 2 | 3 | 4 | 5 => {
+          const n = Math.max(1, Math.min(5, Math.round(Number(v) || 5)));
+          return n as 1 | 2 | 3 | 4 | 5;
+        };
+        const rec = await frontDeskStore.recordQualityEvaluationDurable({
+          sessionId: sanitizePlainText(req.body?.sessionId, 100) || 'manual-audit',
+          channel:
+            req.body?.channel === 'ai_frontdesk_voice' ||
+            req.body?.channel === 'widget_chat' ||
+            req.body?.channel === 'widget_voice'
+              ? req.body.channel
+              : 'ai_frontdesk_chat',
+          rating: clampRating(req.body?.rating),
+          naturalnessScore: clampRating(req.body?.naturalnessScore),
+          accuracyScore: clampRating(req.body?.accuracyScore),
+          policyCompliancePassed: req.body?.policyCompliancePassed !== false,
+          evaluatorEmail: req.adminUser?.email || 'admin',
+          notes: sanitizePlainText(req.body?.notes, 500) || 'Reviewed for quality & commercial compliance.',
+        });
+        res.status(201).json({ success: true, evaluation: rec });
+      } catch (err) {
+        next(err);
+      }
     }
   );
 
@@ -3528,7 +3827,7 @@ SECURITY BOUNDARIES:
   // 7. SAFE CENTRALIZED ERROR HANDLER (Never leak stack traces to clients)
   // -----------------------------------------------------------------------
   app.use((err: any, req: Request & { correlationId?: string }, res: Response, _next: NextFunction) => {
-    if (err instanceof DatabaseUnavailableError) {
+    if (err instanceof DatabaseUnavailableError || err instanceof FrontDeskPersistenceUnavailableError) {
       logStructured('error', 'database_unavailable_error', {
         correlationId: req.correlationId,
         path: req.path,

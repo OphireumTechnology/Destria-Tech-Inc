@@ -68,10 +68,18 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
-      - name: Verify no server secrets, legacy domains, or internal emails leaked into frontend bundle
+      - name: Verify no server secrets, Paste_* artifacts, localhost API URLs, legacy domains, or internal emails leaked into frontend bundle
         run: |
+          if find public dist -type f -name 'Paste_*' | grep -q .; then
+            echo "ERROR: Proprietary internal Paste_* prompt files found in public/ or dist/!"
+            exit 1
+          fi
           if grep -rnE "artaxsvcs@gmail\.com|dhenze\.languisan@gmail\.com|SUPABASE_SERVICE_ROLE_KEY|ADMIN_BOOTSTRAP_PASSWORD|ADMIN_SESSION_SECRET|PORTAL_SIGNING_SECRET|RESEND_API_KEY|GEMINI_API_KEY|GOOGLE_SERVICE_ACCOUNT|XENDIT_SECRET_KEY|PAYMONGO_SECRET_KEY|MAYA_SECRET_KEY|PAYPAL_CLIENT_SECRET|GOTYME_API_SECRET|CARD_GATEWAY_SECRET_KEY|api\.ophireummultimedia\.com|Desmond Hines" dist/; then
             echo "ERROR: Forbidden secret, legacy domain, outdated identity, or internal email detected in built frontend bundle!"
+            exit 1
+          fi
+          if grep -rnE "http://localhost:3000|http://127\.0\.0\.1:3000" dist/assets/; then
+            echo "ERROR: Hardcoded localhost API URL leaked into production dist/assets/!"
             exit 1
           fi
 
@@ -82,6 +90,7 @@ jobs:
           test -f dist/CNAME
           test -f dist/robots.txt
           test -f dist/sitemap.xml
+          test -f dist/ai-frontdesk/index.html
           test -f dist/portal/login/index.html
           test -f dist/portal/register/index.html
           test -f dist/portal/forgot-password/index.html

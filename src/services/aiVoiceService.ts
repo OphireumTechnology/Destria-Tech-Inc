@@ -14,10 +14,11 @@
  */
 
 import { ConsultationAppointment } from './supabaseService';
-import { apiUrl, resolveApiBaseUrl } from '../lib/apiClient';
+import { apiUrl, buildWebSocketUrl } from '../lib/apiClient';
 
 export type VoiceSessionState =
   | 'disconnected'
+  | 'checking_service'
   | 'connecting'
   | 'connected'
   | 'listening'
@@ -142,6 +143,7 @@ export interface VoiceRuntimeDeps {
   maxConsecutiveNetworkFailures?: number;
   echoSuppressionWindowMs?: number;
   playbackWatchdogPaddingMs?: number;
+  sessionPreflightTimeoutMs?: number;
 }
 
 export interface VoiceRuntimeDiagnostics {
@@ -151,6 +153,7 @@ export interface VoiceRuntimeDiagnostics {
   activeVoiceEngine: VoiceEngineType;
   turnCount: number;
   lastTurnId: string | null;
+  lastUnansweredQuestion: string | null;
   circuitBreakerOpen: boolean;
   consecutiveNetworkFailures: number;
   consecutiveRecognitionFailures: number;
@@ -161,7 +164,14 @@ export interface VoiceRuntimeDiagnostics {
 }
 
 const ALLOWED_TRANSITIONS: Record<VoiceSessionState, ReadonlySet<VoiceSessionState>> = {
-  disconnected: new Set(['connecting']),
+  disconnected: new Set(['checking_service', 'connecting']),
+  checking_service: new Set([
+    'connecting',
+    'service_unavailable',
+    'error',
+    'stopping',
+    'disconnected',
+  ]),
   connecting: new Set([
     'connected',
     'listening',
@@ -223,9 +233,9 @@ const ALLOWED_TRANSITIONS: Record<VoiceSessionState, ReadonlySet<VoiceSessionSta
     'error',
     'stopping',
   ]),
-  microphone_unavailable: new Set(['connecting', 'stopping', 'disconnected']),
-  service_unavailable: new Set(['reconnecting', 'listening', 'connecting', 'stopping', 'disconnected']),
-  error: new Set(['reconnecting', 'listening', 'connecting', 'stopping', 'disconnected']),
+  microphone_unavailable: new Set(['checking_service', 'connecting', 'stopping', 'disconnected']),
+  service_unavailable: new Set(['checking_service', 'reconnecting', 'listening', 'connecting', 'stopping', 'disconnected']),
+  error: new Set(['checking_service', 'reconnecting', 'listening', 'connecting', 'stopping', 'disconnected']),
   stopping: new Set(['disconnected']),
 };
 
@@ -339,8 +349,10 @@ export class AIVoiceService {
   private turnMetricsHistory: VoiceTurnMetrics[] = [];
   private stateTransitionLog: Array<{ from: VoiceSessionState; to: VoiceSessionState; at: number }> = [];
 
-  // Anti-loop protection: turn IDs, echo guard, and network circuit breaker (Section 28)
+  // Anti-loop protection: turn IDs, echo guard, unanswered question preservation, and circuit breaker
   private lastTurnId: string | null = null;
+  private lastUnansweredQuestion: string | null = null;
+  private startInFlightPromise: Promise<boolean> | null = null;
   private circuitBreakerOpen = false;
   private consecutiveNetworkFailures = 0;
   private lastSpokenNetworkErrorAt = 0;
@@ -361,6 +373,7 @@ export class AIVoiceService {
   private readonly maxConsecutiveNetworkFailures: number;
   private readonly echoSuppressionWindowMs: number;
   private readonly playbackWatchdogPaddingMs: number;
+  private readonly sessionPreflightTimeoutMs: number;
 
   constructor(deps: VoiceRuntimeDeps = {}) {
     this.deps = deps;
@@ -378,6 +391,7 @@ export class AIVoiceService {
     this.maxConsecutiveNetworkFailures = deps.maxConsecutiveNetworkFailures ?? 3;
     this.echoSuppressionWindowMs = deps.echoSuppressionWindowMs ?? 2600;
     this.playbackWatchdogPaddingMs = deps.playbackWatchdogPaddingMs ?? 6000;
+    this.sessionPreflightTimeoutMs = deps.sessionPreflightTimeoutMs ?? 5000;
   }
 
   // -------------------------------------------------------------------------
@@ -460,6 +474,7 @@ export class AIVoiceService {
       activeVoiceEngine: this.activeVoiceEngine,
       turnCount: this.turnCount,
       lastTurnId: this.lastTurnId,
+      lastUnansweredQuestion: this.lastUnansweredQuestion,
       circuitBreakerOpen: this.circuitBreakerOpen,
       consecutiveNetworkFailures: this.consecutiveNetworkFailures,
       consecutiveRecognitionFailures: this.consecutiveRecognitionFailures,
@@ -470,6 +485,38 @@ export class AIVoiceService {
     };
   }
 
+  public getLastUnansweredQuestion(): string | null {
+    return this.lastUnansweredQuestion;
+  }
+
+  /**
+   * Re-submit the last unanswered user question after network/service recovery
+   * without duplicating user history entries.
+   */
+  public async retryLastUnansweredQuestion(): Promise<boolean> {
+    const pending = this.lastUnansweredQuestion;
+    if (!pending) return false;
+    if (!this.isSessionActiveFlag || this.status === 'service_unavailable' || this.status === 'disconnected') {
+      const recovered = await this.retryConnection();
+      if (!recovered) return false;
+    }
+    this.circuitBreakerOpen = false;
+    this.consecutiveNetworkFailures = 0;
+    // Remove trailing failed AI fallback entry if present so retry replaces it cleanly
+    if (
+      this.conversationHistory.length >= 2 &&
+      this.conversationHistory[this.conversationHistory.length - 1].sender === 'ai' &&
+      this.conversationHistory[this.conversationHistory.length - 2].sender === 'user' &&
+      this.conversationHistory[this.conversationHistory.length - 2].text === pending
+    ) {
+      this.conversationHistory = this.conversationHistory.slice(0, -2);
+    }
+    this.lastFinalSubmittedText = '';
+    this.lastFinalSubmittedAt = 0;
+    await this.handleUserSpeech(pending, { speechCaptureDurationMs: 0, speechFinalizationMs: 0 });
+    return this.lastUnansweredQuestion === null;
+  }
+
   /**
    * Manual recovery control after circuit breaker opens or transient voice outage.
    */
@@ -478,7 +525,7 @@ export class AIVoiceService {
     this.consecutiveNetworkFailures = 0;
     this.consecutiveRecognitionFailures = 0;
     this.lastSpokenNetworkErrorAt = 0;
-    if (!this.isSessionActiveFlag || this.status === 'disconnected') {
+    if (!this.isSessionActiveFlag || this.status === 'disconnected' || this.status === 'service_unavailable') {
       return this.startSession();
     }
     const mySession = this.sessionSeq;
@@ -833,11 +880,31 @@ export class AIVoiceService {
   // -------------------------------------------------------------------------
 
   public async startSession(): Promise<boolean> {
-    if (this.isSessionActiveFlag && this.status !== 'disconnected' && this.status !== 'error') {
+    if (this.startInFlightPromise) {
+      return this.startInFlightPromise;
+    }
+    if (
+      this.isSessionActiveFlag &&
+      this.status !== 'disconnected' &&
+      this.status !== 'error' &&
+      this.status !== 'service_unavailable'
+    ) {
       return true;
     }
 
-    // Ensure any residual state from a prior errored session is completely cleared first
+    const startRun = this.runStartSession();
+    this.startInFlightPromise = startRun;
+    try {
+      return await startRun;
+    } finally {
+      if (this.startInFlightPromise === startRun) {
+        this.startInFlightPromise = null;
+      }
+    }
+  }
+
+  private async runStartSession(): Promise<boolean> {
+    // Ensure any residual state from a prior errored/unavailable session is completely cleared first
     if (this.status !== 'disconnected') {
       this.stopSession();
     }
@@ -855,42 +922,89 @@ export class AIVoiceService {
     this.lastFinalSubmittedAt = 0;
     this.bargeInHighSince = null;
     this.setSessionActive(true);
+    this.transitionTo('checking_service');
+
+    // 1. Pre-flight backend voice session verification (NEVER enter 'listening' if API is unreachable!)
+    let liveStreamingAvailable = false;
+    let liveWebSocketPath = '/api/voice/live';
+    const preflightController = new AbortController();
+    const preflightTimer = setTimeout(() => {
+      try {
+        preflightController.abort();
+      } catch {
+        // Ignore
+      }
+    }, this.sessionPreflightTimeoutMs);
+
+    try {
+      const res = await this.getFetch()(apiUrl('/api/voice/session'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: preflightController.signal,
+        body: JSON.stringify({
+          language: this.language,
+          stateContext: this.sharedContext,
+        }),
+      });
+      clearTimeout(preflightTimer);
+      if (!this.isCurrentActiveSession(mySession)) return false;
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        const reason =
+          (typeof errBody?.error === 'string' && errBody.error) ||
+          `DESTRIA AI voice service returned HTTP ${res.status}. Please retry or continue via text chat.`;
+        this.setTransportMode('none');
+        this.setActiveVoiceEngine('none');
+        this.setSessionActive(false);
+        this.transitionTo('service_unavailable');
+        this.callbacks.onError?.(reason);
+        return false;
+      }
+
+      const data = await res.json().catch(() => null);
+      if (!data || typeof data.sessionId !== 'string' || !data.sessionId.trim()) {
+        this.setTransportMode('none');
+        this.setActiveVoiceEngine('none');
+        this.setSessionActive(false);
+        this.transitionTo('service_unavailable');
+        this.callbacks.onError?.(
+          'DESTRIA AI voice service did not return a valid session handle. Please retry or continue via text chat.'
+        );
+        return false;
+      }
+
+      this.sessionId = data.sessionId.trim();
+      liveStreamingAvailable = Boolean(data.liveStreamingAvailable);
+      if (typeof data.liveWebSocketPath === 'string' && data.liveWebSocketPath) {
+        liveWebSocketPath = data.liveWebSocketPath;
+      }
+    } catch (preflightErr: any) {
+      clearTimeout(preflightTimer);
+      if (!this.isCurrentActiveSession(mySession)) return false;
+      const isTimeout = preflightErr?.name === 'AbortError';
+      this.setTransportMode('none');
+      this.setActiveVoiceEngine('none');
+      this.setSessionActive(false);
+      this.transitionTo('service_unavailable');
+      this.callbacks.onError?.(
+        isTimeout
+          ? 'DESTRIA AI voice service timed out during startup check. Please retry or continue via text chat.'
+          : 'DESTRIA AI voice service is currently unreachable. Please check your connection or continue via text chat.'
+      );
+      return false;
+    }
+
+    if (!this.isCurrentActiveSession(mySession)) return false;
     this.transitionTo('connecting');
 
     try {
-      // 1. Initialize microphone with echo cancellation & noise suppression
+      // 2. Initialize microphone with echo cancellation & noise suppression
       await this.ensureMicrophoneAvailable(mySession);
       if (!this.isCurrentActiveSession(mySession)) return false;
 
-      // 2. Unlock output AudioContext inside user gesture to satisfy browser autoplay policy
+      // 3. Unlock output AudioContext inside user gesture to satisfy browser autoplay policy
       await this.ensureOutputAudioContextReady();
-      if (!this.isCurrentActiveSession(mySession)) return false;
-
-      // 3. Negotiate persistent server voice session
-      let liveStreamingAvailable = false;
-      let liveWebSocketPath = '/api/voice/live';
-      try {
-        const res = await this.getFetch()(apiUrl('/api/voice/session'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            language: this.language,
-            stateContext: this.sharedContext,
-          }),
-        });
-        if (!this.isCurrentActiveSession(mySession)) return false;
-        if (res.ok) {
-          const data = await res.json();
-          this.sessionId = data.sessionId || `dti-voice-${Date.now()}`;
-          liveStreamingAvailable = Boolean(data.liveStreamingAvailable);
-          if (typeof data.liveWebSocketPath === 'string' && data.liveWebSocketPath) {
-            liveWebSocketPath = data.liveWebSocketPath;
-          }
-        }
-      } catch {
-        this.sessionId = `dti-voice-local-${Date.now()}`;
-      }
-
       if (!this.isCurrentActiveSession(mySession)) return false;
 
       // 4. Primary full-duplex Gemini Live WebSocket when available & permitted
@@ -1401,6 +1515,7 @@ export class AIVoiceService {
     if (responseData && typeof responseData.replyText === 'string' && responseData.replyText.trim()) {
       this.consecutiveNetworkFailures = 0;
       this.circuitBreakerOpen = false;
+      this.lastUnansweredQuestion = null;
       if (responseData.sessionId) {
         this.sessionId = responseData.sessionId;
       }
@@ -1431,6 +1546,7 @@ export class AIVoiceService {
     } else {
       // Section 28 Anti-Loop Circuit Breaker: NEVER repeatedly speak the same network error!
       this.consecutiveNetworkFailures += 1;
+      this.lastUnansweredQuestion = cleanTranscript;
       const errMsg = lastError || 'Temporary voice connection issue. You may retry manually or continue via text chat.';
       this.callbacks.onError?.(errMsg);
       replyText = this.generateContextualLocalFallback(cleanTranscript);
@@ -2298,16 +2414,12 @@ export class AIVoiceService {
     const WsCtor = this.deps.WebSocketCtor || (typeof WebSocket !== 'undefined' ? WebSocket : null);
     if (!WsCtor) return false;
 
-    const apiBase = resolveApiBaseUrl();
-    let wsUrl = '';
-    if (apiBase) {
-      wsUrl = `${apiBase.replace(/^http/i, 'ws')}${wsPath}`;
-    } else if (typeof window !== 'undefined' && window.location?.host) {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      wsUrl = `${protocol}//${window.location.host}${wsPath}`;
-    } else if (this.deps.WebSocketCtor) {
-      wsUrl = `ws://127.0.0.1${wsPath}`;
-    } else {
+    const wsUrl = buildWebSocketUrl(wsPath, {
+      locationHost:
+        this.deps.WebSocketCtor && typeof window === 'undefined' ? '127.0.0.1' : undefined,
+      locationProtocol: typeof window !== 'undefined' ? window.location?.protocol : 'http:',
+    });
+    if (!wsUrl) {
       return false;
     }
 

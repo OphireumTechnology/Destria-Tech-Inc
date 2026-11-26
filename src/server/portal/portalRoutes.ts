@@ -26,6 +26,7 @@ import {
 import { ROUTES, buildCanonicalPublicUrl, buildOrderDetailRoute } from '../../config/routes';
 import type { TransactionalEmailService } from '../services/emailService';
 import type { FrontDeskStore } from '../frontDeskStore';
+import { FrontDeskPersistenceUnavailableError } from '../frontDeskRepository';
 
 function sanitizeProductForPublicCatalog(product: ProductRecord) {
   return {
@@ -1086,14 +1087,22 @@ export function createPortalRouter(options: {
   // M23: Client-Owned AI Front Desk Project Inquiries, Preliminary Masterplans & Inline Corrections
   // SECURITY: Strictly scoped to req.portalUser.email — cross-client access is impossible.
   router.get('/frontdesk/inquiries', async (req: PortalAuthenticatedRequest, res: Response) => {
-    const clientEmail = req.portalUser!.email;
-    const records = frontDeskStore ? frontDeskStore.listInquiriesForClientEmail(clientEmail) : [];
-    res.status(200).json({
-      success: true,
-      count: records.length,
-      inquiries: records,
-      commercialEngagementStatement: COMMERCIAL_ENGAGEMENT_STATEMENT,
-    });
+    try {
+      const clientEmail = req.portalUser!.email;
+      const records = frontDeskStore ? await frontDeskStore.listInquiriesForClientEmailDurable(clientEmail) : [];
+      res.status(200).json({
+        success: true,
+        count: records.length,
+        inquiries: records,
+        commercialEngagementStatement: COMMERCIAL_ENGAGEMENT_STATEMENT,
+      });
+    } catch (err) {
+      if (err instanceof FrontDeskPersistenceUnavailableError) {
+        res.status(503).json({ success: false, code: err.code, error: err.message });
+        return;
+      }
+      throw err;
+    }
   });
 
   router.patch('/frontdesk/inquiries/:referenceCode/corrections', async (req: PortalAuthenticatedRequest, res: Response) => {
@@ -1101,28 +1110,41 @@ export function createPortalRouter(options: {
       res.status(503).json({ success: false, error: 'AI Front Desk inquiry store is not enabled.' });
       return;
     }
-    const referenceCode = sanitizeText(req.params.referenceCode, 80);
-    const clientEmail = req.portalUser!.email;
-    const patch = req.body?.patch && typeof req.body.patch === 'object' ? req.body.patch : {};
-    const note = sanitizeText(req.body?.note, 300) || undefined;
+    try {
+      const referenceCode = sanitizeText(req.params.referenceCode, 80);
+      const clientEmail = req.portalUser!.email;
+      const patch = req.body?.patch && typeof req.body.patch === 'object' ? req.body.patch : {};
+      const note = sanitizeText(req.body?.note, 300) || undefined;
+      const expectedVersion =
+        typeof req.body?.expectedVersion === 'number' && Number.isFinite(req.body.expectedVersion)
+          ? Math.floor(req.body.expectedVersion)
+          : undefined;
 
-    const outcome = frontDeskStore.applyClientPortalCorrection({
-      referenceCode,
-      authenticatedEmail: clientEmail,
-      patch,
-      note,
-    });
+      const outcome = await frontDeskStore.applyClientPortalCorrectionDurable({
+        referenceCode,
+        authenticatedEmail: clientEmail,
+        patch,
+        note,
+        expectedVersion,
+      });
 
-    if (outcome.ok === false) {
-      res.status(outcome.statusCode).json({ success: false, error: outcome.error });
-      return;
+      if (outcome.ok === false) {
+        res.status(outcome.statusCode).json({ success: false, error: outcome.error });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        inquiry: outcome.record,
+        message: 'Your inquiry profile and preliminary project masterplan have been updated.',
+      });
+    } catch (err) {
+      if (err instanceof FrontDeskPersistenceUnavailableError) {
+        res.status(503).json({ success: false, code: err.code, error: err.message });
+        return;
+      }
+      throw err;
     }
-
-    res.status(200).json({
-      success: true,
-      inquiry: outcome.record,
-      message: 'Your inquiry profile and preliminary project masterplan have been updated.',
-    });
   });
 
   // Server-Authorized Formal Proposals (Scoped strictly to authenticated client)

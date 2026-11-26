@@ -40,14 +40,8 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
   const [activeTab, setActiveTab] = useState<'portal' | 'studio' | 'agents' | 'admin'>(defaultTab);
   const [adminSubTab, setAdminSubTab] = useState<'appointments' | 'inquiries' | 'audit'>('inquiries');
 
-  // Admin auth session state (server-verified JWT/session token only)
-  const [adminToken, setAdminToken] = useState<string>(() => {
-    try {
-      return sessionStorage.getItem('opm_admin_token') || '';
-    } catch {
-      return '';
-    }
-  });
+  // Admin auth session state (memory-only token + HttpOnly cookie continuity; zero Web Storage)
+  const [adminToken, setAdminToken] = useState<string>('');
   const [adminProfile, setAdminProfile] = useState<{ email: string; role: string } | null>(null);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -64,26 +58,28 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
   const [studioGenerating, setStudioGenerating] = useState(false);
   const [studioOutput, setStudioOutput] = useState<string | null>(null);
 
-  const loadAuthorizedAdminData = useCallback(async (tokenToUse: string) => {
-    if (!tokenToUse) {
-      setAdminProfile(null);
-      return;
-    }
-
+  const loadAuthorizedAdminData = useCallback(async (tokenToUse?: string, silentOnUnauthenticated = false) => {
     setIsLoadingAdminData(true);
     setAdminDataError(null);
 
     try {
-      const headers = { Authorization: `Bearer ${tokenToUse}` };
-      const sessionRes = await fetch(apiUrl('/api/admin/auth/session'), { headers });
+      const headers: Record<string, string> = {
+        'X-Requested-With': 'XMLHttpRequest',
+      };
+      if (tokenToUse) {
+        headers.Authorization = `Bearer ${tokenToUse}`;
+      }
+      const sessionRes = await fetch(apiUrl('/api/admin/auth/session'), {
+        headers,
+        credentials: 'include',
+      });
       if (!sessionRes.ok) {
         const errData = await sessionRes.json().catch(() => ({}));
         setAdminToken('');
         setAdminProfile(null);
-        try {
-          sessionStorage.removeItem('opm_admin_token');
-        } catch {}
-        setAuthError(errData.error || 'Administrator session expired. Please sign in again.');
+        if (!silentOnUnauthenticated) {
+          setAuthError(errData.error || 'Administrator session expired. Please sign in again.');
+        }
         setIsLoadingAdminData(false);
         return;
       }
@@ -92,9 +88,9 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
       setAdminProfile(sessionJson.admin || null);
 
       const [reqRes, aptRes, auditRes] = await Promise.all([
-        fetch(apiUrl('/api/admin/solution-requests?limit=25&offset=0'), { headers }),
-        fetch(apiUrl('/api/admin/appointments?limit=25&offset=0'), { headers }),
-        fetch(apiUrl('/api/admin/audit-logs?limit=25&offset=0'), { headers }),
+        fetch(apiUrl('/api/admin/solution-requests?limit=25&offset=0'), { headers, credentials: 'include' }),
+        fetch(apiUrl('/api/admin/appointments?limit=25&offset=0'), { headers, credentials: 'include' }),
+        fetch(apiUrl('/api/admin/audit-logs?limit=25&offset=0'), { headers, credentials: 'include' }),
       ]);
 
       const reqJson = await reqRes.json().catch(() => ({}));
@@ -111,7 +107,9 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
         setAuditLogs(Array.isArray(auditJson.records) ? auditJson.records : []);
       }
     } catch {
-      setAdminDataError('Unable to connect to the authorized admin API endpoints.');
+      if (!silentOnUnauthenticated) {
+        setAdminDataError('Unable to connect to the authorized admin API endpoints.');
+      }
     } finally {
       setIsLoadingAdminData(false);
     }
@@ -122,8 +120,8 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
   }, [defaultTab]);
 
   useEffect(() => {
-    if (isOpen && activeTab === 'admin' && adminToken) {
-      void loadAuthorizedAdminData(adminToken);
+    if (isOpen && activeTab === 'admin') {
+      void loadAuthorizedAdminData(adminToken || undefined, true);
     }
   }, [isOpen, activeTab, adminToken, loadAuthorizedAdminData]);
 
@@ -137,7 +135,11 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
     try {
       const res = await fetch(apiUrl('/api/admin/auth/login'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
         body: JSON.stringify({
           email: loginEmail.trim(),
           password: loginPassword,
@@ -151,9 +153,6 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
       setAdminToken(data.token);
       setAdminProfile(data.admin || null);
       setLoginPassword('');
-      try {
-        sessionStorage.setItem('opm_admin_token', data.token);
-      } catch {}
       await loadAuthorizedAdminData(data.token);
     } catch (err: any) {
       setAuthError(err?.message || 'Unable to verify administrator credentials.');
@@ -163,15 +162,22 @@ export const EnterpriseModal: React.FC<EnterpriseModalProps> = ({
   };
 
   const handleAdminLogout = () => {
+    const tokenToRevoke = adminToken;
+    void fetch(apiUrl('/api/admin/auth/logout'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        ...(tokenToRevoke ? { Authorization: `Bearer ${tokenToRevoke}` } : {}),
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    }).catch(() => {});
     setAdminToken('');
     setAdminProfile(null);
     setSolutionRequests([]);
     setAppointments([]);
     setAuditLogs([]);
     setAdminDataError(null);
-    try {
-      sessionStorage.removeItem('opm_admin_token');
-    } catch {}
   };
 
   const handleRunStudioSimulation = () => {
